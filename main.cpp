@@ -132,9 +132,10 @@ int main()
 	// Seasonality: Do you want the spread to be limited to certain months?
 	bool ss = true;
 	bool wind = true;
+	// set the direction of the wind {N=0,NE=45,E=90,SE=135,S=180,SW=225,W=270,NW=315,NO  // NO means that there is no wind}
 	Direction pwdir=NE;
+	// set the spore rate
 	double spore_rate = 4.4;
-	int nth_output = 4;
 	Rtype rtype = CAUCHY;
 	double scale1 = 20.57;
 	int kappa = 2;
@@ -143,6 +144,7 @@ int main()
 	Date dd_start(START_TIME,01,01);
 	Date dd_end(END_TIME,12,31);
 
+	// main simulation loop(weekly steps)
 	for(int i=0;dd_start.compareDate(dd_end);i++,dd_start.increasedByWeek()){
 		bool allInfected = true;
 		for(int j=0;j<height;j++){
@@ -152,11 +154,13 @@ int main()
 			}
 		}
 
+		// if all the oaks are infected, then exit
 		if(allInfected){
 			cerr << "In the " << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << " all suspectible oaks are infected!" << endl;
 			break;
 		}
 
+		// check whether the spore occurs in the month
 		if(ss && dd_start.getMonth()>9){
 			cout << "----------"  << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << "-------------" << endl;
 			for(int m=0;m<height;m++){
@@ -168,7 +172,7 @@ int main()
 			continue;
 		}
 		
-
+		// read the weather information
 		if(!mcf_nc->set_cur(i,0,0)){
 			cerr << "Can not read the coefficients from the mcf_nc pointer to mcf array " << i << endl;
 			exit(EXIT_FAILURE);
@@ -195,12 +199,14 @@ int main()
 			}
 		}
 
+		// build the Sporulation object
 		Sporulation sp1;
 		sp1.SporeGen(I_umca_rast,weather,spore_rate);
 
 		sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast, I_oaks_rast, lvtree_rast, 
 				rtype, weather, scale1, kappa, pwdir);
 
+		// print out the result
 		cout << "----------"  << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << "-------------" << endl;
 		for(int m=0;m<height;m++){
 			for(int j=0;j<width;j++){
@@ -211,20 +217,13 @@ int main()
 
 	}
 
+	// compute the time used when running the model
 	clock_t end = clock();
 	double elapsed_secs = double(end-begin) / CLOCKS_PER_SEC;
 
 	cout << "The elapsed time during the program running: " << elapsed_secs<< endl;
 
-	/*
-	for(int i=0;i<bkr_img.getHeight();i++){
-		for(int j=0;j<bkr_img.getWidth();j++){
-			cout << bkr_img.data[i*bkr_img.getWidth() + j]<< " ";
-		}
-		cout << endl;
-	}
-	*/
-
+	// clean the allocated memory
 	if(weather){
 		for(int i=0;i<height;i++){
 			if(weather[i])
@@ -235,33 +234,3 @@ int main()
 
 	return 0;
 }
-
-	/*
-	GDALDataset *dataset;
-	GDALRasterBand *dataBand;
-	int width;
-	int height;
-	int *data;
-	GDALAllRegister();
-	dataset = (GDALDataset *)GDALOpen(PATH, GA_ReadOnly);
-	if(!dataset ){
-		cerr << "Can not read the image!" << endl;
-	}
-
-	width = dataset->GetRasterXSize();
-	height = dataset->GetRasterYSize();
-
-	dataBand = dataset->GetRasterBand(1);
-	data = (int *) CPLMalloc(sizeof(int)*width*height);
-	dataBand->RasterIO(GF_Read,0,0,width,height,data,
-		width,height,GDT_Int32,0,0);
-	*/
-
-/*
-	for(int i=0;i<height;i++){
-		for(int j=0;j<width;j++){
-				cout << mcf[i][j] << " ";
-		}
-		cout << endl;
-	}
-*/
