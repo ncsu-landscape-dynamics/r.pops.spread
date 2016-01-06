@@ -1,15 +1,8 @@
 #include <iostream>
 #include "Img.h"
 #include <netcdfcpp.h>
-#include "Spore.h"
-//#include <opencv2/highgui/highgui.hpp>
-// to compile, add g++ main.cpp -ldgal
-//#include <gdal/gdal_priv.h>
-//http://www.unidata.ucar.edu/software/netcdf/examples/programs/
-//http://www.unidata.ucar.edu/software/netcdf/docs/netcdf-tutorial/
-//<netcdfcpp.h>
 // to compile with netcdfcpp.h, add -lnetcdf_c++
-// http://docs.opencv.org/modules/core/doc/intro.html
+#include "Spore.h"
 //g++ -std=c++11 main.cpp Img.h Img.cpp Spore.h Spore.cpp -lgdal -lnetcdf_c++
 
 
@@ -21,34 +14,76 @@ using namespace std;
 #define I_OAKS_RAST_PATH "./layers/init_2000_cnt.img"
 #define BACKGROUND_IMAGE_PATH "./layers/ortho_5m_color.tif"
 #define START_TIME 2000
-#define END_TIME 2007
-#define WEATHER_COEFF_PATH "./layers/weather/weatherCoeff_2000_2007.nc"
+#define END_TIME 2010
+#define WEATHER_COEFF_PATH "./layers/weather/weatherCoeff_2000_2014.nc"
 #define DIM 1
+
+// Initialize infected trees for each species(!!Needed unless empirical info is available)
+static Img initialize(Img& img1,Img& img2){
+	int re_width=0;
+	int re_height=0;
+	int **re_data=NULL;
+	if(img1.getWidth() != img2.getWidth() || img2.getHeight() != img2.getHeight()){
+		cerr << "The height or width of one image do not match with that of the other one!" << endl;
+		return Img();
+	}else{
+		re_width = img1.getWidth();
+		re_height = img1.getHeight();
+		re_data = (int **)CPLMalloc(sizeof(int *) * re_height);
+		int *stream = (int *)CPLMalloc(sizeof(int)*re_width*re_height);
+
+		for(int i=0;i<re_height;i++){
+			re_data[i] = &stream[i*re_width];
+		}
+
+		for(int i=0;i<re_height;i++){
+			for(int j=0;j<re_width;j++){
+				if(img2.data[i][j]>0){
+					if(img1.data[i][j]>img2.data[i][j])
+						re_data[i][j] = img1.data[i][j] < (img2.data[i][j]*2)?img1.data[i][j]:(img2.data[i][j]*2);
+					else
+						re_data[i][j] = img1.data[i][j];
+				}else{
+					re_data[i][j]=0;
+				}
+			}
+		}
+
+		return Img(re_width,re_height,img1.getWEResolution(), img1.getNSResolution(),re_data);
+	}
+}
+
 
 int main()
 {
+	// set the start point of the program
 	clock_t begin = clock();
-	// read the UMCA raster image
-	Img umca_rast(UMCA_RAST_PATH);
-	//umca_rast.readImage(UMCA_RAST_PATH);
-	// read the oaks raster image
 
+	// read the suspectible UMCA raster image
+	Img umca_rast(UMCA_RAST_PATH);
+
+	// read the SOD-affected oaks raster image
 	Img oaks_rast(OAKS_RAST_PATH);
-	//oaks_rast.readImage(OAKS_RAST_PATH);
+
 	// read the living trees raster image
 	Img lvtree_rast(LVTREE_RAST_PATH);
-	//lvtree_rast.readImage(LVTREE_RAST_PATH);
 
-	// SOD-immune trees image
-	Img SOD_rast = umca_rast + oaks_rast;
-	Img IMM_rast = lvtree_rast - SOD_rast;
-
+	// read the initial infected oaks image
 	Img I_oaks_rast(I_OAKS_RAST_PATH);
 
-	Img I_umca_rast = I_oaks_rast * 2;
-
+	// create the initial suspectible oaks image
 	Img S_oaks_rast = oaks_rast - I_oaks_rast;
+
+	// create the initial infected umca image
+	Img I_umca_rast = initialize(umca_rast,I_oaks_rast);
+
+	// create the initial suspectible umca image
 	Img S_umca_rast = umca_rast - I_umca_rast;
+
+	// SOD-immune trees image
+	//Img SOD_rast = umca_rast + oaks_rast;
+	//Img IMM_rast = lvtree_rast - SOD_rast;
+
 /*
 	for(int i=0;i<S_oaks_rast.getHeight();i++){
 		for(int j=0;j<S_oaks_rast.getWidth();j++){
@@ -57,8 +92,10 @@ int main()
 		cout << endl;
 	}
 */
+	// read the background satellite image
 	Img bkr_img(BACKGROUND_IMAGE_PATH);
 
+	// retrieve the width and height of the images
 	int width = umca_rast.getWidth();
 	int height = umca_rast.getHeight();
 
@@ -92,6 +129,8 @@ int main()
 		weather[i] = new double[width];
 	}
 
+	// Seasonality: Do you want the spread to be limited to certain months?
+	bool ss = true;
 	bool wind = true;
 	Direction pwdir=NE;
 	double spore_rate = 4.4;
@@ -99,7 +138,12 @@ int main()
 	Rtype rtype = CAUCHY;
 	double scale1 = 20.57;
 	int kappa = 2;
-	for(int i=0;i<=415;i++){
+
+	// initialize the start Date and end Date object
+	Date dd_start(START_TIME,01,01);
+	Date dd_end(END_TIME,12,31);
+
+	for(int i=0;dd_start.compareDate(dd_end);i++,dd_start.increasedByWeek()){
 		bool allInfected = true;
 		for(int j=0;j<height;j++){
 			for(int k=0;k<width;k++){
@@ -109,10 +153,22 @@ int main()
 		}
 
 		if(allInfected){
-			cerr << "In the " << i << "th iteration, all suspectible oaks are infected!" << endl;
+			cerr << "In the " << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << " all suspectible oaks are infected!" << endl;
 			break;
 		}
-	// we can set the first dimension of the set_cur(first,second,third), which is the timestamp
+
+		if(ss && dd_start.getMonth()>9){
+			cout << "----------"  << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << "-------------" << endl;
+			for(int m=0;m<height;m++){
+				for(int j=0;j<width;j++){
+					cout << I_oaks_rast.data[m][j] << " ";
+				}
+				cout << endl;
+			}
+			continue;
+		}
+		
+
 		if(!mcf_nc->set_cur(i,0,0)){
 			cerr << "Can not read the coefficients from the mcf_nc pointer to mcf array " << i << endl;
 			exit(EXIT_FAILURE);
@@ -133,24 +189,26 @@ int main()
 			exit(EXIT_FAILURE);
 		}
 
-		for(int i=0;i<height;i++){
-			for(int j=0;j<width;j++){
-				weather[i][j] = mcf[i][j] * ccf[i][j];
+		for(int j=0;j<height;j++){
+			for(int k=0;k<width;k++){
+				weather[j][k] = mcf[j][k] * ccf[j][k];
 			}
 		}
 
 		Sporulation sp1;
 		sp1.SporeGen(I_umca_rast,weather,spore_rate);
-		sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast, I_oaks_rast, IMM_rast, 
+
+		sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast, I_oaks_rast, lvtree_rast, 
 				rtype, weather, scale1, kappa, pwdir);
 
-		cout << "----------"  << i << "-------------" << endl;
-		for(int i=0;i<height;i++){
+		cout << "----------"  << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << "-------------" << endl;
+		for(int m=0;m<height;m++){
 			for(int j=0;j<width;j++){
-				cout << I_oaks_rast.data[i][j] << " ";
+				cout << I_oaks_rast.data[m][j] << " ";
 			}
 			cout << endl;
 		}
+
 	}
 
 	clock_t end = clock();
