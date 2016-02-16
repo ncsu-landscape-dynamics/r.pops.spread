@@ -1,3 +1,14 @@
+/*
+ *
+ *  SOD-model-cpp
+ *
+ *  Created on: Oct,2015 
+ *  Author: Zexi Chen(zchen22@ncsu.edu)
+ *
+ *
+ */
+
+
 #include <iostream>
 #include "Img.h"
 #include <netcdfcpp.h>
@@ -12,6 +23,8 @@ using namespace std;
 #define OAKS_RAST_PATH "./layers/OAKS_den_100m.img"
 #define LVTREE_RAST_PATH "./layers/TPH_den_100m.img"
 #define I_OAKS_RAST_PATH "./layers/init_2000_cnt.img"
+// you can specify the outfile
+#define OUT_PATH_BASE "out_"
 #define BACKGROUND_IMAGE_PATH "./layers/ortho_5m_color.tif"
 #define START_TIME 2000
 #define END_TIME 2010
@@ -48,14 +61,59 @@ static Img initialize(Img& img1,Img& img2){
 				}
 			}
 		}
-
 		return Img(re_width,re_height,img1.getWEResolution(), img1.getNSResolution(),re_data);
 	}
 }
 
 
+// inputFname is used to retrieve GDAL information from the known input file
+static void writeGeotiff(const char *inputFname, const char *outFname, Img& img){
+	// obtain information for output Geotiff images
+	GDALDataset *inputDataset;
+	GDALRasterBand *inputDataBand;
+	GDALAllRegister();
+	inputDataset = (GDALDataset *)GDALOpen(inputFname, GA_ReadOnly);
+	double inputAdfGeoTransform[6];
+	inputDataset->GetGeoTransform(inputAdfGeoTransform);
+
+	// Setup driver
+	const char *pszFormat = "GTiff";
+	GDALDriver *gdalDriver;
+	gdalDriver = GetGDALDriverManager()->GetDriverByName(pszFormat);
+	//char *pszSRS_WKT = NULL;
+	int xSize = inputDataset->GetRasterXSize();
+	int ySize = inputDataset->GetRasterYSize();
+	GDALRasterBand *outBand;
+
+	//Set output Dataset
+	GDALDataset *outDataset;
+	char **papszOptions = NULL;
+
+	int *outstream = (int *)CPLMalloc(sizeof(int)*xSize*ySize);
+	for(int i=0;i<ySize;i++){
+		for(int j=0;j<xSize;j++){
+			outstream[i*xSize+j] = img.data[i][j];
+		}
+	}
+
+	// create output geotiff
+	outDataset = gdalDriver->Create(outFname, xSize, ySize, 1, GDT_Byte, papszOptions);
+	outDataset->SetGeoTransform(inputAdfGeoTransform);
+	outDataset->SetProjection(inputDataset->GetProjectionRef());
+	outBand = outDataset->GetRasterBand(1);
+	outBand->RasterIO(GF_Write,0,0,xSize,ySize,outstream,
+			xSize,ySize,GDT_Int32,0,0);
+	GDALClose( (GDALDatasetH) outDataset );
+	GDALClose( (GDALDatasetH) inputDataset );
+	if(outstream){
+		delete [] outstream;
+	}
+	
+}
+
 int main()
 {
+	string outPathBase(OUT_PATH_BASE);
 	// set the start point of the program
 	clock_t begin = clock();
 
@@ -92,6 +150,7 @@ int main()
 		cout << endl;
 	}
 */
+
 	// read the background satellite image
 	Img bkr_img(BACKGROUND_IMAGE_PATH);
 
@@ -144,8 +203,13 @@ int main()
 	Date dd_start(START_TIME,01,01);
 	Date dd_end(END_TIME,12,31);
 
+    // the variablbs created for the output to Geotiff file
+	std::string s_year;
+	std::string s_month;
+	std::string s_day;
 	// main simulation loop(weekly steps)
 	for(int i=0;dd_start.compareDate(dd_end);i++,dd_start.increasedByWeek()){
+
 		bool allInfected = true;
 		for(int j=0;j<height;j++){
 			for(int k=0;k<width;k++){
@@ -205,6 +269,10 @@ int main()
 
 		sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast, I_oaks_rast, lvtree_rast, 
 				rtype, weather, scale1, kappa, pwdir);
+		
+		s_year = std::to_string(dd_start.getYear());
+		s_month = std::to_string(dd_start.getMonth());
+		s_day = std::to_string(dd_start.getDay());	
 
 		// print out the result
 		cout << "----------"  << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << "-------------" << endl;
@@ -214,8 +282,15 @@ int main()
 			}
 			cout << endl;
 		}
-
 	}
+
+	// write the result into GeoTiff file
+
+	string outfilepath = outPathBase+s_year+"_"+s_month+"_"+s_day+".tif";
+
+	const char *outfile;
+	outfile = outfilepath.c_str();
+	writeGeotiff(I_OAKS_RAST_PATH, outfile, I_oaks_rast);
 
 	// compute the time used when running the model
 	clock_t end = clock();
