@@ -82,7 +82,7 @@ static void writeGeotiff(const char *inputFname, const char *outFname, Img& img)
 	gdalDriver = GetGDALDriverManager()->GetDriverByName(pszFormat);
 	//char *pszSRS_WKT = NULL;
 	int xSize = inputDataset->GetRasterXSize();
-	int ySize = inputDataset->GetRasterYSize();
+    int ySize = inputDataset->GetRasterYSize();
 	GDALRasterBand *outBand;
 
 	//Set output Dataset
@@ -108,11 +108,13 @@ static void writeGeotiff(const char *inputFname, const char *outFname, Img& img)
 	if(outstream){
 		delete [] outstream;
 	}
-	
+	CSLDestroy( papszOptions );
 }
+
 
 int main()
 {
+
 	string outPathBase(OUT_PATH_BASE);
 	// set the start point of the program
 	clock_t begin = clock();
@@ -183,11 +185,7 @@ int main()
 
 	double mcf[height][width];
 	double ccf[height][width];
-	double **weather = new double *[height];
-	for(int i=0;i<height;i++){
-		weather[i] = new double[width];
-	}
-
+	double *weather = new double[height*width];
 	// Seasonality: Do you want the spread to be limited to certain months?
 	bool ss = true;
 	bool wind = true;
@@ -259,7 +257,7 @@ int main()
 
 		for(int j=0;j<height;j++){
 			for(int k=0;k<width;k++){
-				weather[j][k] = mcf[j][k] * ccf[j][k];
+				weather[j*width+k] = mcf[j][k] * ccf[j][k];
 			}
 		}
 
@@ -272,8 +270,8 @@ int main()
 		
 		s_year = std::to_string(dd_start.getYear());
 		s_month = std::to_string(dd_start.getMonth());
-		s_day = std::to_string(dd_start.getDay());	
-
+		s_day = std::to_string(dd_start.getDay());
+		
 		// print out the result
 		cout << "----------"  << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << "-------------" << endl;
 		for(int m=0;m<height;m++){
@@ -300,10 +298,7 @@ int main()
 
 	// clean the allocated memory
 	if(weather){
-		for(int i=0;i<height;i++){
-			if(weather[i])
-				delete [] weather[i];
-		}
+
 		delete [] weather;
 	}
 
