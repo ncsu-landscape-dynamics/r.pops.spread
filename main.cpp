@@ -42,8 +42,8 @@ static Img initialize(Img& img1,Img& img2){
 	}else{
 		re_width = img1.getWidth();
 		re_height = img1.getHeight();
-		re_data = (int **)CPLMalloc(sizeof(int *) * re_height);
-		int *stream = (int *)CPLMalloc(sizeof(int)*re_width*re_height);
+		re_data = (int **)std::malloc(sizeof(int *) * re_height);
+		int *stream = (int *)std::malloc(sizeof(int)*re_width*re_height);
 
 		for(int i=0;i<re_height;i++){
 			re_data[i] = &stream[i*re_width];
@@ -89,7 +89,7 @@ static void writeGeotiff(const char *inputFname, const char *outFname, Img& img)
 	GDALDataset *outDataset;
 	char **papszOptions = NULL;
 
-	int *outstream = (int *)CPLMalloc(sizeof(int)*xSize*ySize);
+	int *outstream = (int *)std::malloc(sizeof(int)*xSize*ySize);
 	for(int i=0;i<ySize;i++){
 		for(int j=0;j<xSize;j++){
 			outstream[i*xSize+j] = img.data[i][j];
