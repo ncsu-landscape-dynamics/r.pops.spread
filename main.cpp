@@ -39,46 +39,57 @@ static Img initialize(Img& img1,Img& img2){
     if(img1.getWidth() != img2.getWidth() || img2.getHeight() != img2.getHeight()){
         cerr << "The height or width of one image do not match with that of the other one!" << endl;
         return Img();
-    }else{
+    }
+    else {
         re_width = img1.getWidth();
         re_height = img1.getHeight();
         re_data = (int **)std::malloc(sizeof(int *) * re_height);
-        int *stream = (int *)std::malloc(sizeof(int)*re_width*re_height);
+        int *stream = (int *)std::malloc(sizeof(int) * re_width * re_height);
 
-        for(int i=0;i<re_height;i++){
-            re_data[i] = &stream[i*re_width];
+        for (int i = 0; i < re_height; i++) {
+            re_data[i] = &stream[i * re_width];
         }
 
-        for(int i=0;i<re_height;i++){
-            for(int j=0;j<re_width;j++){
-                if(img2.data[i][j]>0){
-                    if(img1.data[i][j]>img2.data[i][j])
-                        re_data[i][j] = img1.data[i][j] < (img2.data[i][j]*2)?img1.data[i][j]:(img2.data[i][j]*2);
+        for (int i = 0; i < re_height; i++) {
+            for (int j = 0; j < re_width; j++) {
+                if (img2.data[i][j] > 0) {
+                    if (img1.data[i][j] > img2.data[i][j])
+                        re_data[i][j] =
+                            img1.data[i][j] <
+                            (img2.data[i][j] *
+                             2) ? img1.data[i][j] : (img2.data[i][j] * 2);
                     else
                         re_data[i][j] = img1.data[i][j];
-                }else{
-                    re_data[i][j]=0;
+                }
+                else {
+                    re_data[i][j] = 0;
                 }
             }
         }
-        return Img(re_width,re_height,img1.getWEResolution(), img1.getNSResolution(),re_data);
+        return Img(re_width, re_height, img1.getWEResolution(),
+                   img1.getNSResolution(), re_data);
     }
 }
 
 
 // inputFname is used to retrieve GDAL information from the known input file
-static void writeGeotiff(const char *inputFname, const char *outFname, Img& img){
+static void writeGeotiff(const char *inputFname, const char *outFname,
+                         Img & img)
+{
     // obtain information for output Geotiff images
     GDALDataset *inputDataset;
     GDALRasterBand *inputDataBand;
+
     GDALAllRegister();
-    inputDataset = (GDALDataset *)GDALOpen(inputFname, GA_ReadOnly);
+    inputDataset = (GDALDataset *) GDALOpen(inputFname, GA_ReadOnly);
     double inputAdfGeoTransform[6];
+
     inputDataset->GetGeoTransform(inputAdfGeoTransform);
 
     // Setup driver
     const char *pszFormat = "GTiff";
     GDALDriver *gdalDriver;
+
     gdalDriver = GetGDALDriverManager()->GetDriverByName(pszFormat);
     //char *pszSRS_WKT = NULL;
     int xSize = inputDataset->GetRasterXSize();
@@ -89,10 +100,11 @@ static void writeGeotiff(const char *inputFname, const char *outFname, Img& img)
     GDALDataset *outDataset;
     char **papszOptions = NULL;
 
-    int *outstream = (int *)std::malloc(sizeof(int)*xSize*ySize);
-    for(int i=0;i<ySize;i++){
-        for(int j=0;j<xSize;j++){
-            outstream[i*xSize+j] = img.data[i][j];
+    int *outstream = (int *)std::malloc(sizeof(int) * xSize * ySize);
+
+    for (int i = 0; i < ySize; i++) {
+        for (int j = 0; j < xSize; j++) {
+            outstream[i * xSize + j] = img.data[i][j];
         }
     }
 
@@ -108,7 +120,7 @@ static void writeGeotiff(const char *inputFname, const char *outFname, Img& img)
     if(outstream){
         delete [] outstream;
     }
-    CSLDestroy( papszOptions );
+    CSLDestroy(papszOptions);
 }
 
 
@@ -116,6 +128,7 @@ int main()
 {
 
     string outPathBase(OUT_PATH_BASE);
+
     // set the start point of the program
     clock_t begin = clock();
 
@@ -135,7 +148,7 @@ int main()
     Img S_oaks_rast = oaks_rast - I_oaks_rast;
 
     // create the initial infected umca image
-    Img I_umca_rast = initialize(umca_rast,I_oaks_rast);
+    Img I_umca_rast = initialize(umca_rast, I_oaks_rast);
 
     // create the initial suspectible umca image
     Img S_umca_rast = umca_rast - I_umca_rast;
@@ -160,37 +173,43 @@ int main()
     int width = umca_rast.getWidth();
     int height = umca_rast.getHeight();
 
-    if(START_TIME > END_TIME){
-        cerr << "Start date must precede the end date!!!"<< endl;
+    if (START_TIME > END_TIME) {
+        cerr << "Start date must precede the end date!!!" << endl;
         exit(EXIT_FAILURE);
     }
 
     NcFile weatherCoeff(WEATHER_COEFF_PATH, NcFile::ReadOnly);
 
-    if(!weatherCoeff.is_valid()){
-        cerr << "Can not open the weather coefficients file(.cn)!"<< endl;
+    if (!weatherCoeff.is_valid()) {
+        cerr << "Can not open the weather coefficients file(.cn)!" << endl;
         exit(EXIT_FAILURE);
     }
 
     NcVar *mcf_nc, *ccf_nc;
-    if(!(mcf_nc = weatherCoeff.get_var("Mcoef"))){
-        cerr << "Can not read the moisture coefficients from the file!"<< endl;
+
+    if (!(mcf_nc = weatherCoeff.get_var("Mcoef"))) {
+        cerr << "Can not read the moisture coefficients from the file!" <<
+            endl;
         exit(EXIT_FAILURE);
     }
 
-    if(!(ccf_nc = weatherCoeff.get_var("Ccoef"))){
-        cerr << "Can not read the temperature coefficients from the file!"<< endl;
+    if (!(ccf_nc = weatherCoeff.get_var("Ccoef"))) {
+        cerr << "Can not read the temperature coefficients from the file!" <<
+            endl;
         exit(EXIT_FAILURE);
     }
 
     double mcf[height][width];
     double ccf[height][width];
-    double *weather = new double[height*width];
+    double *weather = new double[height * width];
+
     // Seasonality: Do you want the spread to be limited to certain months?
     bool ss = true;
     bool wind = true;
+
     // set the direction of the wind {N=0,NE=45,E=90,SE=135,S=180,SW=225,W=270,NW=315,NO  // NO means that there is no wind}
-    Direction pwdir=NE;
+    Direction pwdir = NE;
+
     // set the spore rate
     double spore_rate = 4.4;
     Rtype rtype = CAUCHY;
@@ -198,35 +217,41 @@ int main()
     int kappa = 2;
 
     // initialize the start Date and end Date object
-    Date dd_start(START_TIME,01,01);
-    Date dd_end(END_TIME,12,31);
+    Date dd_start(START_TIME, 01, 01);
+    Date dd_end(END_TIME, 12, 31);
 
     // the variablbs created for the output to Geotiff file
     std::string s_year;
     std::string s_month;
     std::string s_day;
     // main simulation loop(weekly steps)
-    for(int i=0;dd_start.compareDate(dd_end);i++,dd_start.increasedByWeek()){
+    for (int i = 0; dd_start.compareDate(dd_end);
+         i++, dd_start.increasedByWeek()) {
 
         bool allInfected = true;
-        for(int j=0;j<height;j++){
-            for(int k=0;k<width;k++){
-                if(S_oaks_rast.data[j][k]>0)
+
+        for (int j = 0; j < height; j++) {
+            for (int k = 0; k < width; k++) {
+                if (S_oaks_rast.data[j][k] > 0)
                     allInfected = false;
             }
         }
 
         // if all the oaks are infected, then exit
-        if(allInfected){
-            cerr << "In the " << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << " all suspectible oaks are infected!" << endl;
+        if (allInfected) {
+            cerr << "In the " << dd_start.getYear() << "-" << dd_start.
+                getMonth() << "-" << dd_start.
+                getDay() << " all suspectible oaks are infected!" << endl;
             break;
         }
 
         // check whether the spore occurs in the month
-        if(ss && dd_start.getMonth()>9){
-            cout << "----------"  << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << "-------------" << endl;
-            for(int m=0;m<height;m++){
-                for(int j=0;j<width;j++){
+        if (ss && dd_start.getMonth() > 9) {
+            cout << "----------" << dd_start.getYear() << "-" << dd_start.
+                getMonth() << "-" << dd_start.
+                getDay() << "-------------" << endl;
+            for (int m = 0; m < height; m++) {
+                for (int j = 0; j < width; j++) {
                     cout << I_oaks_rast.data[m][j] << " ";
                 }
                 cout << endl;
@@ -245,19 +270,19 @@ int main()
             exit(EXIT_FAILURE);
         }
 
-        if(!mcf_nc->get(&mcf[0][0],1,height,width)){
-            cerr << "Can not get the record from mcf_nc "<< i << endl;
+        if (!mcf_nc->get(&mcf[0][0], 1, height, width)) {
+            cerr << "Can not get the record from mcf_nc " << i << endl;
             exit(EXIT_FAILURE);
         }
 
-        if(!ccf_nc->get(&ccf[0][0],1,height,width)){
-            cerr << "Can not get the record from ccf_nc "<< i << endl;
+        if (!ccf_nc->get(&ccf[0][0], 1, height, width)) {
+            cerr << "Can not get the record from ccf_nc " << i << endl;
             exit(EXIT_FAILURE);
         }
 
-        for(int j=0;j<height;j++){
-            for(int k=0;k<width;k++){
-                weather[j*width+k] = mcf[j][k] * ccf[j][k];
+        for (int j = 0; j < height; j++) {
+            for (int k = 0; k < width; k++) {
+                weather[j * width + k] = mcf[j][k] * ccf[j][k];
             }
         }
 
@@ -273,9 +298,10 @@ int main()
         s_day = std::to_string(dd_start.getDay());
 
         // print out the result
-        cout << "----------"  << dd_start.getYear() << "-" << dd_start.getMonth() <<"-" << dd_start.getDay() << "-------------" << endl;
-        for(int m=0;m<height;m++){
-            for(int j=0;j<width;j++){
+        cout << "----------" << dd_start.getYear() << "-" << dd_start.
+            getMonth() << "-" << dd_start.getDay() << "-------------" << endl;
+        for (int m = 0; m < height; m++) {
+            for (int j = 0; j < width; j++) {
                 cout << I_oaks_rast.data[m][j] << " ";
             }
             cout << endl;
