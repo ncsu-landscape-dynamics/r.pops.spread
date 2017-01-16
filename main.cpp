@@ -32,11 +32,13 @@ using namespace std;
 #define DIM 1
 
 // Initialize infected trees for each species(!!Needed unless empirical info is available)
-static Img initialize(Img& img1,Img& img2){
+static Img initialize(Img& img1,Img& img2) {
     int re_width=0;
     int re_height=0;
     int **re_data=NULL;
-    if(img1.getWidth() != img2.getWidth() || img2.getHeight() != img2.getHeight()){
+
+    if (img1.getWidth() != img2.getWidth() ||
+            img2.getHeight() != img2.getHeight()) {
         cerr << "The height or width of one image do not match with that of the other one!" << endl;
         return Img();
     }
@@ -113,11 +115,11 @@ static void writeGeotiff(const char *inputFname, const char *outFname,
     outDataset->SetGeoTransform(inputAdfGeoTransform);
     outDataset->SetProjection(inputDataset->GetProjectionRef());
     outBand = outDataset->GetRasterBand(1);
-    outBand->RasterIO(GF_Write,0,0,xSize,ySize,outstream,
-                      xSize,ySize,GDT_Int32,0,0);
-    GDALClose( (GDALDatasetH) outDataset );
-    GDALClose( (GDALDatasetH) inputDataset );
-    if(outstream){
+    outBand->RasterIO(GF_Write, 0, 0, xSize, ySize,outstream,
+                      xSize, ySize, GDT_Int32, 0, 0);
+    GDALClose((GDALDatasetH) outDataset);
+    GDALClose((GDALDatasetH) inputDataset);
+    if (outstream) {
         delete [] outstream;
     }
     CSLDestroy(papszOptions);
@@ -260,12 +262,12 @@ int main()
         }
 
         // read the weather information
-        if(!mcf_nc->set_cur(i,0,0)){
+        if (!mcf_nc->set_cur(i,0,0)) {
             cerr << "Can not read the coefficients from the mcf_nc pointer to mcf array " << i << endl;
             exit(EXIT_FAILURE);
         }
 
-        if(!ccf_nc->set_cur(i,0,0)){
+        if (!ccf_nc->set_cur(i,0,0)) {
             cerr << "Can not read the coefficients from the ccf_nc pointer to ccf array "<< i << endl;
             exit(EXIT_FAILURE);
         }
@@ -310,7 +312,7 @@ int main()
 
     // write the result into GeoTiff file
 
-    string outfilepath = outPathBase+s_year+"_"+s_month+"_"+s_day+".tif";
+    string outfilepath = outPathBase + s_year + "_" + s_month + "_" + s_day + ".tif";
 
     const char *outfile;
     outfile = outfilepath.c_str();
@@ -320,12 +322,11 @@ int main()
     clock_t end = clock();
     double elapsed_secs = double(end-begin) / CLOCKS_PER_SEC;
 
-    cout << "The elapsed time during the program running: " << elapsed_secs<< endl;
+    cout << "The elapsed time during the program running: " << elapsed_secs << endl;
 
     // clean the allocated memory
-    if(weather){
-
-        delete [] weather;
+    if (weather) {
+        delete[] weather;
     }
 
     return 0;
