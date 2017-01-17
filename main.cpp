@@ -12,6 +12,12 @@
 #include <iostream>
 #include "Img.h"
 #include <netcdfcpp.h>
+
+extern "C" {
+#include <grass/gis.h>
+#include <grass/glocale.h>
+}
+
 // to compile with netcdfcpp.h, add -lnetcdf_c++
 #include "Spore.h"
 //g++ -std=c++11 main.cpp Img.h Img.cpp Spore.h Spore.cpp -lgdal -lnetcdf_c++
@@ -126,8 +132,45 @@ static void writeGeotiff(const char *inputFname, const char *outFname,
 }
 
 
-int main()
+struct SodOptions
 {
+    struct Option *umca, *oaks, *lvtree, *ioaks;
+};
+
+struct SodFlags
+{
+    //struct Flag *generate_seed;
+};
+
+
+int main(int argc, char *argv[])
+{
+    SodOptions opt;
+    SodFlags flg;
+
+    G_gisinit(argv[0]);
+
+    struct GModule *module = G_define_module();
+
+    G_add_keyword(_("raster"));
+    G_add_keyword(_("spread"));
+    G_add_keyword(_("model"));
+    G_add_keyword(_("disease"));
+
+    opt.umca = G_define_standard_option(G_OPT_R_INPUT);
+    opt.umca->key = "umca";
+
+    opt.oaks = G_define_standard_option(G_OPT_R_INPUT);
+    opt.oaks->key = "oaks";
+
+    opt.lvtree = G_define_standard_option(G_OPT_R_INPUT);
+    opt.lvtree->key = "lvtree";
+
+    opt.ioaks = G_define_standard_option(G_OPT_R_INPUT);
+    opt.ioaks->key = "ioaks";
+
+    if (G_parser(argc, argv))
+        exit(EXIT_FAILURE);
 
     string outPathBase(OUT_PATH_BASE);
 
@@ -135,16 +178,16 @@ int main()
     clock_t begin = clock();
 
     // read the suspectible UMCA raster image
-    Img umca_rast(UMCA_RAST_PATH);
+    Img umca_rast = Img::fromGrassRaster(opt.umca->answer);
 
     // read the SOD-affected oaks raster image
-    Img oaks_rast(OAKS_RAST_PATH);
+    Img oaks_rast = Img::fromGrassRaster(opt.oaks->answer);
 
     // read the living trees raster image
-    Img lvtree_rast(LVTREE_RAST_PATH);
+    Img lvtree_rast = Img::fromGrassRaster(opt.lvtree->answer);
 
     // read the initial infected oaks image
-    Img I_oaks_rast(I_OAKS_RAST_PATH);
+    Img I_oaks_rast = Img::fromGrassRaster(opt.ioaks->answer);
 
     // create the initial suspectible oaks image
     Img S_oaks_rast = oaks_rast - I_oaks_rast;
@@ -167,9 +210,6 @@ int main()
         cout << endl;
     }
 */
-
-    // read the background satellite image
-    Img bkr_img(BACKGROUND_IMAGE_PATH);
 
     // retrieve the width and height of the images
     int width = umca_rast.getWidth();
