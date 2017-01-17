@@ -26,8 +26,6 @@ extern "C" {
 using namespace std;
 using std::string;
 
-#define START_TIME 2000
-#define END_TIME 2010
 #define DIM 1
 
 // Initialize infected trees for each species(!!Needed unless empirical info is available)
@@ -139,6 +137,7 @@ struct SodOptions
 {
     struct Option *umca, *oaks, *lvtree, *ioaks;
     struct Option *nc_weather;
+    struct Option *start_time, *end_time;
     struct Option *output, *output_series;
 };
 
@@ -176,6 +175,18 @@ int main(int argc, char *argv[])
 
     opt.nc_weather = G_define_standard_option(G_OPT_F_INPUT);
     opt.nc_weather->key = "ncdf_weather";
+
+    opt.start_time = G_define_option();
+    opt.start_time->type = TYPE_INTEGER;
+    opt.start_time->key = "start_time";
+    opt.start_time->description = "Start year for the simulation";
+    opt.start_time->required = YES;
+
+    opt.end_time = G_define_option();
+    opt.end_time->type = TYPE_INTEGER;
+    opt.end_time->key = "end_time";
+    opt.end_time->description = "End year for the simulation";
+    opt.end_time->required = YES;
 
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
 
@@ -227,7 +238,10 @@ int main(int argc, char *argv[])
     int width = umca_rast.getWidth();
     int height = umca_rast.getHeight();
 
-    if (START_TIME > END_TIME) {
+    // options for times are required ints
+    int start_time = std::stoi(opt.start_time->answer);
+    int end_time = std::stoi(opt.end_time->answer);
+    if (start_time > end_time) {
         cerr << "Start date must precede the end date!!!" << endl;
         exit(EXIT_FAILURE);
     }
@@ -271,8 +285,8 @@ int main(int argc, char *argv[])
     int kappa = 2;
 
     // initialize the start Date and end Date object
-    Date dd_start(START_TIME, 01, 01);
-    Date dd_end(END_TIME, 12, 31);
+    Date dd_start(start_time, 01, 01);
+    Date dd_end(end_time, 12, 31);
 
     // the variablbs created for the output to Geotiff file
     std::string s_year;
