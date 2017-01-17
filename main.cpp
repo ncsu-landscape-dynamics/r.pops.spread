@@ -209,7 +209,7 @@ int main()
     bool ss = true;
     bool wind = true;
 
-    // set the direction of the wind {N=0,NE=45,E=90,SE=135,S=180,SW=225,W=270,NW=315,NO  // NO means that there is no wind}
+    // set the direction of the wind {N=0,NE=45,E=90,SE=135,S=180,SW=225,W=270,NW=315,NONE  // NONE means that there is no wind}
     Direction pwdir = NE;
 
     // set the spore rate
