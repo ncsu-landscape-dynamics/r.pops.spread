@@ -146,6 +146,7 @@ string generate_name(const string& basename, const Date& date)
 struct SodOptions
 {
     struct Option *umca, *oaks, *lvtree, *ioaks;
+    struct Option *nc_weather;
     struct Option *output, *output_series;
 };
 
@@ -180,6 +181,9 @@ int main(int argc, char *argv[])
 
     opt.ioaks = G_define_standard_option(G_OPT_R_INPUT);
     opt.ioaks->key = "ioaks";
+
+    opt.nc_weather = G_define_standard_option(G_OPT_F_INPUT);
+    opt.nc_weather->key = "ncdf_weather";
 
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
 
@@ -238,7 +242,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    NcFile weatherCoeff(WEATHER_COEFF_PATH, NcFile::ReadOnly);
+    NcFile weatherCoeff(opt.nc_weather->answer, NcFile::ReadOnly);
 
     if (!weatherCoeff.is_valid()) {
         cerr << "Can not open the weather coefficients file(.cn)!" << endl;
