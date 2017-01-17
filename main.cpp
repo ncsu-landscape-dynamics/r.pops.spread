@@ -24,6 +24,7 @@ extern "C" {
 
 
 using namespace std;
+using std::string;
 
 #define UMCA_RAST_PATH "./layers/UMCA_den_100m.img"
 #define OAKS_RAST_PATH "./layers/OAKS_den_100m.img"
@@ -131,10 +132,21 @@ static void writeGeotiff(const char *inputFname, const char *outFname,
     CSLDestroy(papszOptions);
 }
 
+string generate_name(const string& basename, const Date& date)
+{
+    // counting on year being 4 digits
+    auto year = G_double_to_basename_format(date.getYear(), 4, 0);
+    auto month = G_double_to_basename_format(date.getMonth(), 2, 0);
+    auto day = G_double_to_basename_format(date.getDay(), 2, 0);
+    auto sep = G_get_basename_separator();
+    string name = basename + sep + year + "_" + month + "_" + day;
+    return name;
+}
 
 struct SodOptions
 {
     struct Option *umca, *oaks, *lvtree, *ioaks;
+    struct Option *output, *output_series;
 };
 
 struct SodFlags
@@ -168,6 +180,12 @@ int main(int argc, char *argv[])
 
     opt.ioaks = G_define_standard_option(G_OPT_R_INPUT);
     opt.ioaks->key = "ioaks";
+
+    opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
+
+    opt.output_series = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.output_series->key = "output_series";
+    opt.output_series->required = NO;
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -289,14 +307,10 @@ int main(int argc, char *argv[])
 
         // check whether the spore occurs in the month
         if (ss && dd_start.getMonth() > 9) {
-            cout << "----------" << dd_start.getYear() << "-" << dd_start.
-                getMonth() << "-" << dd_start.
-                getDay() << "-------------" << endl;
-            for (int m = 0; m < height; m++) {
-                for (int j = 0; j < width; j++) {
-                    cout << I_oaks_rast.data[m][j] << " ";
-                }
-                cout << endl;
+            if (opt.output_series->answer) {
+                // TODO: use end instead?
+                string name = generate_name(opt.output_series->answer, dd_start);
+                I_oaks_rast.toGrassRaster(name.c_str());
             }
             continue;
         }
@@ -339,24 +353,15 @@ int main(int argc, char *argv[])
         s_month = std::to_string(dd_start.getMonth());
         s_day = std::to_string(dd_start.getDay());
 
-        // print out the result
-        cout << "----------" << dd_start.getYear() << "-" << dd_start.
-            getMonth() << "-" << dd_start.getDay() << "-------------" << endl;
-        for (int m = 0; m < height; m++) {
-            for (int j = 0; j < width; j++) {
-                cout << I_oaks_rast.data[m][j] << " ";
-            }
-            cout << endl;
+        if (opt.output_series->answer) {
+            // TODO: use end instead?
+            string name = generate_name(opt.output_series->answer, dd_start);
+            I_oaks_rast.toGrassRaster(name.c_str());
         }
     }
 
-    // write the result into GeoTiff file
-
-    string outfilepath = outPathBase + s_year + "_" + s_month + "_" + s_day + ".tif";
-
-    const char *outfile;
-    outfile = outfilepath.c_str();
-    writeGeotiff(I_OAKS_RAST_PATH, outfile, I_oaks_rast);
+    // write final result
+    I_oaks_rast.toGrassRaster(opt.output->answer);
 
     // compute the time used when running the model
     clock_t end = clock();
