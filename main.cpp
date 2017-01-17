@@ -26,16 +26,8 @@ extern "C" {
 using namespace std;
 using std::string;
 
-#define UMCA_RAST_PATH "./layers/UMCA_den_100m.img"
-#define OAKS_RAST_PATH "./layers/OAKS_den_100m.img"
-#define LVTREE_RAST_PATH "./layers/TPH_den_100m.img"
-#define I_OAKS_RAST_PATH "./layers/init_2000_cnt.img"
-// you can specify the outfile
-#define OUT_PATH_BASE "out_"
-#define BACKGROUND_IMAGE_PATH "./layers/ortho_5m_color.tif"
 #define START_TIME 2000
 #define END_TIME 2010
-#define WEATHER_COEFF_PATH "./layers/weather/weatherCoeff_2000_2014.nc"
 #define DIM 1
 
 // Initialize infected trees for each species(!!Needed unless empirical info is available)
@@ -193,8 +185,6 @@ int main(int argc, char *argv[])
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
-
-    string outPathBase(OUT_PATH_BASE);
 
     // set the start point of the program
     clock_t begin = clock();
