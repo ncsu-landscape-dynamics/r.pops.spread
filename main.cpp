@@ -23,6 +23,7 @@ extern "C" {
 //g++ -std=c++11 main.cpp Img.h Img.cpp Spore.h Spore.cpp -lgdal -lnetcdf_c++
 
 #include <memory>
+#include <stdexcept>
 
 using namespace std;
 using std::string;
@@ -134,11 +135,22 @@ string generate_name(const string& basename, const Date& date)
     return name;
 }
 
+Rtype radial_type_from_string(const string& text)
+{
+    if (text == "cauchy")
+        return CAUCHY;
+    else if (text == "cauchy_mix")
+        return CAUCHY_MIX;
+    else
+        throw std::invalid_argument("Invalid value provided");
+}
+
 struct SodOptions
 {
     struct Option *umca, *oaks, *lvtree, *ioaks;
     struct Option *nc_weather, *weather_value;
     struct Option *start_time, *end_time;
+    struct Option *radial_type;
     struct Option *output, *output_series;
 };
 
@@ -200,6 +212,13 @@ int main(int argc, char *argv[])
     opt.end_time->label = _("End year for the simulation");
     opt.end_time->description = _("The last day of the year will be used");
     opt.end_time->required = YES;
+
+    opt.radial_type = G_define_option();
+    opt.radial_type->type = TYPE_STRING;
+    opt.radial_type->key = "radial_type";
+    opt.radial_type->label = _("Radial distribution type");
+    opt.radial_type->answer = "cauchy";
+    opt.radial_type->options = "cauchy,cauchy_mix";
 
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
 
@@ -308,7 +327,7 @@ int main(int argc, char *argv[])
 
     // set the spore rate
     double spore_rate = 4.4;
-    Rtype rtype = CAUCHY;
+    Rtype rtype = radial_type_from_string(opt.radial_type->answer);
     double scale1 = 20.57;
     int kappa = 2;
 
