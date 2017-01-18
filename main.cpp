@@ -135,6 +135,21 @@ string generate_name(const string& basename, const Date& date)
     return name;
 }
 
+Direction direction_enum_from_string(const string& text)
+{
+    std::map<string, Direction> mapping{
+        {"N", N}, {"NE", NE}, {"E", E}, {"SE", SE}, {"S", S},
+        {"SW", SW}, {"W", W}, {"NW", NW}, {"NONE", NONE}
+    };
+    try {
+        return mapping.at(text);
+    }
+    catch (const std::out_of_range&) {
+        throw std::invalid_argument("direction_enum_from_string: Invalid"
+                                    " value '" + text +"' provided");
+    }
+}
+
 Rtype radial_type_from_string(const string& text)
 {
     if (text == "cauchy")
@@ -142,7 +157,8 @@ Rtype radial_type_from_string(const string& text)
     else if (text == "cauchy_mix")
         return CAUCHY_MIX;
     else
-        throw std::invalid_argument("Invalid value provided");
+        throw std::invalid_argument("radial_type_from_string: Invalid"
+                                    " value '" + text +"' provided");
 }
 
 struct SodOptions
@@ -150,7 +166,7 @@ struct SodOptions
     struct Option *umca, *oaks, *lvtree, *ioaks;
     struct Option *nc_weather, *weather_value;
     struct Option *start_time, *end_time;
-    struct Option *spore_rate;
+    struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa;
     struct Option *output, *output_series;
 };
@@ -220,6 +236,14 @@ int main(int argc, char *argv[])
     opt.spore_rate->label = _("Spore production rate per week for each infected tree");
     opt.spore_rate->answer = "4.4";
 
+    opt.wind = G_define_option();
+    opt.wind->type = TYPE_STRING;
+    opt.wind->key = "wind";
+    opt.wind->label = _("Prevailing wind direction");
+    opt.wind->description = _("NONE means that there is no wind");
+    opt.wind->options = "N,NE,E,SE,S,SW,W,NW,NONE";
+    opt.wind->required = YES;
+
     opt.radial_type = G_define_option();
     opt.radial_type->type = TYPE_STRING;
     opt.radial_type->key = "radial_type";
@@ -260,8 +284,7 @@ int main(int argc, char *argv[])
     bool ss = true;
     bool wind = true;
 
-    // set the direction of the wind {N=0,NE=45,E=90,SE=135,S=180,SW=225,W=270,NW=315,NONE  // NONE means that there is no wind}
-    Direction pwdir = NE;
+    Direction pwdir = direction_enum_from_string(opt.wind->answer);
 
     // set the spore rate
     double spore_rate = std::stod(opt.spore_rate->answer);
