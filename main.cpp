@@ -9,21 +9,22 @@
  */
 
 
-#include <iostream>
+#include "Spore.h"
 #include "Img.h"
-#include <netcdfcpp.h>
 
 extern "C" {
 #include <grass/gis.h>
 #include <grass/glocale.h>
 }
 
-#include "Spore.h"
+#include <netcdfcpp.h>
+#include <gdal/gdal.h>
+#include <gdal/gdal_priv.h>
 
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <fstream>
-
 
 using std::string;
 using std::cout;
