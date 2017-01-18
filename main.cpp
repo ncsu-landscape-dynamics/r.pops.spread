@@ -190,13 +190,15 @@ int main(int argc, char *argv[])
     opt.start_time = G_define_option();
     opt.start_time->type = TYPE_INTEGER;
     opt.start_time->key = "start_time";
-    opt.start_time->description = "Start year for the simulation";
+    opt.start_time->label = _("Start year for the simulation");
+    opt.start_time->description = _("The first day of the year will be used");
     opt.start_time->required = YES;
 
     opt.end_time = G_define_option();
     opt.end_time->type = TYPE_INTEGER;
     opt.end_time->key = "end_time";
-    opt.end_time->description = "End year for the simulation";
+    opt.end_time->label = _("End year for the simulation");
+    opt.start_time->description = _("The last day of the year will be used");
     opt.end_time->required = YES;
 
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
