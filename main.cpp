@@ -24,6 +24,7 @@ extern "C" {
 
 #include <memory>
 #include <stdexcept>
+#include <fstream>
 
 
 using std::string;
@@ -175,10 +176,25 @@ bool seasonality_from_string(const string& text)
                                     " value '" + text +"' provided");
 }
 
+std::vector<double> weather_file_to_list(const string& filename)
+{
+    std::ifstream input(filename);
+    std::vector<double> output;
+    string line;
+    while (std::getline(input, line))
+    {
+        double m, c;
+        std::istringstream stream(line);
+        stream >> m >> c;
+        output.push_back(m * c);
+    }
+    return output;
+}
+
 struct SodOptions
 {
     struct Option *umca, *oaks, *lvtree, *ioaks;
-    struct Option *nc_weather, *weather_value;
+    struct Option *nc_weather, *weather_value, *weather_file;
     struct Option *start_time, *end_time, *seasonality;
     struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
@@ -229,6 +245,13 @@ int main(int argc, char *argv[])
             _("Spatially and temporally constant weather coeficient"
               " (usually moisture times temperture in C)");
     opt.weather_value->required = NO;
+
+    opt.weather_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.weather_file->key = "weather_file";
+    opt.weather_file->label = _("Text file with weather");
+    opt.weather_file->description =
+            _("Moisture and temperature");
+    opt.weather_file->required = NO;
 
     opt.start_time = G_define_option();
     opt.start_time->type = TYPE_INTEGER;
@@ -386,9 +409,12 @@ int main(int argc, char *argv[])
     int height = umca_rast.getHeight();
 
     std::shared_ptr<NcFile> weather_coeff = nullptr;
+    std::vector<double> weather_values;
     double weather_value = 0;
     if (opt.nc_weather->answer)
         weather_coeff = std::make_shared<NcFile>(opt.nc_weather->answer, NcFile::ReadOnly);
+    else if (opt.weather_file->answer)
+        weather_values = weather_file_to_list(opt.weather_file->answer);
     else if (opt.weather_value->answer)
         weather_value = std::stoi(opt.weather_value->answer);
     else
@@ -478,6 +504,8 @@ int main(int argc, char *argv[])
                     weather[j * width + k] = mcf[j * width + k] * ccf[j * width + k];
                 }
             }
+        } else if (!weather_values.empty()) {
+            weather_value = weather_values[i];
         }
 
         // build the Sporulation object
