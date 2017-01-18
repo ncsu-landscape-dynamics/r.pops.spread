@@ -150,6 +150,7 @@ struct SodOptions
     struct Option *umca, *oaks, *lvtree, *ioaks;
     struct Option *nc_weather, *weather_value;
     struct Option *start_time, *end_time;
+    struct Option *spore_rate;
     struct Option *radial_type;
     struct Option *output, *output_series;
 };
@@ -212,6 +213,12 @@ int main(int argc, char *argv[])
     opt.end_time->label = _("End year for the simulation");
     opt.end_time->description = _("The last day of the year will be used");
     opt.end_time->required = YES;
+
+    opt.spore_rate = G_define_option();
+    opt.spore_rate->type = TYPE_DOUBLE;
+    opt.spore_rate->key = "spore_rate";
+    opt.spore_rate->label = _("Spore production rate per week for each infected tree");
+    opt.spore_rate->answer = "4.4";
 
     opt.radial_type = G_define_option();
     opt.radial_type->type = TYPE_STRING;
@@ -326,7 +333,7 @@ int main(int argc, char *argv[])
     Direction pwdir = NE;
 
     // set the spore rate
-    double spore_rate = 4.4;
+    double spore_rate = std::stod(opt.spore_rate->answer);
     Rtype rtype = radial_type_from_string(opt.radial_type->answer);
     double scale1 = 20.57;
     int kappa = 2;
