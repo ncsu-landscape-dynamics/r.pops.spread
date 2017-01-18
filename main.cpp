@@ -276,7 +276,15 @@ int main(int argc, char *argv[])
         scale2 = std::stod(opt.scale_2->answer);
     double kappa = std::stod(opt.kappa->answer);
 
+
     // initialize the start Date and end Date object
+    // options for times are required ints
+    int start_time = std::stoi(opt.start_time->answer);
+    int end_time = std::stoi(opt.end_time->answer);
+    if (start_time > end_time) {
+        cerr << "Start date must precede the end date!!!" << endl;
+        exit(EXIT_FAILURE);
+    }
     Date dd_start(start_time, 01, 01);
     Date dd_end(end_time, 12, 31);
 
@@ -317,15 +325,6 @@ int main(int argc, char *argv[])
     // retrieve the width and height of the images
     int width = umca_rast.getWidth();
     int height = umca_rast.getHeight();
-
-    // options for times are required ints
-    int start_time = std::stoi(opt.start_time->answer);
-    int end_time = std::stoi(opt.end_time->answer);
-    if (start_time > end_time) {
-        cerr << "Start date must precede the end date!!!" << endl;
-        exit(EXIT_FAILURE);
-    }
-
 
     std::shared_ptr<NcFile> weather_coeff = nullptr;
     double weather_value = 0;
