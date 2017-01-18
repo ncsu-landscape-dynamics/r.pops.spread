@@ -268,7 +268,7 @@ int main(int argc, char *argv[])
                       opt.radial_type->answer);
     else if (opt.scale_2->answer)
         scale2 = std::stod(opt.scale_2->answer);
-    int kappa = 2;
+    double kappa = 2;
 
     // initialize the start Date and end Date object
     Date dd_start(start_time, 01, 01);
