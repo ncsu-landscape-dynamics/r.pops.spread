@@ -424,10 +424,6 @@ int main(int argc, char *argv[])
         weather = new double[height * width];
     }
 
-    // the variablbs created for the output to Geotiff file
-    std::string s_year;
-    std::string s_month;
-    std::string s_day;
     // main simulation loop(weekly steps)
     for (int i = 0; dd_start.compareDate(dd_end);
          i++, dd_start.increasedByWeek()) {
@@ -492,10 +488,6 @@ int main(int argc, char *argv[])
                             I_oaks_rast, lvtree_rast, rtype, weather,
                             weather_value, scale1, kappa, pwdir, scale2,
                             gamma);
-
-        s_year = std::to_string(dd_start.getYear());
-        s_month = std::to_string(dd_start.getMonth());
-        s_day = std::to_string(dd_start.getDay());
 
         if (opt.output_series->answer) {
             // TODO: use end instead?
