@@ -250,6 +250,30 @@ int main(int argc, char *argv[])
     // set the start point of the program
     clock_t begin = clock();
 
+    // Seasonality: Do you want the spread to be limited to certain months?
+    bool ss = true;
+    bool wind = true;
+
+    // set the direction of the wind {N=0,NE=45,E=90,SE=135,S=180,SW=225,W=270,NW=315,NONE  // NONE means that there is no wind}
+    Direction pwdir = NE;
+
+    // set the spore rate
+    double spore_rate = std::stod(opt.spore_rate->answer);
+    Rtype rtype = radial_type_from_string(opt.radial_type->answer);
+    double scale1 = std::stod(opt.scale_1->answer);
+    double scale2 = 0;
+    if (rtype == CAUCHY_MIX && !opt.scale_2->answer)
+        G_fatal_error(_("The option %s is required for %s=%s"),
+                      opt.scale_2->key, opt.radial_type->key,
+                      opt.radial_type->answer);
+    else if (opt.scale_2->answer)
+        scale2 = std::stod(opt.scale_2->answer);
+    int kappa = 2;
+
+    // initialize the start Date and end Date object
+    Date dd_start(start_time, 01, 01);
+    Date dd_end(end_time, 12, 31);
+
     // read the suspectible UMCA raster image
     Img umca_rast = Img::fromGrassRaster(opt.umca->answer);
 
@@ -335,30 +359,6 @@ int main(int argc, char *argv[])
         ccf = new double[height * width];
         weather = new double[height * width];
     }
-
-    // Seasonality: Do you want the spread to be limited to certain months?
-    bool ss = true;
-    bool wind = true;
-
-    // set the direction of the wind {N=0,NE=45,E=90,SE=135,S=180,SW=225,W=270,NW=315,NONE  // NONE means that there is no wind}
-    Direction pwdir = NE;
-
-    // set the spore rate
-    double spore_rate = std::stod(opt.spore_rate->answer);
-    Rtype rtype = radial_type_from_string(opt.radial_type->answer);
-    double scale1 = std::stod(opt.scale_1->answer);
-    double scale2 = 0;
-    if (rtype == CAUCHY_MIX && !opt.scale_2->answer)
-        G_fatal_error(_("The option %s is required for %s=%s"),
-                      opt.scale_2->key, opt.radial_type->key,
-                      opt.radial_type->answer);
-    else if (opt.scale_2->answer)
-        scale2 = std::stod(opt.scale_2->answer);
-    int kappa = 2;
-
-    // initialize the start Date and end Date object
-    Date dd_start(start_time, 01, 01);
-    Date dd_end(end_time, 12, 31);
 
     // the variablbs created for the output to Geotiff file
     std::string s_year;
