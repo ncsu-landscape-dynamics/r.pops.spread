@@ -25,8 +25,12 @@ extern "C" {
 #include <memory>
 #include <stdexcept>
 
-using namespace std;
+
 using std::string;
+using std::cout;
+using std::cerr;
+using std::endl;
+
 
 #define DIM 1
 
