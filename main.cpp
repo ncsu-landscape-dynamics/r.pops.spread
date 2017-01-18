@@ -79,7 +79,6 @@ static void writeGeotiff(const char *inputFname, const char *outFname,
 {
     // obtain information for output Geotiff images
     GDALDataset *inputDataset;
-    GDALRasterBand *inputDataBand;
 
     GDALAllRegister();
     inputDataset = (GDALDataset *) GDALOpen(inputFname, GA_ReadOnly);
@@ -308,7 +307,6 @@ int main(int argc, char *argv[])
 
     // Seasonality: Do you want the spread to be limited to certain months?
     bool ss = seasonality_from_string(opt.seasonality->answer);
-    bool wind = true;
 
     Direction pwdir = direction_enum_from_string(opt.wind->answer);
 
