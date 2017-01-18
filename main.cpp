@@ -18,9 +18,7 @@ extern "C" {
 #include <grass/glocale.h>
 }
 
-// to compile with netcdfcpp.h, add -lnetcdf_c++
 #include "Spore.h"
-//g++ -std=c++11 main.cpp Img.h Img.cpp Spore.h Spore.cpp -lgdal -lnetcdf_c++
 
 #include <memory>
 #include <stdexcept>
@@ -35,7 +33,8 @@ using std::endl;
 
 #define DIM 1
 
-// Initialize infected trees for each species(!!Needed unless empirical info is available)
+// Initialize infected trees for each species
+// needed unless empirical info is available
 static Img initialize(Img& img1,Img& img2) {
     int re_width=0;
     int re_height=0;
@@ -96,7 +95,6 @@ static void writeGeotiff(const char *inputFname, const char *outFname,
     GDALDriver *gdalDriver;
 
     gdalDriver = GetGDALDriverManager()->GetDriverByName(pszFormat);
-    //char *pszSRS_WKT = NULL;
     int xSize = inputDataset->GetRasterXSize();
     int ySize = inputDataset->GetRasterYSize();
     GDALRasterBand *outBand;
@@ -394,15 +392,6 @@ int main(int argc, char *argv[])
     // SOD-immune trees image
     //Img SOD_rast = umca_rast + oaks_rast;
     //Img IMM_rast = lvtree_rast - SOD_rast;
-
-    /*
-    for(int i=0;i<S_oaks_rast.getHeight();i++){
-        for(int j=0;j<S_oaks_rast.getWidth();j++){
-            cout << S_oaks_rast.data[i][j] << " ";
-        }
-        cout << endl;
-    }
-*/
 
     // retrieve the width and height of the images
     int width = umca_rast.getWidth();
