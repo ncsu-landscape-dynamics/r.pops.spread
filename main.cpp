@@ -198,7 +198,7 @@ int main(int argc, char *argv[])
     opt.end_time->type = TYPE_INTEGER;
     opt.end_time->key = "end_time";
     opt.end_time->label = _("End year for the simulation");
-    opt.start_time->description = _("The last day of the year will be used");
+    opt.end_time->description = _("The last day of the year will be used");
     opt.end_time->required = YES;
 
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
