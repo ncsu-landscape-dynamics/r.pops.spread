@@ -22,6 +22,7 @@ extern "C" {
 #include "Spore.h"
 //g++ -std=c++11 main.cpp Img.h Img.cpp Spore.h Spore.cpp -lgdal -lnetcdf_c++
 
+#include <memory>
 
 using namespace std;
 using std::string;
@@ -136,7 +137,7 @@ string generate_name(const string& basename, const Date& date)
 struct SodOptions
 {
     struct Option *umca, *oaks, *lvtree, *ioaks;
-    struct Option *nc_weather;
+    struct Option *nc_weather, *weather_value;
     struct Option *start_time, *end_time;
     struct Option *output, *output_series;
 };
@@ -175,6 +176,16 @@ int main(int argc, char *argv[])
 
     opt.nc_weather = G_define_standard_option(G_OPT_F_INPUT);
     opt.nc_weather->key = "ncdf_weather";
+    opt.nc_weather->required = NO;
+
+    opt.weather_value = G_define_option();
+    opt.weather_value->type = TYPE_INTEGER;
+    opt.weather_value->key = "weather_value";
+    opt.weather_value->label = _("Value to be used as weather coeficient");
+    opt.weather_value->description =
+            _("Spatially and temporally constant weather coeficient"
+              " (usually moisture times temperture in C)");
+    opt.weather_value->required = NO;
 
     opt.start_time = G_define_option();
     opt.start_time->type = TYPE_INTEGER;
@@ -246,30 +257,45 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    NcFile weatherCoeff(opt.nc_weather->answer, NcFile::ReadOnly);
 
-    if (!weatherCoeff.is_valid()) {
+    std::shared_ptr<NcFile> weather_coeff = nullptr;
+    double weather_value = 0;
+    if (opt.nc_weather->answer)
+        weather_coeff = std::make_shared<NcFile>(opt.nc_weather->answer, NcFile::ReadOnly);
+    else if (opt.weather_value->answer)
+        weather_value = std::stoi(opt.weather_value->answer);
+    else
+        weather_value = 1;  // no change (used in multiplication)
+
+    if (weather_coeff && !weather_coeff->is_valid()) {
         cerr << "Can not open the weather coefficients file(.cn)!" << endl;
         exit(EXIT_FAILURE);
     }
 
-    NcVar *mcf_nc, *ccf_nc;
+    // TODO: do we need to free this? docs is 404
+    NcVar *mcf_nc = nullptr;
+    NcVar *ccf_nc = nullptr;
 
-    if (!(mcf_nc = weatherCoeff.get_var("Mcoef"))) {
+    if (weather_coeff && !(mcf_nc = weather_coeff->get_var("Mcoef"))) {
         cerr << "Can not read the moisture coefficients from the file!" <<
             endl;
         exit(EXIT_FAILURE);
     }
 
-    if (!(ccf_nc = weatherCoeff.get_var("Ccoef"))) {
+    if (weather_coeff && !(ccf_nc = weather_coeff->get_var("Ccoef"))) {
         cerr << "Can not read the temperature coefficients from the file!" <<
             endl;
         exit(EXIT_FAILURE);
     }
 
-    double mcf[height][width];
-    double ccf[height][width];
-    double *weather = new double[height * width];
+    double *mcf = nullptr;
+    double *ccf = nullptr;
+    double *weather = nullptr;
+    if (weather_coeff) {
+        mcf = new double[height * width];
+        ccf = new double[height * width];
+        weather = new double[height * width];
+    }
 
     // Seasonality: Do you want the spread to be limited to certain months?
     bool ss = true;
@@ -323,39 +349,38 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        // read the weather information
-        if (!mcf_nc->set_cur(i,0,0)) {
-            cerr << "Can not read the coefficients from the mcf_nc pointer to mcf array " << i << endl;
-            exit(EXIT_FAILURE);
-        }
-
-        if (!ccf_nc->set_cur(i,0,0)) {
-            cerr << "Can not read the coefficients from the ccf_nc pointer to ccf array "<< i << endl;
-            exit(EXIT_FAILURE);
-        }
-
-        if (!mcf_nc->get(&mcf[0][0], 1, height, width)) {
-            cerr << "Can not get the record from mcf_nc " << i << endl;
-            exit(EXIT_FAILURE);
-        }
-
-        if (!ccf_nc->get(&ccf[0][0], 1, height, width)) {
-            cerr << "Can not get the record from ccf_nc " << i << endl;
-            exit(EXIT_FAILURE);
-        }
-
-        for (int j = 0; j < height; j++) {
-            for (int k = 0; k < width; k++) {
-                weather[j * width + k] = mcf[j][k] * ccf[j][k];
+        if (weather_coeff) {
+            // read the weather information
+            if (!mcf_nc->set_cur(i,0,0)) {
+                cerr << "Can not read the coefficients from the mcf_nc pointer to mcf array " << i << endl;
+                exit(EXIT_FAILURE);
+            }
+            if (!ccf_nc->set_cur(i,0,0)) {
+                cerr << "Can not read the coefficients from the ccf_nc pointer to ccf array "<< i << endl;
+                exit(EXIT_FAILURE);
+            }
+            if (!mcf_nc->get(mcf, 1, height, width)) {
+                cerr << "Can not get the record from mcf_nc " << i << endl;
+                exit(EXIT_FAILURE);
+            }
+            if (!ccf_nc->get(ccf, 1, height, width)) {
+                cerr << "Can not get the record from ccf_nc " << i << endl;
+                exit(EXIT_FAILURE);
+            }
+            for (int j = 0; j < height; j++) {
+                for (int k = 0; k < width; k++) {
+                    weather[j * width + k] = mcf[j * width + k] * ccf[j * width + k];
+                }
             }
         }
 
         // build the Sporulation object
         Sporulation sp1;
-        sp1.SporeGen(I_umca_rast,weather,spore_rate);
+        sp1.SporeGen(I_umca_rast, weather, weather_value, spore_rate);
 
-        sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast, I_oaks_rast, lvtree_rast,
-                            rtype, weather, scale1, kappa, pwdir);
+        sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast,
+                            I_oaks_rast, lvtree_rast, rtype, weather,
+                            weather_value, scale1, kappa, pwdir);
 
         s_year = std::to_string(dd_start.getYear());
         s_month = std::to_string(dd_start.getMonth());
@@ -379,6 +404,8 @@ int main(int argc, char *argv[])
 
     // clean the allocated memory
     if (weather) {
+        delete[] mcf;
+        delete[] ccf;
         delete[] weather;
     }
 
