@@ -161,11 +161,22 @@ Rtype radial_type_from_string(const string& text)
                                     " value '" + text +"' provided");
 }
 
+bool seasonality_from_string(const string& text)
+{
+    if (text == "yes")
+        return true;
+    else if (text == "no")
+        return false;
+    else
+        throw std::invalid_argument("seasonality_from_string: Invalid"
+                                    " value '" + text +"' provided");
+}
+
 struct SodOptions
 {
     struct Option *umca, *oaks, *lvtree, *ioaks;
     struct Option *nc_weather, *weather_value;
-    struct Option *start_time, *end_time;
+    struct Option *start_time, *end_time, *seasonality;
     struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
     struct Option *output, *output_series;
@@ -230,6 +241,14 @@ int main(int argc, char *argv[])
     opt.end_time->description = _("The last day of the year will be used");
     opt.end_time->required = YES;
 
+    opt.seasonality = G_define_option();
+    opt.seasonality->type = TYPE_STRING;
+    opt.seasonality->key = "seasonality";
+    opt.seasonality->label = _("Seasonal spread");
+    opt.seasonality->description = _("Spread limited to certain months (season)");
+    opt.seasonality->options = "yes,no";
+    opt.seasonality->answer = "yes";
+
     opt.spore_rate = G_define_option();
     opt.spore_rate->type = TYPE_DOUBLE;
     opt.spore_rate->key = "spore_rate";
@@ -288,7 +307,7 @@ int main(int argc, char *argv[])
     clock_t begin = clock();
 
     // Seasonality: Do you want the spread to be limited to certain months?
-    bool ss = true;
+    bool ss = seasonality_from_string(opt.seasonality->answer);
     bool wind = true;
 
     Direction pwdir = direction_enum_from_string(opt.wind->answer);
