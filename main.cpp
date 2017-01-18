@@ -151,7 +151,7 @@ struct SodOptions
     struct Option *nc_weather, *weather_value;
     struct Option *start_time, *end_time;
     struct Option *spore_rate;
-    struct Option *radial_type;
+    struct Option *radial_type, *scale_1, *scale_2;
     struct Option *output, *output_series;
 };
 
@@ -226,6 +226,17 @@ int main(int argc, char *argv[])
     opt.radial_type->label = _("Radial distribution type");
     opt.radial_type->answer = "cauchy";
     opt.radial_type->options = "cauchy,cauchy_mix";
+
+    opt.scale_1 = G_define_option();
+    opt.scale_1->type = TYPE_DOUBLE;
+    opt.scale_1->key = "scale_1";
+    opt.scale_1->label = _("Scale parameter for the first Cauchy distribution");
+    opt.scale_1->answer = "20.57";
+
+    opt.scale_2 = G_define_option();
+    opt.scale_2->type = TYPE_DOUBLE;
+    opt.scale_2->key = "scale_2";
+    opt.scale_2->label = _("Scale parameter for the second Cauchy distribution");
 
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
 
@@ -335,7 +346,14 @@ int main(int argc, char *argv[])
     // set the spore rate
     double spore_rate = std::stod(opt.spore_rate->answer);
     Rtype rtype = radial_type_from_string(opt.radial_type->answer);
-    double scale1 = 20.57;
+    double scale1 = std::stod(opt.scale_1->answer);
+    double scale2 = 0;
+    if (rtype == CAUCHY_MIX && !opt.scale_2->answer)
+        G_fatal_error(_("The option %s is required for %s=%s"),
+                      opt.scale_2->key, opt.radial_type->key,
+                      opt.radial_type->answer);
+    else if (opt.scale_2->answer)
+        scale2 = std::stod(opt.scale_2->answer);
     int kappa = 2;
 
     // initialize the start Date and end Date object
@@ -408,7 +426,7 @@ int main(int argc, char *argv[])
 
         sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast,
                             I_oaks_rast, lvtree_rast, rtype, weather,
-                            weather_value, scale1, kappa, pwdir);
+                            weather_value, scale1, kappa, pwdir, scale2);
 
         s_year = std::to_string(dd_start.getYear());
         s_month = std::to_string(dd_start.getMonth());
