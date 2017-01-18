@@ -167,7 +167,7 @@ struct SodOptions
     struct Option *nc_weather, *weather_value;
     struct Option *start_time, *end_time;
     struct Option *spore_rate, *wind;
-    struct Option *radial_type, *scale_1, *scale_2, *kappa;
+    struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
     struct Option *output, *output_series;
 };
 
@@ -268,6 +268,13 @@ int main(int argc, char *argv[])
     opt.kappa->label = _("Concentration parameter for the von Mises distribution");
     opt.kappa->answer = "2";
 
+    opt.gamma = G_define_option();
+    opt.gamma->type = TYPE_DOUBLE;
+    opt.gamma->key = "gamma";
+    opt.gamma->label = _("Gamma parameter for Bernoulli distribution");
+    opt.gamma->description = _("Probability of using the first Cauchy distribution");
+    opt.gamma->options = "0-1";
+
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
 
     opt.output_series = G_define_standard_option(G_OPT_R_OUTPUT);
@@ -298,6 +305,14 @@ int main(int argc, char *argv[])
     else if (opt.scale_2->answer)
         scale2 = std::stod(opt.scale_2->answer);
     double kappa = std::stod(opt.kappa->answer);
+    double gamma = 0.0;
+    if (rtype == CAUCHY_MIX && !opt.gamma->answer)
+        G_fatal_error(_("The option %s is required for %s=%s"),
+                      opt.gamma->key, opt.radial_type->key,
+                      opt.radial_type->answer);
+    else if (opt.gamma->answer)
+        gamma = std::stod(opt.gamma->answer);
+
 
 
     // initialize the start Date and end Date object
@@ -454,7 +469,8 @@ int main(int argc, char *argv[])
 
         sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast,
                             I_oaks_rast, lvtree_rast, rtype, weather,
-                            weather_value, scale1, kappa, pwdir, scale2);
+                            weather_value, scale1, kappa, pwdir, scale2,
+                            gamma);
 
         s_year = std::to_string(dd_start.getYear());
         s_month = std::to_string(dd_start.getMonth());
