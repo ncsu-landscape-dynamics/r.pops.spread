@@ -151,7 +151,7 @@ struct SodOptions
     struct Option *nc_weather, *weather_value;
     struct Option *start_time, *end_time;
     struct Option *spore_rate;
-    struct Option *radial_type, *scale_1, *scale_2;
+    struct Option *radial_type, *scale_1, *scale_2, *kappa;
     struct Option *output, *output_series;
 };
 
@@ -238,6 +238,12 @@ int main(int argc, char *argv[])
     opt.scale_2->key = "scale_2";
     opt.scale_2->label = _("Scale parameter for the second Cauchy distribution");
 
+    opt.kappa = G_define_option();
+    opt.kappa->type = TYPE_DOUBLE;
+    opt.kappa->key = "kappa";
+    opt.kappa->label = _("Concentration parameter for the von Mises distribution");
+    opt.kappa->answer = "2";
+
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
 
     opt.output_series = G_define_standard_option(G_OPT_R_OUTPUT);
@@ -268,7 +274,7 @@ int main(int argc, char *argv[])
                       opt.radial_type->answer);
     else if (opt.scale_2->answer)
         scale2 = std::stod(opt.scale_2->answer);
-    double kappa = 2;
+    double kappa = std::stod(opt.kappa->answer);
 
     // initialize the start Date and end Date object
     Date dd_start(start_time, 01, 01);
