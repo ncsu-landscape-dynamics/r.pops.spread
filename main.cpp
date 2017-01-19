@@ -77,56 +77,6 @@ static Img initialize(Img& img1,Img& img2) {
     }
 }
 
-
-// inputFname is used to retrieve GDAL information from the known input file
-static void writeGeotiff(const char *inputFname, const char *outFname,
-                         Img & img)
-{
-    // obtain information for output Geotiff images
-    GDALDataset *inputDataset;
-
-    GDALAllRegister();
-    inputDataset = (GDALDataset *) GDALOpen(inputFname, GA_ReadOnly);
-    double inputAdfGeoTransform[6];
-
-    inputDataset->GetGeoTransform(inputAdfGeoTransform);
-
-    // Setup driver
-    const char *pszFormat = "GTiff";
-    GDALDriver *gdalDriver;
-
-    gdalDriver = GetGDALDriverManager()->GetDriverByName(pszFormat);
-    int xSize = inputDataset->GetRasterXSize();
-    int ySize = inputDataset->GetRasterYSize();
-    GDALRasterBand *outBand;
-
-    //Set output Dataset
-    GDALDataset *outDataset;
-    char **papszOptions = NULL;
-
-    int *outstream = (int *)std::malloc(sizeof(int) * xSize * ySize);
-
-    for (int i = 0; i < ySize; i++) {
-        for (int j = 0; j < xSize; j++) {
-            outstream[i * xSize + j] = img.data[i][j];
-        }
-    }
-
-    // create output geotiff
-    outDataset = gdalDriver->Create(outFname, xSize, ySize, 1, GDT_Byte, papszOptions);
-    outDataset->SetGeoTransform(inputAdfGeoTransform);
-    outDataset->SetProjection(inputDataset->GetProjectionRef());
-    outBand = outDataset->GetRasterBand(1);
-    outBand->RasterIO(GF_Write, 0, 0, xSize, ySize,outstream,
-                      xSize, ySize, GDT_Int32, 0, 0);
-    GDALClose((GDALDatasetH) outDataset);
-    GDALClose((GDALDatasetH) inputDataset);
-    if (outstream) {
-        delete [] outstream;
-    }
-    CSLDestroy(papszOptions);
-}
-
 string generate_name(const string& basename, const Date& date)
 {
     // counting on year being 4 digits
