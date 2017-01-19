@@ -471,7 +471,7 @@ int main(int argc, char *argv[])
         }
 
         // build the Sporulation object
-        Sporulation sp1(seed_value);
+        Sporulation sp1(seed_value, I_umca_rast);
         sp1.SporeGen(I_umca_rast, weather, weather_value, spore_rate);
 
         sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast,
