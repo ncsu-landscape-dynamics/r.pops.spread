@@ -58,14 +58,14 @@ static Img initialize(Img& img1,Img& img2) {
 
         for (int i = 0; i < re_height; i++) {
             for (int j = 0; j < re_width; j++) {
-                if (img2.data[i][j] > 0) {
-                    if (img1.data[i][j] > img2.data[i][j])
+                if (img2(i, j) > 0) {
+                    if (img1(i, j) > img2(i, j))
                         re_data[i][j] =
-                            img1.data[i][j] <
-                            (img2.data[i][j] *
-                             2) ? img1.data[i][j] : (img2.data[i][j] * 2);
+                            img1(i, j) <
+                            (img2(i, j) *
+                             2) ? img1(i, j) : (img2(i, j) * 2);
                     else
-                        re_data[i][j] = img1.data[i][j];
+                        re_data[i][j] = img1(i, j);
                 }
                 else {
                     re_data[i][j] = 0;
@@ -430,7 +430,7 @@ int main(int argc, char *argv[])
 
         for (int j = 0; j < height; j++) {
             for (int k = 0; k < width; k++) {
-                if (S_oaks_rast.data[j][k] > 0)
+                if (S_oaks_rast(j, k) > 0)
                     allInfected = false;
             }
         }
