@@ -37,43 +37,33 @@ using std::endl;
 // Initialize infected trees for each species
 // needed unless empirical info is available
 static Img initialize(Img& img1,Img& img2) {
-    int re_width=0;
-    int re_height=0;
-    int **re_data=NULL;
-
     if (img1.getWidth() != img2.getWidth() ||
             img2.getHeight() != img2.getHeight()) {
         cerr << "The height or width of one image do not match with that of the other one!" << endl;
         return Img();
     }
     else {
-        re_width = img1.getWidth();
-        re_height = img1.getHeight();
-        re_data = (int **)std::malloc(sizeof(int *) * re_height);
-        int *stream = (int *)std::malloc(sizeof(int) * re_width * re_height);
-
-        for (int i = 0; i < re_height; i++) {
-            re_data[i] = &stream[i * re_width];
-        }
+        auto re_width = img1.getWidth();
+        auto re_height = img1.getHeight();
+        auto out = Img(re_width, re_height, img1.getWEResolution(), img1.getNSResolution());
 
         for (int i = 0; i < re_height; i++) {
             for (int j = 0; j < re_width; j++) {
                 if (img2(i, j) > 0) {
                     if (img1(i, j) > img2(i, j))
-                        re_data[i][j] =
+                        out(i, j) =
                             img1(i, j) <
                             (img2(i, j) *
                              2) ? img1(i, j) : (img2(i, j) * 2);
                     else
-                        re_data[i][j] = img1(i, j);
+                        out(i, j) = img1(i, j);
                 }
                 else {
-                    re_data[i][j] = 0;
+                    out(i, j) = 0;
                 }
             }
         }
-        return Img(re_width, re_height, img1.getWEResolution(),
-                   img1.getNSResolution(), re_data);
+        return out;
     }
 }
 
