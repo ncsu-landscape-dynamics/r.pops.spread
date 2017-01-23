@@ -21,6 +21,7 @@ extern "C" {
 #include <gdal/gdal.h>
 #include <gdal/gdal_priv.h>
 
+#include <map>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
