@@ -11,6 +11,7 @@
 
 #include "Spore.h"
 #include "Img.h"
+#include "date.h"
 
 extern "C" {
 #include <grass/gis.h>
