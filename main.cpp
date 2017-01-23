@@ -132,6 +132,44 @@ std::vector<double> weather_file_to_list(const string& filename)
     return output;
 }
 
+bool all_infected(Img& S_oaks_rast)
+{
+    bool allInfected = true;
+    for (int j = 0; j < S_oaks_rast.getHeight(); j++) {
+        for (int k = 0; k < S_oaks_rast.getWidth(); k++) {
+            if (S_oaks_rast(j, k) > 0)
+                allInfected = false;
+        }
+    }
+    return allInfected;
+}
+
+void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf, double* weather, int width, int height, int step)
+{
+    // read the weather information
+    if (!mcf_nc->set_cur(step, 0, 0)) {
+        cerr << "Can not read the coefficients from the mcf_nc pointer to mcf array " << step << endl;
+        exit(EXIT_FAILURE);
+    }
+    if (!ccf_nc->set_cur(step, 0, 0)) {
+        cerr << "Can not read the coefficients from the ccf_nc pointer to ccf array "<< step << endl;
+        exit(EXIT_FAILURE);
+    }
+    if (!mcf_nc->get(mcf, 1, height, width)) {
+        cerr << "Can not get the record from mcf_nc " << step << endl;
+        exit(EXIT_FAILURE);
+    }
+    if (!ccf_nc->get(ccf, 1, height, width)) {
+        cerr << "Can not get the record from ccf_nc " << step << endl;
+        exit(EXIT_FAILURE);
+    }
+    for (int j = 0; j < height; j++) {
+        for (int k = 0; k < width; k++) {
+            weather[j * width + k] = mcf[j * width + k] * ccf[j * width + k];
+        }
+    }
+}
+
 struct SodOptions
 {
     struct Option *umca, *oaks, *lvtree, *ioaks;
@@ -162,6 +200,7 @@ int main(int argc, char *argv[])
     G_add_keyword(_("spread"));
     G_add_keyword(_("model"));
     G_add_keyword(_("disease"));
+    module->description = _("Stochastic landscape spread model of forest pathogen - Sudden Oak Death (SOD)");
 
     opt.umca = G_define_standard_option(G_OPT_R_INPUT);
     opt.umca->key = "umca";
@@ -446,17 +485,8 @@ int main(int argc, char *argv[])
     for (int i = 0; dd_start.compareDate(dd_end);
          i++, dd_start.increasedByWeek()) {
 
-        bool allInfected = true;
-
-        for (int j = 0; j < height; j++) {
-            for (int k = 0; k < width; k++) {
-                if (S_oaks_rast(j, k) > 0)
-                    allInfected = false;
-            }
-        }
-
         // if all the oaks are infected, then exit
-        if (allInfected) {
+        if (all_infected(S_oaks_rast)) {
             cerr << "In the " << dd_start.getYear() << "-" << dd_start.
                 getMonth() << "-" << dd_start.
                 getDay() << " all suspectible oaks are infected!" << endl;
@@ -475,27 +505,7 @@ int main(int argc, char *argv[])
 
         if (weather_coeff) {
             // read the weather information
-            if (!mcf_nc->set_cur(i,0,0)) {
-                cerr << "Can not read the coefficients from the mcf_nc pointer to mcf array " << i << endl;
-                exit(EXIT_FAILURE);
-            }
-            if (!ccf_nc->set_cur(i,0,0)) {
-                cerr << "Can not read the coefficients from the ccf_nc pointer to ccf array "<< i << endl;
-                exit(EXIT_FAILURE);
-            }
-            if (!mcf_nc->get(mcf, 1, height, width)) {
-                cerr << "Can not get the record from mcf_nc " << i << endl;
-                exit(EXIT_FAILURE);
-            }
-            if (!ccf_nc->get(ccf, 1, height, width)) {
-                cerr << "Can not get the record from ccf_nc " << i << endl;
-                exit(EXIT_FAILURE);
-            }
-            for (int j = 0; j < height; j++) {
-                for (int k = 0; k < width; k++) {
-                    weather[j * width + k] = mcf[j * width + k] * ccf[j * width + k];
-                }
-            }
+            get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, weather, width, height, i);
         } else if (!weather_values.empty()) {
             weather_value = weather_values[i];
         }
