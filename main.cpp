@@ -163,63 +163,33 @@ int main(int argc, char *argv[])
 
     opt.umca = G_define_standard_option(G_OPT_R_INPUT);
     opt.umca->key = "umca";
+    opt.umca->description = _("Input bay laurel (UMCA) raster map");
+    opt.umca->guisection = _("Input");
 
     opt.oaks = G_define_standard_option(G_OPT_R_INPUT);
     opt.oaks->key = "oaks";
+    opt.oaks->description = _("Input SOD-oaks raster map");
+    opt.oaks->guisection = _("Input");
 
     opt.lvtree = G_define_standard_option(G_OPT_R_INPUT);
     opt.lvtree->key = "lvtree";
+    opt.lvtree->description = _("Input live tree (all) raster map");
+    opt.lvtree->guisection = _("Input");
 
+    // TODO: is this oaks?
     opt.ioaks = G_define_standard_option(G_OPT_R_INPUT);
     opt.ioaks->key = "ioaks";
+    opt.ioaks->description = _("Initial sources of infection raster map");
+    opt.ioaks->guisection = _("Input");
 
-    opt.nc_weather = G_define_standard_option(G_OPT_F_INPUT);
-    opt.nc_weather->key = "ncdf_weather";
-    opt.nc_weather->required = NO;
+    opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.output->guisection = _("Output");
 
-    opt.weather_value = G_define_option();
-    opt.weather_value->type = TYPE_INTEGER;
-    opt.weather_value->key = "weather_value";
-    opt.weather_value->label = _("Value to be used as weather coeficient");
-    opt.weather_value->description =
-            _("Spatially and temporally constant weather coeficient"
-              " (usually moisture times temperture in C)");
-    opt.weather_value->required = NO;
-
-    opt.weather_file = G_define_standard_option(G_OPT_F_INPUT);
-    opt.weather_file->key = "weather_file";
-    opt.weather_file->label = _("Text file with weather");
-    opt.weather_file->description =
-            _("Moisture and temperature");
-    opt.weather_file->required = NO;
-
-    opt.start_time = G_define_option();
-    opt.start_time->type = TYPE_INTEGER;
-    opt.start_time->key = "start_time";
-    opt.start_time->label = _("Start year for the simulation");
-    opt.start_time->description = _("The first day of the year will be used");
-    opt.start_time->required = YES;
-
-    opt.end_time = G_define_option();
-    opt.end_time->type = TYPE_INTEGER;
-    opt.end_time->key = "end_time";
-    opt.end_time->label = _("End year for the simulation");
-    opt.end_time->description = _("The last day of the year will be used");
-    opt.end_time->required = YES;
-
-    opt.seasonality = G_define_option();
-    opt.seasonality->type = TYPE_STRING;
-    opt.seasonality->key = "seasonality";
-    opt.seasonality->label = _("Seasonal spread");
-    opt.seasonality->description = _("Spread limited to certain months (season)");
-    opt.seasonality->options = "yes,no";
-    opt.seasonality->answer = "yes";
-
-    opt.spore_rate = G_define_option();
-    opt.spore_rate->type = TYPE_DOUBLE;
-    opt.spore_rate->key = "spore_rate";
-    opt.spore_rate->label = _("Spore production rate per week for each infected tree");
-    opt.spore_rate->answer = "4.4";
+    opt.output_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
+    opt.output_series->key = "output_series";
+    opt.output_series->description = _("Basename for output series");
+    opt.output_series->required = NO;
+    opt.output_series->guisection = _("Output");
 
     opt.wind = G_define_option();
     opt.wind->type = TYPE_STRING;
@@ -228,6 +198,63 @@ int main(int argc, char *argv[])
     opt.wind->description = _("NONE means that there is no wind");
     opt.wind->options = "N,NE,E,SE,S,SW,W,NW,NONE";
     opt.wind->required = YES;
+    opt.wind->guisection = _("Weather");
+
+    opt.nc_weather = G_define_standard_option(G_OPT_F_BIN_INPUT);
+    opt.nc_weather->key = "ncdf_weather";
+    opt.nc_weather->description = _("Weather data");
+    opt.nc_weather->required = NO;
+    opt.nc_weather->guisection = _("Weather");
+
+    opt.weather_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.weather_file->key = "weather_file";
+    opt.weather_file->label = _("Text file with weather");
+    opt.weather_file->description =
+            _("Moisture and temperature");
+    opt.weather_file->required = NO;
+    opt.weather_file->guisection = _("Weather");
+
+    opt.weather_value = G_define_option();
+    opt.weather_value->type = TYPE_INTEGER;
+    opt.weather_value->key = "weather_value";
+    opt.weather_value->label = _("Value to be used as weather coeficient");
+    opt.weather_value->description =
+            _("Spatially and temporally constant weather coeficient"
+              " (usually moisture times temperture)");
+    opt.weather_value->required = NO;
+    opt.weather_value->guisection = _("Weather");
+
+    opt.start_time = G_define_option();
+    opt.start_time->type = TYPE_INTEGER;
+    opt.start_time->key = "start_time";
+    opt.start_time->label = _("Start year for the simulation");
+    opt.start_time->description = _("The first day of the year will be used");
+    opt.start_time->required = YES;
+    opt.start_time->guisection = _("Time");
+
+    opt.end_time = G_define_option();
+    opt.end_time->type = TYPE_INTEGER;
+    opt.end_time->key = "end_time";
+    opt.end_time->label = _("End year for the simulation");
+    opt.end_time->description = _("The last day of the year will be used");
+    opt.end_time->required = YES;
+    opt.end_time->guisection = _("Time");
+
+    opt.seasonality = G_define_option();
+    opt.seasonality->type = TYPE_STRING;
+    opt.seasonality->key = "seasonality";
+    opt.seasonality->label = _("Seasonal spread");
+    opt.seasonality->description = _("Spread limited to certain months (season)");
+    opt.seasonality->options = "yes,no";
+    opt.seasonality->answer = "yes";
+    opt.seasonality->guisection = _("Time");
+
+    opt.spore_rate = G_define_option();
+    opt.spore_rate->type = TYPE_DOUBLE;
+    opt.spore_rate->key = "spore_rate";
+    opt.spore_rate->label = _("Spore production rate per week for each infected tree");
+    opt.spore_rate->answer = "4.4";
+    opt.spore_rate->guisection = _("Spores");
 
     opt.radial_type = G_define_option();
     opt.radial_type->type = TYPE_STRING;
@@ -235,23 +262,27 @@ int main(int argc, char *argv[])
     opt.radial_type->label = _("Radial distribution type");
     opt.radial_type->answer = "cauchy";
     opt.radial_type->options = "cauchy,cauchy_mix";
+    opt.radial_type->guisection = _("Spores");
 
     opt.scale_1 = G_define_option();
     opt.scale_1->type = TYPE_DOUBLE;
     opt.scale_1->key = "scale_1";
     opt.scale_1->label = _("Scale parameter for the first Cauchy distribution");
     opt.scale_1->answer = "20.57";
+    opt.scale_1->guisection = _("Spores");
 
     opt.scale_2 = G_define_option();
     opt.scale_2->type = TYPE_DOUBLE;
     opt.scale_2->key = "scale_2";
     opt.scale_2->label = _("Scale parameter for the second Cauchy distribution");
+    opt.scale_2->guisection = _("Spores");
 
     opt.kappa = G_define_option();
     opt.kappa->type = TYPE_DOUBLE;
     opt.kappa->key = "kappa";
     opt.kappa->label = _("Concentration parameter for the von Mises distribution");
     opt.kappa->answer = "2";
+    opt.kappa->guisection = _("Spores");
 
     opt.gamma = G_define_option();
     opt.gamma->type = TYPE_DOUBLE;
@@ -259,12 +290,7 @@ int main(int argc, char *argv[])
     opt.gamma->label = _("Gamma parameter for Bernoulli distribution");
     opt.gamma->description = _("Probability of using the first Cauchy distribution");
     opt.gamma->options = "0-1";
-
-    opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
-
-    opt.output_series = G_define_standard_option(G_OPT_R_OUTPUT);
-    opt.output_series->key = "output_series";
-    opt.output_series->required = NO;
+    opt.gamma->guisection = _("Spores");
 
     opt.seed = G_define_option();
     opt.seed->key = "random_seed";
@@ -274,6 +300,7 @@ int main(int argc, char *argv[])
     opt.seed->description =
         _("The same seed can be used to obtain same results"
           " or random seed can be generated by other means.");
+    opt.seed->guisection = _("Randomness");
 
     flg.generate_seed = G_define_flag();
     flg.generate_seed->key = 's';
@@ -282,6 +309,7 @@ int main(int argc, char *argv[])
     flg.generate_seed->description =
         _("Automatically generates random seed for random number"
           " generator (use when you don't want to provide the seed option)");
+    flg.generate_seed->guisection = _("Randomness");
 
     G_option_exclusive(opt.seed, flg.generate_seed, NULL);
     G_option_required(opt.seed, flg.generate_seed, NULL);
