@@ -481,6 +481,9 @@ int main(int argc, char *argv[])
         weather = new double[height * width];
     }
 
+    // build the Sporulation object
+    Sporulation sp1(seed_value, I_umca_rast);
+
     // main simulation loop(weekly steps)
     for (int i = 0; dd_start.compareDate(dd_end);
          i++, dd_start.increasedByWeek()) {
@@ -510,8 +513,6 @@ int main(int argc, char *argv[])
             weather_value = weather_values[i];
         }
 
-        // build the Sporulation object
-        Sporulation sp1(seed_value, I_umca_rast);
         sp1.SporeGen(I_umca_rast, weather, weather_value, spore_rate);
 
         sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast,
