@@ -12,6 +12,7 @@
 #include "Spore.h"
 #include "Img.h"
 #include "date.h"
+#include "tcp_client.h"
 
 extern "C" {
 #include <grass/gis.h>
@@ -21,6 +22,10 @@ extern "C" {
 #include <netcdfcpp.h>
 #include <gdal/gdal.h>
 #include <gdal/gdal_priv.h>
+
+#include <atomic>
+#include <arpa/inet.h> //inet_addr
+#include <thread>
 
 #include <map>
 #include <iostream>
@@ -32,6 +37,9 @@ using std::string;
 using std::cout;
 using std::cerr;
 using std::endl;
+using std::atomic;
+using std::thread;
+using std::ref;
 
 
 #define DIM 1
@@ -170,6 +178,52 @@ void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf,
     }
 }
 
+void steering_client(tcp_client &c, string &ip_address, int &port, atomic<int> &instr_code)
+{
+    int rec_error;
+    string received;
+    
+    //connect to host
+    c.conn(ip_address, port);
+
+    while (true) {
+        cout << "to receive" << endl;
+        //receive and echo reply
+        received = c.receive(200, rec_error);
+        cout << received << endl;
+        cout << rec_error << endl;
+        if (rec_error < 0){
+            cerr << "receive failed\n";
+        }
+        else {
+            if (received == "start") {
+                instr_code.store(1);
+                cout << "start" << endl;
+            }
+            else if (received == "end") {
+                instr_code.store(2);
+                cout << "end" << endl;
+            }
+            else if (received == "pause") {
+                instr_code.store(3);
+                cout << "pause" << endl;
+            }
+            else if (received == "play") {
+                instr_code.store(4);
+                cout << "play" << endl;
+            }
+            else if (received == "stepf") {
+                instr_code.store(5);
+            }
+            else if (received == "exit") {
+                instr_code.store(6);
+            }
+            else
+                cout << "X" << received << "X" << rec_error << endl;
+        }
+    }
+}
+
 struct SodOptions
 {
     struct Option *umca, *oaks, *lvtree, *ioaks;
@@ -178,7 +232,8 @@ struct SodOptions
     struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
     struct Option *seed;
-    struct Option *output, *output_series;
+    struct Option *output_series;
+    struct Option *ip_address, *port;
 };
 
 struct SodFlags
@@ -222,9 +277,6 @@ int main(int argc, char *argv[])
     opt.ioaks->key = "ioaks";
     opt.ioaks->description = _("Initial sources of infection raster map");
     opt.ioaks->guisection = _("Input");
-
-    opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
-    opt.output->guisection = _("Output");
 
     opt.output_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
     opt.output_series->key = "output_series";
@@ -351,6 +403,20 @@ int main(int argc, char *argv[])
         _("Automatically generates random seed for random number"
           " generator (use when you don't want to provide the seed option)");
     flg.generate_seed->guisection = _("Randomness");
+    
+    opt.ip_address = G_define_option();
+    opt.ip_address->key = "ip_address";
+    opt.ip_address->type = TYPE_STRING;
+    opt.ip_address->required = YES;
+    opt.ip_address->description = _("IP address of steering server");
+    opt.ip_address->guisection = _("Steering");
+
+    opt.port = G_define_option();
+    opt.port->key = "port";
+    opt.port->type = TYPE_INTEGER;
+    opt.port->required = YES;
+    opt.port->description = _("Port of steering server");
+    opt.port->guisection = _("Steering");
 
     G_option_exclusive(opt.seed, flg.generate_seed, NULL);
     G_option_required(opt.seed, flg.generate_seed, NULL);
@@ -481,54 +547,99 @@ int main(int argc, char *argv[])
         weather = new double[height * width];
     }
 
+    // setup steering variables
+    Date dd_current(dd_start);
+    Date dd_current_end(dd_start);
+
+    // setup client
+    tcp_client c;
+    atomic<int> instr_code(0);
+    thread client_thread;
+    string ip = string(opt.ip_address->answer);
+    int port = atoi(opt.port->answer);
+    client_thread = thread(steering_client, ref(c), ref(ip), ref(port), ref(instr_code));
+
     // build the Sporulation object
     Sporulation sp1(seed_value, I_umca_rast);
 
     // main simulation loop(weekly steps)
-    for (int i = 0; dd_start.compareDate(dd_end);
-         i++, dd_start.increasedByWeek()) {
-
-        // if all the oaks are infected, then exit
-        if (all_infected(S_oaks_rast)) {
-            cerr << "In the " << dd_start.getYear() << "-" << dd_start.
-                getMonth() << "-" << dd_start.
-                getDay() << " all suspectible oaks are infected!" << endl;
+    int i = 0;
+    while (true) {
+        int code = instr_code.load();
+        instr_code.store(0);
+        if (code == 1) { // start
+            dd_current = dd_start;
+            i = 0;
+        }
+        else if (code == 2) { // end
+            dd_current = dd_end;
+            i = dd_current.weeksFromDate(dd_end);
+        }
+        else if (code == 3) { // pause
+            dd_current_end = dd_current.getYearEnd();
+        }
+        else if (code == 4) { // play
+            dd_current_end = dd_end;
+        }
+        else if (code == 5) { // 1 step forward
+            dd_current_end = dd_current.getNextYearEnd();
+            if (dd_current_end > dd_end)
+                dd_current_end = dd_end;
+        }
+        else if (code == 6) { // complete stop
             break;
         }
-
-        // check whether the spore occurs in the month
-        if (ss && dd_start.getMonth() > 9) {
-            if (opt.output_series->answer) {
-                // TODO: use end instead?
-                string name = generate_name(opt.output_series->answer, dd_start);
-                I_oaks_rast.toGrassRaster(name.c_str());
+        
+        if (dd_current_end > dd_start && dd_current <= dd_current_end) {
+            cout << i << endl;
+            // here do spread
+            // if all the oaks are infected, then exit
+            if (all_infected(S_oaks_rast)) {
+                cerr << "In the " << dd_start.getYear() << "-" << dd_start.
+                        getMonth() << "-" << dd_start.
+                        getDay() << " all suspectible oaks are infected!" << endl;
+                continue;
             }
-            continue;
+
+            // check whether the spore occurs in the month
+            if (ss && dd_start.getMonth() > 9) {
+                if (opt.output_series->answer) {
+                    // TODO: use end instead?
+                    string name = generate_name(opt.output_series->answer, dd_start);
+                    I_oaks_rast.toGrassRaster(name.c_str());
+                }
+                continue;
+            }
+
+            if (weather_coeff) {
+                // read the weather information
+                get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, weather, width, height, i);
+            } else if (!weather_values.empty()) {
+                weather_value = weather_values[i];
+            }
+
+            sp1.SporeGen(I_umca_rast, weather, weather_value, spore_rate);
+
+            sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast,
+                                I_oaks_rast, lvtree_rast, rtype, weather,
+                                weather_value, scale1, kappa, pwdir, scale2,
+                                gamma);
+
+            if (dd_current.isYearEnd()) {
+                if (opt.output_series->answer) {
+                    string name = generate_name(opt.output_series->answer, dd_current);
+                    I_oaks_rast.toGrassRaster(name.c_str());
+                }
+                c.send_data("output");
+            }
+
+            dd_current.increasedByWeek();
+            i += 1;
         }
-
-        if (weather_coeff) {
-            // read the weather information
-            get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, weather, width, height, i);
-        } else if (!weather_values.empty()) {
-            weather_value = weather_values[i];
-        }
-
-        sp1.SporeGen(I_umca_rast, weather, weather_value, spore_rate);
-
-        sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast,
-                            I_oaks_rast, lvtree_rast, rtype, weather,
-                            weather_value, scale1, kappa, pwdir, scale2,
-                            gamma);
-
-        if (opt.output_series->answer) {
-            // TODO: use end instead?
-            string name = generate_name(opt.output_series->answer, dd_start);
-            I_oaks_rast.toGrassRaster(name.c_str());
+        else {
+            // paused
         }
     }
-
-    // write final result
-    I_oaks_rast.toGrassRaster(opt.output->answer);
 
     // compute the time used when running the model
     clock_t end = clock();

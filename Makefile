@@ -5,7 +5,7 @@ PGM = sod-cpp
 LIBES = $(RASTERLIB) $(GISLIB) $(MATHLIB)
 DEPENDENCIES = $(RASTERDEP) $(GISDEP)
 # $(NETCDFLIBS) is only C
-EXTRA_LIBS = $(GDALLIBS) -lnetcdf_c++
+EXTRA_LIBS = $(GDALLIBS) -lnetcdf_c++ -lpthread
 EXTRA_CFLAGS = $(GDALCFLAGS) -std=c++11 -Wall -Wextra -fpermissive
 
 include $(MODULE_TOPDIR)/include/Make/Module.make
