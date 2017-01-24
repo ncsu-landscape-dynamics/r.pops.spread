@@ -178,7 +178,20 @@ void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf,
     }
 }
 
-void steering_client(tcp_client &c, string &ip_address, int &port, atomic<int> &instr_code)
+void reload_UMCA_input(Img &umca, string map, Img &I_umca, Img &S_umca)
+{
+    umca = Img::fromGrassRaster(map.c_str());
+    for (int i = 0; i < umca.getHeight(); i++) {
+        for (int j = 0; j < umca.getWidth(); j++) {
+            if (umca(i, j) < I_umca(i, j)) {
+                I_umca(i, j) = umca(i, j);
+            }
+        }
+    }
+    S_umca = umca - I_umca;
+}
+
+void steering_client(tcp_client &c, string ip_address, int port, atomic<int> &instr_code, string &load_name, int &jump_date)
 {
     int rec_error;
     string received;
@@ -188,37 +201,40 @@ void steering_client(tcp_client &c, string &ip_address, int &port, atomic<int> &
 
     while (true) {
         cout << "to receive" << endl;
-        //receive and echo reply
         received = c.receive(200, rec_error);
-        cout << received << endl;
-        cout << rec_error << endl;
         if (rec_error < 0){
             cerr << "receive failed\n";
+            c.close_socket();
+            instr_code.store(5);
+            break;
         }
         else {
-            if (received == "start") {
-                instr_code.store(1);
-                cout << "start" << endl;
-            }
-            else if (received == "end") {
-                instr_code.store(2);
-                cout << "end" << endl;
-            }
-            else if (received == "pause") {
-                instr_code.store(3);
-                cout << "pause" << endl;
-            }
-            else if (received == "play") {
+            if (received.substr(0, 3) == "cmd") {
+                string cmd = received.substr(4, received.length() - 4);
+                if (cmd == "play") {
+                    instr_code.store(1);
+                    cout << "play from " << endl;
+                }
+                else if (cmd == "pause") {
+                    instr_code.store(2);
+                    cout << "pause" << endl;
+                }
+                else if (cmd == "step") {
+                    instr_code.store(3);
+                    cout << "step" << endl;
+                }
+                else if (cmd == "stop") {
+                    c.close_socket();
+                    instr_code.store(5);
+                    break;
+                }
+            } else if (received.substr(0, 4) == "load") {
+                string name = received.substr(5, received.length() - 5);
+                load_name = name;
                 instr_code.store(4);
-                cout << "play" << endl;
-            }
-            else if (received == "stepf") {
-                instr_code.store(5);
-            }
-            else if (received == "exit") {
-                instr_code.store(6);
-            }
-            else
+            } else if (received.substr(0, 4) == "move") {
+                jump_date = std::stoi(received.substr(5, received.length() - 5));
+            } else
                 cout << "X" << received << "X" << rec_error << endl;
         }
     }
@@ -556,37 +572,35 @@ int main(int argc, char *argv[])
     atomic<int> instr_code(0);
     thread client_thread;
     string ip = string(opt.ip_address->answer);
+    string load_name = "";
+    int jump_date = 0;
     int port = atoi(opt.port->answer);
-    client_thread = thread(steering_client, ref(c), ref(ip), ref(port), ref(instr_code));
+    client_thread = thread(steering_client, ref(c), ip, port, ref(instr_code), ref(load_name), ref(jump_date));
 
     // build the Sporulation object
     Sporulation sp1(seed_value, I_umca_rast);
 
-    // main simulation loop(weekly steps)
+    // main simulation loop (weekly steps)
     int i = 0;
     while (true) {
         int code = instr_code.load();
         instr_code.store(0);
-        if (code == 1) { // start
-            dd_current = dd_start;
-            i = 0;
-        }
-        else if (code == 2) { // end
-            dd_current = dd_end;
-            i = dd_current.weeksFromDate(dd_end);
-        }
-        else if (code == 3) { // pause
-            dd_current_end = dd_current.getYearEnd();
-        }
-        else if (code == 4) { // play
+        if (code == 1) { // play from
             dd_current_end = dd_end;
         }
-        else if (code == 5) { // 1 step forward
+        else if (code == 2) { // pause
+            dd_current_end = dd_current.getYearEnd();
+        }
+        else if (code == 3) { // 1 step forward
             dd_current_end = dd_current.getNextYearEnd();
             if (dd_current_end > dd_end)
                 dd_current_end = dd_end;
         }
-        else if (code == 6) { // complete stop
+        else if (code == 4) { // load data
+            cout << "loading data: " << load_name << endl;
+            reload_UMCA_input(umca_rast, load_name, I_umca_rast, S_umca_rast);
+        }
+        else if (code == 5) { // complete stop
             break;
         }
         
@@ -641,6 +655,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    client_thread.join();
     // compute the time used when running the model
     clock_t end = clock();
     double elapsed_secs = double(end-begin) / CLOCKS_PER_SEC;

@@ -119,3 +119,6 @@ string tcp_client::receive(int size, int &error)
     return reply;
 }
 
+void tcp_client::close_socket() {
+    shutdown(sock, 0);
+}
