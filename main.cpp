@@ -8,10 +8,9 @@
  *
  */
 
-
-#include "Spore.h"
-#include "Img.h"
 #include "date.h"
+#include "Img.h"
+#include "Spore.h"
 
 extern "C" {
 #include <grass/gis.h>
@@ -19,8 +18,6 @@ extern "C" {
 }
 
 #include <netcdfcpp.h>
-#include <gdal/gdal.h>
-#include <gdal/gdal_priv.h>
 
 #include <map>
 #include <iostream>
