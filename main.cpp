@@ -530,6 +530,7 @@ int main(int argc, char *argv[])
             weather_value = weather_values[i];
         }
 
+        #pragma omp parallel for
         for (unsigned s = 0; s < num_runs; s++) {
             sporulations[s].SporeGen(inf_umca_rasts[s], weather, weather_value, spore_rate);
 
