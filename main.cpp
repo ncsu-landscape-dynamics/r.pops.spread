@@ -175,7 +175,7 @@ struct SodOptions
     struct Option *start_time, *end_time, *seasonality;
     struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
-    struct Option *seed, *runs;
+    struct Option *seed, *runs, *threads;
     struct Option *output, *output_series;
 };
 
@@ -360,11 +360,24 @@ int main(int argc, char *argv[])
           " and will be avaraged for the output");
     opt.runs->guisection = _("Randomness");
 
+    opt.threads = G_define_option();
+    opt.threads->key = "nprocs";
+    opt.threads->type = TYPE_INTEGER;
+    opt.threads->required = NO;
+    opt.threads->description =
+        _("Number of threads for parallel computing");
+    opt.threads->options = "1-";
+    opt.threads->guisection = _("Randomness");
+
     G_option_exclusive(opt.seed, flg.generate_seed, NULL);
     G_option_required(opt.seed, flg.generate_seed, NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
+
+    unsigned threads = 1;
+    if (opt.threads->answer)
+        threads = std::stoul(opt.threads->answer);
 
     // set the start point of the program
     clock_t begin = clock();
@@ -530,7 +543,7 @@ int main(int argc, char *argv[])
             weather_value = weather_values[i];
         }
 
-        #pragma omp parallel for
+        #pragma omp parallel for num_threads(threads)
         for (unsigned s = 0; s < num_runs; s++) {
             sporulations[s].SporeGen(inf_umca_rasts[s], weather, weather_value, spore_rate);
 
