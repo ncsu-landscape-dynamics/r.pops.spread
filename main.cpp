@@ -24,6 +24,7 @@ extern "C" {
 #include <memory>
 #include <stdexcept>
 #include <fstream>
+#include <string>
 
 using std::string;
 using std::cout;
@@ -174,7 +175,7 @@ struct SodOptions
     struct Option *start_time, *end_time, *seasonality;
     struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
-    struct Option *seed;
+    struct Option *seed, *runs;
     struct Option *output, *output_series;
 };
 
@@ -349,6 +350,16 @@ int main(int argc, char *argv[])
           " generator (use when you don't want to provide the seed option)");
     flg.generate_seed->guisection = _("Randomness");
 
+    opt.runs = G_define_option();
+    opt.runs->key = "runs";
+    opt.runs->type = TYPE_INTEGER;
+    opt.runs->required = NO;
+    opt.runs->label = _("Number of simulation runs");
+    opt.runs->description =
+        _("The individual runs will obtain different seeds"
+          " and will be avaraged for the output");
+    opt.runs->guisection = _("Randomness");
+
     G_option_exclusive(opt.seed, flg.generate_seed, NULL);
     G_option_required(opt.seed, flg.generate_seed, NULL);
 
@@ -479,8 +490,17 @@ int main(int argc, char *argv[])
     }
 
     // build the Sporulation object
-    Sporulation sp1(seed_value, I_umca_rast);
-
+    unsigned num_runs = 1;
+    if (opt.runs->answer)
+        num_runs = std::stoul(opt.runs->answer);
+    std::vector<Sporulation> sporulations;
+    std::vector<Img> sus_umca_rasts(num_runs, S_umca_rast);
+    std::vector<Img> sus_oaks_rasts(num_runs, S_oaks_rast);
+    std::vector<Img> inf_umca_rasts(num_runs, I_umca_rast);
+    std::vector<Img> inf_oaks_rasts(num_runs, I_oaks_rast);
+    sporulations.reserve(num_runs);
+    for (unsigned i = 0; i < num_runs; ++i)
+        sporulations.emplace_back(seed_value++, I_umca_rast);
     // main simulation loop(weekly steps)
     for (int i = 0; dd_start.compareDate(dd_end);
          i++, dd_start.increasedByWeek()) {
@@ -498,7 +518,7 @@ int main(int argc, char *argv[])
             if (opt.output_series->answer) {
                 // TODO: use end instead?
                 string name = generate_name(opt.output_series->answer, dd_start);
-                I_oaks_rast.toGrassRaster(name.c_str());
+                inf_oaks_rasts[0].toGrassRaster(name.c_str());
             }
             continue;
         }
@@ -510,19 +530,29 @@ int main(int argc, char *argv[])
             weather_value = weather_values[i];
         }
 
-        sp1.SporeGen(I_umca_rast, weather, weather_value, spore_rate);
+        for (unsigned s = 0; s < num_runs; s++) {
+            sporulations[s].SporeGen(inf_umca_rasts[s], weather, weather_value, spore_rate);
 
-        sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast,
-                            I_oaks_rast, lvtree_rast, rtype, weather,
-                            weather_value, scale1, kappa, pwdir, scale2,
-                            gamma);
+            sporulations[s].SporeSpreadDisp(sus_umca_rasts[s], sus_oaks_rasts[s], inf_umca_rasts[s],
+                                            inf_oaks_rasts[s], lvtree_rast, rtype, weather,
+                                            weather_value, scale1, kappa, pwdir, scale2,
+                                            gamma);
+        }
 
         if (opt.output_series->answer) {
             // TODO: use end instead?
             string name = generate_name(opt.output_series->answer, dd_start);
-            I_oaks_rast.toGrassRaster(name.c_str());
+            // TODO: aggregate?
+            inf_oaks_rasts[0].toGrassRaster(name.c_str());
         }
     }
+
+    I_oaks_rast.zero();
+    for (unsigned s = 0; s < num_runs; s++) {
+        I_oaks_rast += inf_oaks_rasts[s];
+    }
+
+    I_oaks_rast /= num_runs;
 
     // write final result
     I_oaks_rast.toGrassRaster(opt.output->answer);
