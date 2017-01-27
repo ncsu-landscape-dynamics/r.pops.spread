@@ -501,7 +501,7 @@ int main(int argc, char *argv[])
     if (weather_coeff) {
         mcf = new double[height * width];
         ccf = new double[height * width];
-        weather = new double[num_runs * max_weeks_in_year * height * width];
+        weather = new double[max_weeks_in_year * height * width];
     }
 
     // build the Sporulation object
@@ -532,22 +532,31 @@ int main(int argc, char *argv[])
         // check whether the spore occurs in the month
         if (dd_start.isYearEnd() || dd_start >= dd_end) {
             if (!unresolved_weeks.empty()) {
+
+                unsigned week_in_chunk = 0;
+                // get weather for all the weeks
+                for (auto week : unresolved_weeks) {
+                    double *week_weather = weather + week_in_chunk * width * height;
+                    if (weather_coeff) {
+                        get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, week_weather, width, height, week);
+                    }
+                    ++week_in_chunk;
+                }
+
                 // stochastic simulation runs
                 #pragma omp parallel for num_threads(threads)
                 for (unsigned run = 0; run < num_runs; run++) {
                     unsigned week_in_chunk = 0;
                     // actual runs of the simulation per week
                     for (auto week : unresolved_weeks) {
-                        if (weather_coeff) {
-                            get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, weather + run + week_in_chunk, width, height, week);
-                        }
-                        else if (!weather_values.empty()) {
+                        double *week_weather = weather + week_in_chunk * width * height;
+                        if (!weather_coeff && !weather_values.empty()) {
                             weather_value = weather_values[week];
                         }
-                        sporulations[run].SporeGen(inf_umca_rasts[run], weather + run + week_in_chunk, weather_value, spore_rate);
+                        sporulations[run].SporeGen(inf_umca_rasts[run], week_weather, weather_value, spore_rate);
 
                         sporulations[run].SporeSpreadDisp(sus_umca_rasts[run], sus_oaks_rasts[run], inf_umca_rasts[run],
-                                                          inf_oaks_rasts[run], lvtree_rast, rtype, weather + run + week_in_chunk,
+                                                          inf_oaks_rasts[run], lvtree_rast, rtype, week_weather,
                                                           weather_value, scale1, kappa, pwdir, scale2,
                                                           gamma);
                         ++week_in_chunk;
