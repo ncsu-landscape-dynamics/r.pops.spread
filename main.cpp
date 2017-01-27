@@ -564,6 +564,12 @@ int main(int argc, char *argv[])
                 }
                 unresolved_weeks.clear();
             }
+            if (opt.output_series->answer) {
+                // date is always end of the year, even for seasonal spread
+                string name = generate_name(opt.output_series->answer, dd_start);
+                // TODO: aggregate
+                inf_oaks_rasts[0].toGrassRaster(name.c_str());
+            }
         }
 
         if (dd_start >= dd_end)
