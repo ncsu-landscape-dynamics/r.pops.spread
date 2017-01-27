@@ -375,6 +375,10 @@ int main(int argc, char *argv[])
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
 
+    unsigned num_runs = 1;
+    if (opt.runs->answer)
+        num_runs = std::stoul(opt.runs->answer);
+
     unsigned threads = 1;
     if (opt.threads->answer)
         threads = std::stoul(opt.threads->answer);
@@ -493,19 +497,17 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
+    const unsigned max_weeks_in_year = 53;
     double *mcf = nullptr;
     double *ccf = nullptr;
     double *weather = nullptr;
     if (weather_coeff) {
         mcf = new double[height * width];
         ccf = new double[height * width];
-        weather = new double[height * width];
+        weather = new double[num_runs * max_weeks_in_year * height * width];
     }
 
     // build the Sporulation object
-    unsigned num_runs = 1;
-    if (opt.runs->answer)
-        num_runs = std::stoul(opt.runs->answer);
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_umca_rasts(num_runs, S_umca_rast);
     std::vector<Img> sus_oaks_rasts(num_runs, S_oaks_rast);
@@ -514,51 +516,59 @@ int main(int argc, char *argv[])
     sporulations.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i)
         sporulations.emplace_back(seed_value++, I_umca_rast);
-    // main simulation loop(weekly steps)
-    for (int i = 0; dd_start.compareDate(dd_end);
-         i++, dd_start.increasedByWeek()) {
+
+    std::vector<unsigned> unresolved_weeks;
+    unresolved_weeks.reserve(max_weeks_in_year);
+
+    // main simulation loop (weekly steps)
+    for (int current_week = 0; ; current_week++, dd_start.increasedByWeek()) {
+        if (dd_start.compareDate(dd_end)) {
+            if (ss) {
+                if (!(dd_start.getMonth() > 9)) {
+                    unresolved_weeks.push_back(current_week);
+                }
+            }
+            else {
+                unresolved_weeks.push_back(current_week);
+            }
+        }
 
         // if all the oaks are infected, then exit
         if (all_infected(S_oaks_rast)) {
-            cerr << "In the " << dd_start.getYear() << "-" << dd_start.
-                getMonth() << "-" << dd_start.
-                getDay() << " all suspectible oaks are infected!" << endl;
+            cerr << "In the " << dd_start << " all suspectible oaks are infected!" << endl;
             break;
         }
 
         // check whether the spore occurs in the month
-        if (ss && dd_start.getMonth() > 9) {
-            if (opt.output_series->answer) {
-                // TODO: use end instead?
-                string name = generate_name(opt.output_series->answer, dd_start);
-                inf_oaks_rasts[0].toGrassRaster(name.c_str());
+        if (dd_start.isYearEnd() || !dd_start.compareDate(dd_end)) {
+            if (!unresolved_weeks.empty()) {
+                // stochastic simulation runs
+                #pragma omp parallel for num_threads(threads)
+                for (unsigned run = 0; run < num_runs; run++) {
+                    unsigned week_in_chunk = 0;
+                    // actual runs of the simulation per week
+                    for (auto week : unresolved_weeks) {
+                        if (weather_coeff) {
+                            get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, weather + run + week_in_chunk, width, height, week);
+                        }
+                        else if (!weather_values.empty()) {
+                            weather_value = weather_values[week];
+                        }
+                        sporulations[run].SporeGen(inf_umca_rasts[run], weather + run + week_in_chunk, weather_value, spore_rate);
+
+                        sporulations[run].SporeSpreadDisp(sus_umca_rasts[run], sus_oaks_rasts[run], inf_umca_rasts[run],
+                                                          inf_oaks_rasts[run], lvtree_rast, rtype, weather + run + week_in_chunk,
+                                                          weather_value, scale1, kappa, pwdir, scale2,
+                                                          gamma);
+                        ++week_in_chunk;
+                    }
+                }
+                unresolved_weeks.clear();
             }
-            continue;
         }
 
-        if (weather_coeff) {
-            // read the weather information
-            get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, weather, width, height, i);
-        } else if (!weather_values.empty()) {
-            weather_value = weather_values[i];
-        }
-
-        #pragma omp parallel for num_threads(threads)
-        for (unsigned s = 0; s < num_runs; s++) {
-            sporulations[s].SporeGen(inf_umca_rasts[s], weather, weather_value, spore_rate);
-
-            sporulations[s].SporeSpreadDisp(sus_umca_rasts[s], sus_oaks_rasts[s], inf_umca_rasts[s],
-                                            inf_oaks_rasts[s], lvtree_rast, rtype, weather,
-                                            weather_value, scale1, kappa, pwdir, scale2,
-                                            gamma);
-        }
-
-        if (opt.output_series->answer) {
-            // TODO: use end instead?
-            string name = generate_name(opt.output_series->answer, dd_start);
-            // TODO: aggregate?
-            inf_oaks_rasts[0].toGrassRaster(name.c_str());
-        }
+        if (!dd_start.compareDate(dd_end))
+            break;
     }
 
     I_oaks_rast.zero();
