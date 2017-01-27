@@ -565,10 +565,15 @@ int main(int argc, char *argv[])
                 unresolved_weeks.clear();
             }
             if (opt.output_series->answer) {
+                // aggregate
+                I_oaks_rast.zero();
+                for (unsigned i = 0; i < num_runs; i++)
+                    I_oaks_rast += inf_oaks_rasts[i];
+                I_oaks_rast /= num_runs;
+                // write result
                 // date is always end of the year, even for seasonal spread
                 string name = generate_name(opt.output_series->answer, dd_start);
-                // TODO: aggregate
-                inf_oaks_rasts[0].toGrassRaster(name.c_str());
+                I_oaks_rast.toGrassRaster(name.c_str());
             }
         }
 
@@ -576,13 +581,11 @@ int main(int argc, char *argv[])
             break;
     }
 
+    // aggregate
     I_oaks_rast.zero();
-    for (unsigned s = 0; s < num_runs; s++) {
-        I_oaks_rast += inf_oaks_rasts[s];
-    }
-
+    for (unsigned i = 0; i < num_runs; i++)
+        I_oaks_rast += inf_oaks_rasts[i];
     I_oaks_rast /= num_runs;
-
     // write final result
     I_oaks_rast.toGrassRaster(opt.output->answer);
 
