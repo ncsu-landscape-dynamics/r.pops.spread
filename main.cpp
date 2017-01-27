@@ -383,9 +383,6 @@ int main(int argc, char *argv[])
     if (opt.threads->answer)
         threads = std::stoul(opt.threads->answer);
 
-    // set the start point of the program
-    clock_t begin = clock();
-
     // Seasonality: Do you want the spread to be limited to certain months?
     bool ss = seasonality_from_string(opt.seasonality->answer);
 
@@ -580,12 +577,6 @@ int main(int argc, char *argv[])
 
     // write final result
     I_oaks_rast.toGrassRaster(opt.output->answer);
-
-    // compute the time used when running the model
-    clock_t end = clock();
-    double elapsed_secs = double(end-begin) / CLOCKS_PER_SEC;
-
-    cout << "The elapsed time during the program running: " << elapsed_secs << endl;
 
     // clean the allocated memory
     if (weather) {
