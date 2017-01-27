@@ -202,7 +202,7 @@ void steering_client(tcp_client &c, string ip_address, int port, atomic<int> &in
     while (true) {
         cout << "to receive" << endl;
         received = c.receive(200, rec_error);
-        if (rec_error < 0){
+        if (rec_error <= 0){
             cerr << "receive failed\n";
             c.close_socket();
             instr_code.store(5);
@@ -584,28 +584,31 @@ int main(int argc, char *argv[])
     int i = 0;
     while (true) {
         int code = instr_code.load();
-        instr_code.store(0);
         if (code == 1) { // play from
             dd_current_end = dd_end;
+            instr_code.store(0);
         }
         else if (code == 2) { // pause
             dd_current_end = dd_current.getYearEnd();
+            instr_code.store(0);
         }
         else if (code == 3) { // 1 step forward
             dd_current_end = dd_current.getNextYearEnd();
             if (dd_current_end > dd_end)
                 dd_current_end = dd_end;
+            instr_code.store(0);
         }
         else if (code == 4) { // load data
             cout << "loading data: " << load_name << endl;
             reload_UMCA_input(umca_rast, load_name, I_umca_rast, S_umca_rast);
+            instr_code.store(0);
         }
         else if (code == 5) { // complete stop
             break;
         }
-        
+
+        string last_name = "";
         if (dd_current_end > dd_start && dd_current <= dd_current_end) {
-            cout << i << endl;
             // here do spread
             // if all the oaks are infected, then exit
             if (all_infected(S_oaks_rast)) {
@@ -616,12 +619,16 @@ int main(int argc, char *argv[])
             }
 
             // check whether the spore occurs in the month
-            if (ss && dd_start.getMonth() > 9) {
-                if (opt.output_series->answer) {
-                    // TODO: use end instead?
-                    string name = generate_name(opt.output_series->answer, dd_start);
+            if (ss && dd_current.getMonth() > 9) {
+                if (dd_current.isYearEnd() && opt.output_series->answer)
+                {
+                    string name = generate_name(opt.output_series->answer, dd_current);
                     I_oaks_rast.toGrassRaster(name.c_str());
+                    c.send_data("output:" + name + '|');
+                    last_name = name;
                 }
+                dd_current.increasedByWeek();
+                i += 1;
                 continue;
             }
 
@@ -643,12 +650,15 @@ int main(int argc, char *argv[])
                 if (opt.output_series->answer) {
                     string name = generate_name(opt.output_series->answer, dd_current);
                     I_oaks_rast.toGrassRaster(name.c_str());
+                    c.send_data("output:" + name + '|');
+                    last_name = name;
                 }
-                c.send_data("output");
             }
 
             dd_current.increasedByWeek();
             i += 1;
+            if (dd_current > dd_end)
+                c.send_data("info:last:" + last_name);
         }
         else {
             // paused
