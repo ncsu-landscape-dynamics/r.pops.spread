@@ -519,16 +519,9 @@ int main(int argc, char *argv[])
 
     // main simulation loop (weekly steps)
     for (int current_week = 0; ; current_week++, dd_start.increasedByWeek()) {
-        if (dd_start < dd_end) {
-            if (ss) {
-                if (!(dd_start.getMonth() > 9)) {
-                    unresolved_weeks.push_back(current_week);
-                }
-            }
-            else {
+        if (dd_start < dd_end)
+            if (!ss || !(dd_start.getMonth() > 9))
                 unresolved_weeks.push_back(current_week);
-            }
-        }
 
         // if all the oaks are infected, then exit
         if (all_infected(S_oaks_rast)) {
