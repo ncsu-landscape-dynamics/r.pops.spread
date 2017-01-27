@@ -519,7 +519,7 @@ int main(int argc, char *argv[])
 
     // main simulation loop (weekly steps)
     for (int current_week = 0; ; current_week++, dd_start.increasedByWeek()) {
-        if (dd_start.compareDate(dd_end)) {
+        if (dd_start < dd_end) {
             if (ss) {
                 if (!(dd_start.getMonth() > 9)) {
                     unresolved_weeks.push_back(current_week);
@@ -537,7 +537,7 @@ int main(int argc, char *argv[])
         }
 
         // check whether the spore occurs in the month
-        if (dd_start.isYearEnd() || !dd_start.compareDate(dd_end)) {
+        if (dd_start.isYearEnd() || dd_start >= dd_end) {
             if (!unresolved_weeks.empty()) {
                 // stochastic simulation runs
                 #pragma omp parallel for num_threads(threads)
@@ -564,7 +564,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        if (!dd_start.compareDate(dd_end))
+        if (dd_start >= dd_end)
             break;
     }
 
