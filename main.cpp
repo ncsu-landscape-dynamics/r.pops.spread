@@ -177,6 +177,7 @@ struct SodOptions
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
     struct Option *seed, *runs, *threads;
     struct Option *output, *output_series;
+    struct Option *stddev, *stddev_series;
 };
 
 struct SodFlags
@@ -229,6 +230,19 @@ int main(int argc, char *argv[])
     opt.output_series->description = _("Basename for output series");
     opt.output_series->required = NO;
     opt.output_series->guisection = _("Output");
+
+    opt.stddev = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.stddev->key = "stddev";
+    opt.stddev->description = _("Standard deviations");
+    opt.stddev->required = NO;
+    opt.stddev->guisection = _("Output");
+
+    opt.stddev_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
+    opt.stddev_series->key = "stddev_series";
+    opt.stddev_series->description
+            = _("Basename for output series of standard deviations");
+    opt.stddev_series->required = NO;
+    opt.stddev_series->guisection = _("Output");
 
     opt.wind = G_define_option();
     opt.wind->type = TYPE_STRING;
@@ -564,7 +578,7 @@ int main(int argc, char *argv[])
                 }
                 unresolved_weeks.clear();
             }
-            if (opt.output_series->answer) {
+            if (opt.output_series->answer || opt.stddev_series->answer) {
                 // aggregate
                 I_oaks_rast.zero();
                 for (unsigned i = 0; i < num_runs; i++)
@@ -572,8 +586,22 @@ int main(int argc, char *argv[])
                 I_oaks_rast /= num_runs;
                 // write result
                 // date is always end of the year, even for seasonal spread
-                string name = generate_name(opt.output_series->answer, dd_start);
-                I_oaks_rast.toGrassRaster(name.c_str());
+                if (opt.output_series->answer) {
+                    string name = generate_name(opt.output_series->answer, dd_start);
+                    I_oaks_rast.toGrassRaster(name.c_str());
+                }
+            }
+            if (opt.stddev_series->answer) {
+                Img stddev(I_oaks_rast.getWidth(), I_oaks_rast.getHeight(),
+                           I_oaks_rast.getWEResolution(), I_oaks_rast.getNSResolution(), 0);
+                for (unsigned i = 0; i < num_runs; i++) {
+                    Img tmp = inf_oaks_rasts[i] - I_oaks_rast;
+                    stddev += tmp * tmp;
+                }
+                stddev /= num_runs;
+                stddev.for_each([](int& a){a = std::sqrt(a);});
+                string name = generate_name(opt.stddev_series->answer, dd_start);
+                stddev.toGrassRaster(name.c_str());
             }
         }
 
@@ -588,6 +616,18 @@ int main(int argc, char *argv[])
     I_oaks_rast /= num_runs;
     // write final result
     I_oaks_rast.toGrassRaster(opt.output->answer);
+
+    if (opt.stddev->answer) {
+        Img stddev(I_oaks_rast.getWidth(), I_oaks_rast.getHeight(),
+                   I_oaks_rast.getWEResolution(), I_oaks_rast.getNSResolution(), 0);
+        for (unsigned i = 0; i < num_runs; i++) {
+            Img tmp = inf_oaks_rasts[i] - I_oaks_rast;
+            stddev += tmp * tmp;
+        }
+        stddev /= num_runs;
+        stddev.for_each([](int& a){a = std::sqrt(a);});
+        stddev.toGrassRaster(opt.stddev->answer);
+    }
 
     // clean the allocated memory
     if (weather) {
