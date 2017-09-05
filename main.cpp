@@ -137,12 +137,12 @@ std::vector<double> weather_file_to_list(const string& filename)
     return output;
 }
 
-bool all_infected(Img& S_oaks_rast)
+bool all_infected(Img& S_rast)
 {
     bool allInfected = true;
-    for (int j = 0; j < S_oaks_rast.getHeight(); j++) {
-        for (int k = 0; k < S_oaks_rast.getWidth(); k++) {
-            if (S_oaks_rast(j, k) > 0)
+    for (int j = 0; j < S_rast.getHeight(); j++) {
+        for (int k = 0; k < S_rast.getWidth(); k++) {
+            if (S_rast(j, k) > 0)
                 allInfected = false;
         }
     }
@@ -177,7 +177,7 @@ void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf,
 
 struct SodOptions
 {
-    struct Option *umca, *oaks, *lvtree, *ioaks;
+    struct Option *species, *lvtree, *infected;
     struct Option *nc_weather, *weather_value, *weather_file;
     struct Option *start_time, *end_time, *seasonality;
     struct Option *spore_rate, *wind;
@@ -208,15 +208,10 @@ int main(int argc, char *argv[])
     G_add_keyword(_("disease"));
     module->description = _("Stochastic landscape spread model of forest pathogen - Sudden Oak Death (SOD)");
 
-    opt.umca = G_define_standard_option(G_OPT_R_INPUT);
-    opt.umca->key = "umca";
-    opt.umca->description = _("Input bay laurel (UMCA) raster map");
-    opt.umca->guisection = _("Input");
-
-    opt.oaks = G_define_standard_option(G_OPT_R_INPUT);
-    opt.oaks->key = "oaks";
-    opt.oaks->description = _("Input SOD-oaks raster map");
-    opt.oaks->guisection = _("Input");
+    opt.species = G_define_standard_option(G_OPT_R_INPUT);
+    opt.species->key = "species";
+    opt.species->description = _("Input infected species raster map");
+    opt.species->guisection = _("Input");
 
     opt.lvtree = G_define_standard_option(G_OPT_R_INPUT);
     opt.lvtree->key = "lvtree";
@@ -224,10 +219,10 @@ int main(int argc, char *argv[])
     opt.lvtree->guisection = _("Input");
 
     // TODO: is this oaks?
-    opt.ioaks = G_define_standard_option(G_OPT_R_INPUT);
-    opt.ioaks->key = "ioaks";
-    opt.ioaks->description = _("Initial sources of infection raster map");
-    opt.ioaks->guisection = _("Input");
+    opt.infected = G_define_standard_option(G_OPT_R_INPUT);
+    opt.infected->key = "infected";
+    opt.infected->description = _("Initial sources of infection raster map");
+    opt.infected->guisection = _("Input");
 
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.output->guisection = _("Output");
@@ -454,33 +449,24 @@ int main(int argc, char *argv[])
     }
 
     // read the suspectible UMCA raster image
-    Img umca_rast = Img::fromGrassRaster(opt.umca->answer);
-
-    // read the SOD-affected oaks raster image
-    Img oaks_rast = Img::fromGrassRaster(opt.oaks->answer);
+    Img species_rast = Img::fromGrassRaster(opt.species->answer);
 
     // read the living trees raster image
     Img lvtree_rast = Img::fromGrassRaster(opt.lvtree->answer);
 
     // read the initial infected oaks image
-    Img I_oaks_rast = Img::fromGrassRaster(opt.ioaks->answer);
+    Img I_species_rast = Img::fromGrassRaster(opt.infected->answer);
 
     // create the initial suspectible oaks image
-    Img S_oaks_rast = oaks_rast - I_oaks_rast;
-
-    // create the initial infected umca image
-    Img I_umca_rast = initialize(umca_rast, I_oaks_rast);
-
-    // create the initial suspectible umca image
-    Img S_umca_rast = umca_rast - I_umca_rast;
+    Img S_species_rast = species_rast - I_species_rast;
 
     // SOD-immune trees image
     //Img SOD_rast = umca_rast + oaks_rast;
     //Img IMM_rast = lvtree_rast - SOD_rast;
 
     // retrieve the width and height of the images
-    int width = umca_rast.getWidth();
-    int height = umca_rast.getHeight();
+    int width = species_rast.getWidth();
+    int height = species_rast.getHeight();
 
     std::shared_ptr<NcFile> weather_coeff = nullptr;
     std::vector<double> weather_values;
@@ -527,13 +513,11 @@ int main(int argc, char *argv[])
 
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
-    std::vector<Img> sus_umca_rasts(num_runs, S_umca_rast);
-    std::vector<Img> sus_oaks_rasts(num_runs, S_oaks_rast);
-    std::vector<Img> inf_umca_rasts(num_runs, I_umca_rast);
-    std::vector<Img> inf_oaks_rasts(num_runs, I_oaks_rast);
+    std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
+    std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
     sporulations.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i)
-        sporulations.emplace_back(seed_value++, I_umca_rast);
+        sporulations.emplace_back(seed_value++, I_species_rast);
 
     std::vector<unsigned> unresolved_weeks;
     unresolved_weeks.reserve(max_weeks_in_year);
@@ -545,7 +529,7 @@ int main(int argc, char *argv[])
                 unresolved_weeks.push_back(current_week);
 
         // if all the oaks are infected, then exit
-        if (all_infected(S_oaks_rast)) {
+        if (all_infected(S_species_rast)) {
             cerr << "In the " << dd_start << " all suspectible oaks are infected!" << endl;
             break;
         }
@@ -574,12 +558,12 @@ int main(int argc, char *argv[])
                         if (!weather_coeff && !weather_values.empty()) {
                             weather_value = weather_values[week];
                         }
-                        sporulations[run].SporeGen(inf_umca_rasts[run], week_weather, weather_value, spore_rate);
+                        sporulations[run].SporeGen(inf_species_rasts[run], week_weather, weather_value, spore_rate);
 
-                        sporulations[run].SporeSpreadDisp(sus_umca_rasts[run], sus_oaks_rasts[run], inf_umca_rasts[run],
-                                                          inf_oaks_rasts[run], lvtree_rast, rtype, week_weather,
-                                                          weather_value, scale1, kappa, pwdir, scale2,
-                                                          gamma);
+                        sporulations[run].SporeSpreadDisp_singleSpecies(sus_species_rasts[run], inf_species_rasts[run],
+                                                                        lvtree_rast, rtype, week_weather,
+                                                                        weather_value, scale1, kappa, pwdir, scale2,
+                                                                        gamma);
                         ++week_in_chunk;
                     }
                 }
@@ -587,22 +571,22 @@ int main(int argc, char *argv[])
             }
             if (opt.output_series->answer || opt.stddev_series->answer) {
                 // aggregate
-                I_oaks_rast.zero();
+                I_species_rast.zero();
                 for (unsigned i = 0; i < num_runs; i++)
-                    I_oaks_rast += inf_oaks_rasts[i];
-                I_oaks_rast /= num_runs;
+                    I_species_rast += inf_species_rasts[i];
+                I_species_rast /= num_runs;
                 // write result
                 // date is always end of the year, even for seasonal spread
                 if (opt.output_series->answer) {
                     string name = generate_name(opt.output_series->answer, dd_start);
-                    I_oaks_rast.toGrassRaster(name.c_str());
+                    I_species_rast.toGrassRaster(name.c_str());
                 }
             }
             if (opt.stddev_series->answer) {
-                Img stddev(I_oaks_rast.getWidth(), I_oaks_rast.getHeight(),
-                           I_oaks_rast.getWEResolution(), I_oaks_rast.getNSResolution(), 0);
+                Img stddev(I_species_rast.getWidth(), I_species_rast.getHeight(),
+                           I_species_rast.getWEResolution(), I_species_rast.getNSResolution(), 0);
                 for (unsigned i = 0; i < num_runs; i++) {
-                    Img tmp = inf_oaks_rasts[i] - I_oaks_rast;
+                    Img tmp = inf_species_rasts[i] - I_species_rast;
                     stddev += tmp * tmp;
                 }
                 stddev /= num_runs;
@@ -617,18 +601,18 @@ int main(int argc, char *argv[])
     }
 
     // aggregate
-    I_oaks_rast.zero();
+    I_species_rast.zero();
     for (unsigned i = 0; i < num_runs; i++)
-        I_oaks_rast += inf_oaks_rasts[i];
-    I_oaks_rast /= num_runs;
+        I_species_rast += inf_species_rasts[i];
+    I_species_rast /= num_runs;
     // write final result
-    I_oaks_rast.toGrassRaster(opt.output->answer);
+    I_species_rast.toGrassRaster(opt.output->answer);
 
     if (opt.stddev->answer) {
-        Img stddev(I_oaks_rast.getWidth(), I_oaks_rast.getHeight(),
-                   I_oaks_rast.getWEResolution(), I_oaks_rast.getNSResolution(), 0);
+        Img stddev(I_species_rast.getWidth(), I_species_rast.getHeight(),
+                   I_species_rast.getWEResolution(), I_species_rast.getNSResolution(), 0);
         for (unsigned i = 0; i < num_runs; i++) {
-            Img tmp = inf_oaks_rasts[i] - I_oaks_rast;
+            Img tmp = inf_species_rasts[i] - I_species_rast;
             stddev += tmp * tmp;
         }
         stddev /= num_runs;
