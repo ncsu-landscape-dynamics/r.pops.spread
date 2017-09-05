@@ -22,6 +22,8 @@
 extern "C" {
 #include <grass/gis.h>
 #include <grass/glocale.h>
+#include <grass/vector.h>
+#include <grass/raster.h>
 }
 
 #include <netcdfcpp.h>
@@ -177,7 +179,7 @@ void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf,
 
 struct SodOptions
 {
-    struct Option *species, *lvtree, *infected;
+    struct Option *species, *lvtree, *infected, *outside_spores;
     struct Option *nc_weather, *weather_value, *weather_file;
     struct Option *start_time, *end_time, *seasonality;
     struct Option *spore_rate, *wind;
@@ -245,6 +247,11 @@ int main(int argc, char *argv[])
             = _("Basename for output series of standard deviations");
     opt.stddev_series->required = NO;
     opt.stddev_series->guisection = _("Output");
+
+    opt.outside_spores = G_define_standard_option(G_OPT_V_OUTPUT);
+    opt.outside_spores->key = "outside_spores";
+    opt.outside_spores->required = NO;
+    opt.outside_spores->guisection = _("Output");
 
     opt.wind = G_define_option();
     opt.wind->type = TYPE_STRING;
@@ -518,6 +525,7 @@ int main(int argc, char *argv[])
     sporulations.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i)
         sporulations.emplace_back(seed_value++, I_species_rast);
+    std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     std::vector<unsigned> unresolved_weeks;
     unresolved_weeks.reserve(max_weeks_in_year);
@@ -561,7 +569,8 @@ int main(int argc, char *argv[])
                         sporulations[run].SporeGen(inf_species_rasts[run], week_weather, weather_value, spore_rate);
 
                         sporulations[run].SporeSpreadDisp_singleSpecies(sus_species_rasts[run], inf_species_rasts[run],
-                                                                        lvtree_rast, rtype, week_weather,
+                                                                        lvtree_rast, outside_spores[run],
+                                                                        rtype, week_weather,
                                                                         weather_value, scale1, kappa, pwdir, scale2,
                                                                         gamma);
                         ++week_in_chunk;
@@ -618,6 +627,36 @@ int main(int argc, char *argv[])
         stddev /= num_runs;
         stddev.for_each([](int& a){a = std::sqrt(a);});
         stddev.toGrassRaster(opt.stddev->answer);
+    }
+    if (opt.outside_spores->answer) {
+        Cell_head region;
+        Rast_get_window(&region);
+        struct Map_info Map;
+        struct line_pnts *Points;
+        struct line_cats *Cats;
+        if (Vect_open_new(&Map, opt.outside_spores->answer, WITHOUT_Z) < 0)
+            G_fatal_error(_("Unable to create vector map <%s>"), opt.outside_spores->answer);
+
+        Points = Vect_new_line_struct();
+        Cats = Vect_new_cats_struct();
+
+        for (unsigned i = 0; i < num_runs; i++) {
+            for (unsigned j = 0; j < outside_spores[i].size(); j++) {
+                int row = std::get<0>(outside_spores[i][j]);
+                int col = std::get<1>(outside_spores[i][j]);
+                double n = Rast_row_to_northing(row, &region);
+                double e = Rast_col_to_easting(col, &region);
+                Vect_reset_line(Points);
+                Vect_reset_cats(Cats);
+                Vect_append_point(Points, e, n, 0);
+                Vect_cat_set(Cats, 1, i + 1);
+                Vect_write_line(&Map, GV_POINT, Points, Cats);
+            }
+        }
+        Vect_build(&Map);
+        Vect_close(&Map);
+        Vect_destroy_line_struct(Points);
+        Vect_destroy_cats_struct(Cats);
     }
 
     // clean the allocated memory
