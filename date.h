@@ -1,3 +1,20 @@
+/*
+ * SOD model - date manipulation
+ *
+ * Copyright (C) 2015-2017 by the authors.
+ *
+ * Authors: Zexi Chen (zchen22 ncsu edu)
+ *          Anna Petrasova (kratochanna gmail com)
+ *
+ * The code contained herein is licensed under the GNU General Public
+ * License. You may obtain a copy of the GNU General Public License
+ * Version 2 or later at the following locations:
+ *
+ * http://www.opensource.org/licenses/gpl-license.html
+ * http://www.gnu.org/copyleft/gpl.html
+ */
+
+
 #ifndef DATE
 #define DATE
 
