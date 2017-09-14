@@ -35,6 +35,7 @@ Run:
 
 * Francesco Tonini (original R version)
 * Zexi Chen (C++ version)
+* Anna Petrasova (steering)
 
 ## License
 
