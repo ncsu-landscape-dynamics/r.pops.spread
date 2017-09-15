@@ -125,6 +125,15 @@ bool seasonality_from_string(const string& text)
                                     " value '" + text +"' provided");
 }
 
+void read_names(std::vector<string>& names, const char* filename)
+{
+    std::ifstream file(filename);
+    string line;
+    while (std::getline(file, line)) {
+        names.push_back(line);
+    }
+}
+
 std::vector<double> weather_file_to_list(const string& filename)
 {
     std::ifstream input(filename);
@@ -178,10 +187,38 @@ void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf,
     }
 }
 
+// TODO: create image which is float/double/template
+void array_from_grass_raster(const char* name, double* array,
+                             unsigned width, unsigned height)
+{
+    int fd = Rast_open_old(name, "");
+
+    for (int row = 0; row < height; row++) {
+        Rast_get_d_row(fd, array + (row * width), row);
+    }
+
+    Rast_close(fd);
+}
+
+void weather_rasters_to_array(const string& moisture_name,
+                              const string& temperature_name,
+                              double* mcf, double* ccf, double* weather,
+                              unsigned width, unsigned height)
+{
+    // read the weather information
+    array_from_grass_raster(moisture_name.c_str(), mcf, width, height);
+    array_from_grass_raster(temperature_name.c_str(), ccf, width, height);
+    for (unsigned j = 0; j < height; j++) {
+        for (unsigned k = 0; k < width; k++) {
+            weather[j * width + k] = mcf[j * width + k] * ccf[j * width + k];
+        }
+    }
+}
+
 struct SodOptions
 {
     struct Option *species, *lvtree, *infected, *outside_spores;
-    struct Option *nc_weather, *weather_value, *weather_file;
+    struct Option *nc_weather, *moisture_file, *temperature_file, *weather_value, *weather_file;
     struct Option *start_time, *end_time, *seasonality;
     struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
@@ -268,6 +305,24 @@ int main(int argc, char *argv[])
     opt.nc_weather->description = _("Weather data");
     opt.nc_weather->required = NO;
     opt.nc_weather->guisection = _("Weather");
+
+    opt.moisture_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.moisture_file->key = "moisture_file";
+    opt.moisture_file->label =
+        _("Input file with one moisture map name per line");
+    opt.moisture_file->description =
+        _("Moisture coefficient");
+    opt.moisture_file->required = NO;
+    opt.moisture_file->guisection = _("Weather");
+
+    opt.temperature_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.temperature_file->key = "temperature_file";
+    opt.temperature_file->label =
+        _("Input file with one temperature map name per line");
+    opt.temperature_file->description =
+        _("Temperature coefficient");
+    opt.temperature_file->required = NO;
+    opt.temperature_file->guisection = _("Weather");
 
     opt.weather_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.weather_file->key = "weather_file";
@@ -396,6 +451,13 @@ int main(int argc, char *argv[])
     G_option_exclusive(opt.seed, flg.generate_seed, NULL);
     G_option_required(opt.seed, flg.generate_seed, NULL);
 
+    // weather
+    G_option_exclusive(opt.moisture_file, opt.nc_weather,
+                       opt.weather_file, opt.weather_value, NULL);
+    G_option_exclusive(opt.temperature_file, opt.nc_weather,
+                       opt.weather_file, opt.weather_value, NULL);
+    G_option_collective(opt.moisture_file, opt.temperature_file, NULL);
+
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
 
@@ -477,10 +539,19 @@ int main(int argc, char *argv[])
     int height = species_rast.getHeight();
 
     std::shared_ptr<NcFile> weather_coeff = nullptr;
+    std::vector<string> moisture_names;
+    std::vector<string> temperature_names;
+    double weather_from_rasters = false;
     std::vector<double> weather_values;
     double weather_value = 0;
+
     if (opt.nc_weather->answer)
         weather_coeff = std::make_shared<NcFile>(opt.nc_weather->answer, NcFile::ReadOnly);
+    else if (opt.moisture_file->answer && opt.temperature_file->answer) {
+        read_names(moisture_names, opt.moisture_file->answer);
+        read_names(temperature_names, opt.temperature_file->answer);
+        weather_from_rasters = true;
+    }
     else if (opt.weather_file->answer)
         weather_values = weather_file_to_list(opt.weather_file->answer);
     else if (opt.weather_value->answer)
@@ -513,7 +584,7 @@ int main(int argc, char *argv[])
     double *mcf = nullptr;
     double *ccf = nullptr;
     double *weather = nullptr;
-    if (weather_coeff) {
+    if (weather_coeff || weather_from_rasters) {
         mcf = new double[height * width];
         ccf = new double[height * width];
         weather = new double[max_weeks_in_year * height * width];
@@ -553,6 +624,12 @@ int main(int argc, char *argv[])
                     double *week_weather = weather + week_in_chunk * width * height;
                     if (weather_coeff) {
                         get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, week_weather, width, height, week);
+                    }
+                    else if (weather_from_rasters) {
+                        weather_rasters_to_array(moisture_names[week],
+                                                 temperature_names[week],
+                                                 mcf, ccf, week_weather,
+                                                 width, height);
                     }
                     ++week_in_chunk;
                 }
