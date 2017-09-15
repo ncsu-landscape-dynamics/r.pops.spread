@@ -669,6 +669,8 @@ int main(int argc, char *argv[])
         }
         else {
             // paused
+            // TODO: sleep for a shorter time than one second
+            sleep(1);
         }
     }
 
