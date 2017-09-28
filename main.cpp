@@ -225,6 +225,7 @@ struct SodOptions
     struct Option *seed, *runs, *threads;
     struct Option *output, *output_series;
     struct Option *stddev, *stddev_series;
+    struct Option *output_probability;
 };
 
 struct SodFlags
@@ -285,6 +286,12 @@ int main(int argc, char *argv[])
             = _("Basename for output series of standard deviations");
     opt.stddev_series->required = NO;
     opt.stddev_series->guisection = _("Output");
+
+    opt.output_probability = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.output_probability->key = "probability";
+    opt.output_probability->description = _("Infection probability (in percent)");
+    opt.output_probability->required = NO;
+    opt.output_probability->guisection = _("Output");
 
     opt.outside_spores = G_define_standard_option(G_OPT_V_OUTPUT);
     opt.outside_spores->key = "outside_spores";
@@ -705,6 +712,18 @@ int main(int argc, char *argv[])
         stddev /= num_runs;
         stddev.for_each([](int& a){a = std::sqrt(a);});
         stddev.toGrassRaster(opt.stddev->answer);
+    }
+    if (opt.output_probability->answer) {
+        Img probability(I_species_rast.getWidth(), I_species_rast.getHeight(),
+                        I_species_rast.getWEResolution(), I_species_rast.getNSResolution(), 0);
+        for (unsigned i = 0; i < num_runs; i++) {
+            Img tmp = inf_species_rasts[i];
+            tmp.for_each([](int& a){a = bool(a);});
+            probability += tmp;
+        }
+        probability *= 100;  // prob from 0 to 100 (using ints)
+        probability /= num_runs;
+        probability.toGrassRaster(opt.output_probability->answer);
     }
     if (opt.outside_spores->answer) {
         Cell_head region;
