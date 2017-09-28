@@ -282,6 +282,7 @@ int main(int argc, char *argv[])
 
     opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.output->guisection = _("Output");
+    opt.output->required = NO;
 
     opt.output_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
     opt.output_series->key = "output_series";
@@ -477,6 +478,9 @@ int main(int argc, char *argv[])
         _("Number of threads for parallel computing");
     opt.threads->options = "1-";
     opt.threads->guisection = _("Randomness");
+
+    G_option_required(opt.output, opt.output_series, opt.output_probability,
+                      opt.outside_spores, NULL);
 
     G_option_exclusive(opt.seed, flg.generate_seed, NULL);
     G_option_required(opt.seed, flg.generate_seed, NULL);
@@ -726,14 +730,17 @@ int main(int argc, char *argv[])
             break;
     }
 
-    // aggregate
-    I_species_rast.zero();
-    for (unsigned i = 0; i < num_runs; i++)
-        I_species_rast += inf_species_rasts[i];
-    I_species_rast /= num_runs;
-    // write final result
-    I_species_rast.toGrassRaster(opt.output->answer);
-
+    if (opt.output->answer || opt.stddev->answer) {
+        // aggregate
+        I_species_rast.zero();
+        for (unsigned i = 0; i < num_runs; i++)
+            I_species_rast += inf_species_rasts[i];
+        I_species_rast /= num_runs;
+    }
+    if (opt.output->answer) {
+        // write final result
+        I_species_rast.toGrassRaster(opt.output->answer);
+    }
     if (opt.stddev->answer) {
         Img stddev(I_species_rast.getWidth(), I_species_rast.getHeight(),
                    I_species_rast.getWEResolution(), I_species_rast.getNSResolution(), 0);
