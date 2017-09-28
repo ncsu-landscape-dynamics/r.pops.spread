@@ -36,6 +36,8 @@ extern "C" {
 #include <fstream>
 #include <string>
 
+#include <sys/stat.h>
+
 using std::string;
 using std::cout;
 using std::cerr;
@@ -43,6 +45,18 @@ using std::endl;
 
 
 #define DIM 1
+
+// check if a file exists
+inline bool file_exists(const char* name) {
+  struct stat buffer;
+  return (stat(name, &buffer) == 0);
+}
+
+inline void file_exists_or_fatal_error(struct Option* option) {
+    if (option->answer && !file_exists(option->answer))
+        G_fatal_error(_("Option %s: File %s does not exist"),
+                      option->key, option->answer);
+}
 
 // Initialize infected trees for each species
 // needed unless empirical info is available
@@ -484,6 +498,11 @@ int main(int argc, char *argv[])
     unsigned threads = 1;
     if (opt.threads->answer)
         threads = std::stoul(opt.threads->answer);
+
+    // check for file existence
+    file_exists_or_fatal_error(opt.moisture_file);
+    file_exists_or_fatal_error(opt.temperature_file);
+    file_exists_or_fatal_error(opt.weather_file);
 
     // Seasonality: Do you want the spread to be limited to certain months?
     bool ss = seasonality_from_string(opt.seasonality->answer);
