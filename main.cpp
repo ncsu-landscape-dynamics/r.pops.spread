@@ -231,6 +231,7 @@ struct SodOptions
 struct SodFlags
 {
     struct Flag *generate_seed;
+    struct Flag *series_as_single_run;
 };
 
 
@@ -286,6 +287,14 @@ int main(int argc, char *argv[])
             = _("Basename for output series of standard deviations");
     opt.stddev_series->required = NO;
     opt.stddev_series->guisection = _("Output");
+
+    flg.series_as_single_run = G_define_flag();
+    flg.series_as_single_run->key = 'l';
+    flg.series_as_single_run->label =
+        _("The output series as a single run only, not average");
+    flg.series_as_single_run->description =
+        _("The first run will be used for output instead of average");
+    flg.series_as_single_run->guisection = _("Output");
 
     opt.output_probability = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.output_probability->key = "probability";
@@ -663,18 +672,22 @@ int main(int argc, char *argv[])
                 }
                 unresolved_weeks.clear();
             }
-            if (opt.output_series->answer || opt.stddev_series->answer) {
-                // aggregate
+            if ((opt.output_series->answer && !flg.series_as_single_run->answer)
+                     || opt.stddev_series->answer) {
+                // aggregate in the series
                 I_species_rast.zero();
                 for (unsigned i = 0; i < num_runs; i++)
                     I_species_rast += inf_species_rasts[i];
                 I_species_rast /= num_runs;
+            }
+            if (opt.output_series->answer) {
                 // write result
                 // date is always end of the year, even for seasonal spread
-                if (opt.output_series->answer) {
-                    string name = generate_name(opt.output_series->answer, dd_start);
+                string name = generate_name(opt.output_series->answer, dd_start);
+                if (flg.series_as_single_run->answer)
+                    inf_species_rasts[0].toGrassRaster(name.c_str());
+                else
                     I_species_rast.toGrassRaster(name.c_str());
-                }
             }
             if (opt.stddev_series->answer) {
                 Img stddev(I_species_rast.getWidth(), I_species_rast.getHeight(),
