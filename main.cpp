@@ -554,6 +554,11 @@ int main(int argc, char *argv[])
     }
     Date dd_start(start_time, 01, 01);
     Date dd_end(end_time, 12, 31);
+    // difference in years (in dates) but including both years
+    auto num_years = dd_end.getYear() - dd_start.getYear() + 1;
+
+    unsigned first_age_to_die = 2;
+    double infected_to_dead_rate = 0.05;
 
     unsigned seed_value;
     if (opt.seed->answer) {
@@ -656,6 +661,16 @@ int main(int argc, char *argv[])
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
+
+    // infected cohort for each year (index is cohort age)
+    // age starts with 0 (in year 1), 0 is oldest
+    std::vector<std::vector<Img> > inf_species_cohort_rasts(
+        num_runs, std::vector<Img>(num_years, I_species_rast));
+
+    // we are using only the first dead img for visualization, but for
+    // parallelization we need all allocated anyway
+    std::vector<Img> dead_in_current_year(num_runs, Img(S_species_rast, 0));
+
     sporulations.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i)
         sporulations.emplace_back(seed_value++, I_species_rast);
@@ -716,7 +731,10 @@ int main(int argc, char *argv[])
                         }
                         sporulations[run].SporeGen(inf_species_rasts[run], week_weather, weather_value, spore_rate);
 
+                        auto current_age = dd_current.getYear() - dd_start.getYear();
+                        //cerr << "current_age: " << current_age << endl;
                         sporulations[run].SporeSpreadDisp_singleSpecies(sus_species_rasts[run], inf_species_rasts[run],
+                                                                        inf_species_cohort_rasts.at(run).at(current_age),
                                                                         lvtree_rast, outside_spores[run],
                                                                         rtype, week_weather,
                                                                         weather_value, scale1, kappa, pwdir, scale2,
@@ -725,6 +743,26 @@ int main(int argc, char *argv[])
                     }
                 }
                 unresolved_weeks.clear();
+            }
+            #pragma omp parallel for num_threads(threads)
+            for (unsigned run = 0; run < num_runs; run++) {
+                dead_in_current_year[run].zero();
+                for (auto age = 0; age < inf_species_cohort_rasts[run].size() /*dd_current.getYear() - dd_start.getYear()*/; age++) {
+                    cerr << "age: " << age << " run: " << run << endl;
+                    //if (age first_age_to_die)
+                    Img dead_in_cohort = inf_species_cohort_rasts[run].at(age) * infected_to_dead_rate;
+                    inf_species_cohort_rasts[run][age] -= dead_in_cohort;
+                    inf_species_cohort_rasts[run][age].for_each([](int& a){if (a < 0) a = 0;});
+                    dead_in_current_year[run] += dead_in_cohort;
+                }
+                inf_species_rasts[run] -= dead_in_current_year[run];
+                inf_species_rasts[run].for_each([](int& a){if (a < 0) a = 0;});
+            }
+            if (true) {
+                // write result
+                // date is always end of the year, even for seasonal spread
+                string name = generate_name("dead_in_current_year", dd_current);
+                dead_in_current_year[0].toGrassRaster(name.c_str());
             }
             if ((opt.output_series->answer && !flg.series_as_single_run->answer)
                      || opt.stddev_series->answer) {
