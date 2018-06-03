@@ -664,20 +664,22 @@ int main(int argc, char *argv[])
     std::vector<unsigned> unresolved_weeks;
     unresolved_weeks.reserve(max_weeks_in_year);
 
+    Date dd_current(dd_start);
+
     // main simulation loop (weekly steps)
-    for (int current_week = 0; ; current_week++, dd_start.increasedByWeek()) {
-        if (dd_start < dd_end)
-            if (!ss || !(dd_start.getMonth() > 9))
+    for (int current_week = 0; ; current_week++, dd_current.increasedByWeek()) {
+        if (dd_current < dd_end)
+            if (!ss || !(dd_current.getMonth() > 9))
                 unresolved_weeks.push_back(current_week);
 
         // if all the oaks are infected, then exit
         if (all_infected(S_species_rast)) {
-            cerr << "In the " << dd_start << " all suspectible oaks are infected!" << endl;
+            cerr << "In the " << dd_current << " all suspectible oaks are infected!" << endl;
             break;
         }
 
         // check whether the spore occurs in the month
-        if (dd_start.isYearEnd() || dd_start >= dd_end) {
+        if (dd_current.isYearEnd() || dd_current >= dd_end) {
             if (!unresolved_weeks.empty()) {
 
                 unsigned week_in_chunk = 0;
@@ -735,7 +737,7 @@ int main(int argc, char *argv[])
             if (opt.output_series->answer) {
                 // write result
                 // date is always end of the year, even for seasonal spread
-                string name = generate_name(opt.output_series->answer, dd_start);
+                string name = generate_name(opt.output_series->answer, dd_current);
                 if (flg.series_as_single_run->answer)
                     inf_species_rasts[0].toGrassRaster(name.c_str());
                 else
@@ -750,12 +752,12 @@ int main(int argc, char *argv[])
                 }
                 stddev /= num_runs;
                 stddev.for_each([](int& a){a = std::sqrt(a);});
-                string name = generate_name(opt.stddev_series->answer, dd_start);
+                string name = generate_name(opt.stddev_series->answer, dd_current);
                 stddev.toGrassRaster(name.c_str());
             }
         }
 
-        if (dd_start >= dd_end)
+        if (dd_current >= dd_end)
             break;
     }
 
