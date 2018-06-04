@@ -670,6 +670,9 @@ int main(int argc, char *argv[])
     // we are using only the first dead img for visualization, but for
     // parallelization we need all allocated anyway
     std::vector<Img> dead_in_current_year(num_runs, Img(S_species_rast, 0));
+    // dead trees accumulated over years
+    // TODO: allow only when series as single run
+    Img accumulated_dead(Img(S_species_rast, 0));
 
     sporulations.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i)
@@ -744,25 +747,32 @@ int main(int argc, char *argv[])
                 }
                 unresolved_weeks.clear();
             }
-            #pragma omp parallel for num_threads(threads)
-            for (unsigned run = 0; run < num_runs; run++) {
-                dead_in_current_year[run].zero();
-                for (auto age = 0; age < inf_species_cohort_rasts[run].size() /*dd_current.getYear() - dd_start.getYear()*/; age++) {
-                    cerr << "age: " << age << " run: " << run << endl;
-                    //if (age first_age_to_die)
-                    Img dead_in_cohort = inf_species_cohort_rasts[run].at(age) * infected_to_dead_rate;
-                    inf_species_cohort_rasts[run][age] -= dead_in_cohort;
-                    inf_species_cohort_rasts[run][age].for_each([](int& a){if (a < 0) a = 0;});
-                    dead_in_current_year[run] += dead_in_cohort;
+            if (true) {
+                #pragma omp parallel for num_threads(threads)
+                for (unsigned run = 0; run < num_runs; run++) {
+                    dead_in_current_year[run].zero();
+                    for (auto age = 0; age < inf_species_cohort_rasts[run].size() /*dd_current.getYear() - dd_start.getYear()*/; age++) {
+                        cerr << "age: " << age << " run: " << run << endl;
+                        //if (age first_age_to_die)
+                        Img dead_in_cohort = inf_species_cohort_rasts[run].at(age) * infected_to_dead_rate;
+                        inf_species_cohort_rasts[run][age] -= dead_in_cohort;
+                        inf_species_cohort_rasts[run][age].for_each([](int& a){if (a < 0) a = 0;});
+                        dead_in_current_year[run] += dead_in_cohort;
+                    }
+                    inf_species_rasts[run] -= dead_in_current_year[run];
+                    inf_species_rasts[run].for_each([](int& a){if (a < 0) a = 0;});
                 }
-                inf_species_rasts[run] -= dead_in_current_year[run];
-                inf_species_rasts[run].for_each([](int& a){if (a < 0) a = 0;});
             }
             if (true) {
                 // write result
                 // date is always end of the year, even for seasonal spread
                 string name = generate_name("dead_in_current_year", dd_current);
                 dead_in_current_year[0].toGrassRaster(name.c_str());
+            }
+            if (true) {
+                accumulated_dead += dead_in_current_year[0];
+                string name = generate_name("accumulated_dead", dd_current);
+                accumulated_dead.toGrassRaster(name.c_str());
             }
             if ((opt.output_series->answer && !flg.series_as_single_run->answer)
                      || opt.stddev_series->answer) {
