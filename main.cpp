@@ -829,11 +829,9 @@ int main(int argc, char *argv[])
                         for (unsigned age = 0; age <= max_index; age++) {
                             Img dead_in_cohort = infected_to_dead_rate * inf_species_cohort_rasts[run][age];
                             inf_species_cohort_rasts[run][age] -= dead_in_cohort;
-                            inf_species_cohort_rasts[run][age].for_each([](int& a){if (a < 0) a = 0;});
                             dead_in_current_year[run] += dead_in_cohort;
                         }
                         inf_species_rasts[run] -= dead_in_current_year[run];
-                        inf_species_rasts[run].for_each([](int& a){if (a < 0) a = 0;});
                     }
                 }
             }
