@@ -796,7 +796,7 @@ int main(int argc, char *argv[])
 
                         auto current_age = dd_current.getYear() - dd_start.getYear();
                         sporulations[run].SporeSpreadDisp_singleSpecies(sus_species_rasts[run], inf_species_rasts[run],
-                                                                        inf_species_cohort_rasts.at(run).at(current_age),
+                                                                        inf_species_cohort_rasts[run][current_age],
                                                                         lvtree_rast, outside_spores[run],
                                                                         rtype, week_weather,
                                                                         weather_value, scale1, kappa, pwdir, scale2,
@@ -827,7 +827,7 @@ int main(int argc, char *argv[])
                     for (unsigned run = 0; run < num_runs; run++) {
                         dead_in_current_year[run].zero();
                         for (unsigned age = 0; age <= max_index; age++) {
-                            Img dead_in_cohort = inf_species_cohort_rasts[run].at(age) * infected_to_dead_rate;
+                            Img dead_in_cohort = infected_to_dead_rate * inf_species_cohort_rasts[run][age];
                             inf_species_cohort_rasts[run][age] -= dead_in_cohort;
                             inf_species_cohort_rasts[run][age].for_each([](int& a){if (a < 0) a = 0;});
                             dead_in_current_year[run] += dead_in_cohort;
