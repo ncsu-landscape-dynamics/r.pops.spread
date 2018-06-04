@@ -665,7 +665,7 @@ int main(int argc, char *argv[])
     // infected cohort for each year (index is cohort age)
     // age starts with 0 (in year 1), 0 is oldest
     std::vector<std::vector<Img> > inf_species_cohort_rasts(
-        num_runs, std::vector<Img>(num_years, I_species_rast));
+        num_runs, std::vector<Img>(num_years, Img(S_species_rast, 0)));
 
     // we are using only the first dead img for visualization, but for
     // parallelization we need all allocated anyway
