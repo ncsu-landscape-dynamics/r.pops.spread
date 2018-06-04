@@ -806,7 +806,9 @@ int main(int argc, char *argv[])
                 }
                 unresolved_weeks.clear();
             }
-            if (true) {
+            if (mortality && (dd_current.getYear() <= dd_end.getYear())) {
+                // to avoid problem with Jan 1 of the following year
+                // we explicitely check if we are in a valid year range
                 unsigned simulation_year = dd_current.getYear() - dd_start.getYear();
                 // only run to the current year of simulation
                 // (first year is 0):
