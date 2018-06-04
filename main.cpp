@@ -557,7 +557,7 @@ int main(int argc, char *argv[])
     // difference in years (in dates) but including both years
     auto num_years = dd_end.getYear() - dd_start.getYear() + 1;
 
-    unsigned first_age_to_die = 2;
+    unsigned first_year_to_die = 2;
     double infected_to_dead_rate = 0.05;
 
     unsigned seed_value;
@@ -748,19 +748,32 @@ int main(int argc, char *argv[])
                 unresolved_weeks.clear();
             }
             if (true) {
-                #pragma omp parallel for num_threads(threads)
-                for (unsigned run = 0; run < num_runs; run++) {
-                    dead_in_current_year[run].zero();
-                    for (auto age = 0; age < inf_species_cohort_rasts[run].size() /*dd_current.getYear() - dd_start.getYear()*/; age++) {
-                        cerr << "age: " << age << " run: " << run << endl;
-                        //if (age first_age_to_die)
-                        Img dead_in_cohort = inf_species_cohort_rasts[run].at(age) * infected_to_dead_rate;
-                        inf_species_cohort_rasts[run][age] -= dead_in_cohort;
-                        inf_species_cohort_rasts[run][age].for_each([](int& a){if (a < 0) a = 0;});
-                        dead_in_current_year[run] += dead_in_cohort;
+                unsigned simulation_year = dd_current.getYear() - dd_start.getYear();
+                // only run to the current year of simulation
+                // (first year is 0):
+                //   max index == sim year
+                // reduced by first time when trees start dying
+                // (counted from 1: first year == 1)
+                // e.g. for sim year 3, year dying 4, max index is 0
+                //   max index = sim year - (dying year - 1)
+                // index is negative before we reach the year
+                // (so we can skip these years)
+                // sim year - (dying year - 1) < 0
+                // sim year < dying year - 1
+                if (simulation_year >= first_year_to_die - 1) {
+                    auto max_index = simulation_year - (first_year_to_die - 1);
+                    #pragma omp parallel for num_threads(threads)
+                    for (unsigned run = 0; run < num_runs; run++) {
+                        dead_in_current_year[run].zero();
+                        for (unsigned age = 0; age <= max_index; age++) {
+                            Img dead_in_cohort = inf_species_cohort_rasts[run].at(age) * infected_to_dead_rate;
+                            inf_species_cohort_rasts[run][age] -= dead_in_cohort;
+                            inf_species_cohort_rasts[run][age].for_each([](int& a){if (a < 0) a = 0;});
+                            dead_in_current_year[run] += dead_in_cohort;
+                        }
+                        inf_species_rasts[run] -= dead_in_current_year[run];
+                        inf_species_rasts[run].for_each([](int& a){if (a < 0) a = 0;});
                     }
-                    inf_species_rasts[run] -= dead_in_current_year[run];
-                    inf_species_rasts[run].for_each([](int& a){if (a < 0) a = 0;});
                 }
             }
             if (true) {
