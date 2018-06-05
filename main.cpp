@@ -461,7 +461,7 @@ int main(int argc, char *argv[])
     opt.infected_to_dead_rate->label =
         _("Mortality rate of infected trees");
     opt.infected_to_dead_rate->description =
-        _("Ratio of dead trees to all infected trees in a given year"
+        _("Percentage of infected trees that die in a given year"
           " (trees are removed from the infected pool)");
     opt.infected_to_dead_rate->options = "0-1";
     opt.infected_to_dead_rate->guisection = _("Mortality");
@@ -470,9 +470,10 @@ int main(int argc, char *argv[])
     opt.first_year_to_die->type = TYPE_INTEGER;
     opt.first_year_to_die->key = "mortality_start";
     opt.first_year_to_die->label =
-        _("Year of simulation when mortality is applied");
+        _("Year of simulation when mortality is first applied");
     opt.first_year_to_die->description =
-        _("First year of simulation when mortality rate is applied");
+        _("How many years it takes for an infected tree to die"
+          " (value 1 for trees dying at the end of the first year)");
     opt.first_year_to_die->guisection = _("Mortality");
 
     opt.dead_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
@@ -614,8 +615,16 @@ int main(int argc, char *argv[])
     double infected_to_dead_rate = 0.0;
     if (flg.mortality->answer) {
         mortality = true;
-        if (opt.first_year_to_die->answer)
+        if (opt.first_year_to_die->answer) {
             first_year_to_die = std::stoi(opt.first_year_to_die->answer);
+            if (first_year_to_die > num_years) {
+                G_fatal_error(
+                    _("%s is too large (%d). It must be smaller or "
+                      " equal than number of simulation years (%d)."),
+                    opt.first_year_to_die->key,
+                    first_year_to_die, num_years);
+            }
+        }
         if (opt.infected_to_dead_rate->answer)
             infected_to_dead_rate = std::stod(opt.infected_to_dead_rate->answer);
     }
