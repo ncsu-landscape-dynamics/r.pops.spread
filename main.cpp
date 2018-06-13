@@ -797,7 +797,10 @@ int main(int argc, char *argv[])
                     unsigned week_in_chunk = 0;
                     // actual runs of the simulation per week
                     for (auto week : unresolved_weeks) {
-                        double *week_weather = weather + week_in_chunk * width * height;
+                        double *week_weather = 0;
+                        if (weather) {
+                            week_weather = weather + week_in_chunk * width * height;
+                        }
                         if (!weather_coeff && !weather_values.empty()) {
                             weather_value = weather_values[week];
                         }
