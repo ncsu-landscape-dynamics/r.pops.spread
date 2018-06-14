@@ -343,13 +343,11 @@ int main(int argc, char *argv[])
     opt.wind->required = YES;
     opt.wind->guisection = _("Weather");
 
-#ifdef SOD_NETCDF_SUPPORT
     opt.nc_weather = G_define_standard_option(G_OPT_F_BIN_INPUT);
     opt.nc_weather->key = "ncdf_weather";
     opt.nc_weather->description = _("Weather data");
     opt.nc_weather->required = NO;
     opt.nc_weather->guisection = _("Weather");
-#endif
 
     opt.moisture_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.moisture_file->key = "moisture_file";
@@ -557,6 +555,13 @@ int main(int argc, char *argv[])
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
+
+#ifndef SOD_NETCDF_SUPPORT
+    if (opt.nc_weather->answer) {
+        G_fatal_error(_("Direct NetCDF support is not available in this"
+                        " installation, import the data instead"));
+    }
+#endif
 
     unsigned num_runs = 1;
     if (opt.runs->answer)
