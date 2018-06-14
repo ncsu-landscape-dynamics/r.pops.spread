@@ -1,11 +1,17 @@
 /*
+ * SOD model - raster manipulation
  *
- *  SOD-model-cpp
+ * Copyright (C) 2015-2017 by the authors.
  *
- *  Created on: Oct,2015
- *  Author: Zexi Chen(zchen22@ncsu.edu)
+ * Authors: Zexi Chen (zchen22 ncsu edu)
+ *          Vaclav Petras (wenzeslaus gmail com)
  *
+ * The code contained herein is licensed under the GNU General Public
+ * License. You may obtain a copy of the GNU General Public License
+ * Version 2 or later at the following locations:
  *
+ * http://www.opensource.org/licenses/gpl-license.html
+ * http://www.gnu.org/copyleft/gpl.html
  */
 
 
@@ -15,8 +21,8 @@
 #include <iostream>
 #include <string>
 #include <cmath>
+#include <algorithm>
 #include <stdlib.h>
-#include <ctime>
 
 
 enum Direction
@@ -37,17 +43,49 @@ private:
 public:
     Img();
     Img(Img&& other);
-    Img(const Img& other) = delete;
+    Img(const Img& other);
     //Img(int width,int height);
     Img(const char *fileName);
     Img(int width, int height, int w_e_res, int n_s_res);
+    Img(int width, int height, int w_e_res, int n_s_res, int value);
     Img& operator=(Img&& other);
-    Img& operator=(const Img& other) = delete;
+    Img& operator=(const Img& other);
 
-    int getWidth() const;
-    int getHeight() const;
-    int getWEResolution() const;
-    int getNSResolution() const;
+    int getWidth() const
+    {
+        return width;
+    }
+
+    int getHeight() const
+    {
+        return height;
+    }
+
+    int getWEResolution() const
+    {
+        return w_e_res;
+    }
+
+    int getNSResolution() const
+    {
+        return n_s_res;
+    }
+
+    void fill(int value)
+    {
+        std::fill(data, data + (width * height), value);
+    }
+
+    void zero()
+    {
+        std::fill(data, data + (width * height), 0);
+    }
+
+    template<class UnaryOperation>
+    void for_each(UnaryOperation op)
+    {
+        std::for_each(data, data + (width * height), op);
+    }
 
     const int& operator()(unsigned row, unsigned col) const
     {
@@ -59,9 +97,20 @@ public:
         return data[row * width + col];
     }
 
-    Img operator+(Img & image);
-    Img operator-(Img & image);
-    Img operator*(int factor);
+    Img operator+(const Img& image) const;
+    Img operator-(const Img& image) const;
+    Img operator*(const Img& image) const;
+    Img operator/(const Img& image) const;
+    Img operator*(double factor) const;
+    Img operator/(double value) const;
+    Img& operator+=(int value);
+    Img& operator-=(int value);
+    Img& operator*=(double value);
+    Img& operator/=(double value);
+    Img& operator+=(const Img& image);
+    Img& operator-=(const Img& image);
+    Img& operator*=(const Img& image);
+    Img& operator/=(const Img& image);
     ~Img();
 
     void toGrassRaster(const char *name);

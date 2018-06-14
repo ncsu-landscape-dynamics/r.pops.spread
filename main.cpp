@@ -1,37 +1,47 @@
 /*
+ * SOD model
  *
- *  SOD-model-cpp
+ * Copyright (C) 2015-2017 by the authors.
  *
- *  Created on: Oct,2015
- *  Author: Zexi Chen(zchen22@ncsu.edu)
+ * Authors: Zexi Chen (zchen22 ncsu edu)
+ *          Vaclav Petras (wenzeslaus gmail com)
+ *          Anna Petrasova (kratochanna gmail com)
  *
+ * The code contained herein is licensed under the GNU General Public
+ * License. You may obtain a copy of the GNU General Public License
+ * Version 2 or later at the following locations:
  *
+ * http://www.opensource.org/licenses/gpl-license.html
+ * http://www.gnu.org/copyleft/gpl.html
  */
 
 
-#include "Spore.h"
-#include "Img.h"
 #include "date.h"
+#include "Img.h"
+#include "Spore.h"
 #include "tcp_client.h"
 
 extern "C" {
 #include <grass/gis.h>
 #include <grass/glocale.h>
+#include <grass/vector.h>
+#include <grass/raster.h>
 }
 
 #include <netcdfcpp.h>
-#include <gdal/gdal.h>
-#include <gdal/gdal_priv.h>
-
 #include <atomic>
 #include <arpa/inet.h> //inet_addr
 #include <thread>
+#include <chrono>
 
 #include <map>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <fstream>
+#include <string>
+
+#include <sys/stat.h>
 
 using std::string;
 using std::cout;
@@ -43,6 +53,18 @@ using std::ref;
 
 
 #define DIM 1
+
+// check if a file exists
+inline bool file_exists(const char* name) {
+  struct stat buffer;
+  return (stat(name, &buffer) == 0);
+}
+
+inline void file_exists_or_fatal_error(struct Option* option) {
+    if (option->answer && !file_exists(option->answer))
+        G_fatal_error(_("Option %s: File %s does not exist"),
+                      option->key, option->answer);
+}
 
 // Initialize infected trees for each species
 // needed unless empirical info is available
@@ -125,6 +147,15 @@ bool seasonality_from_string(const string& text)
                                     " value '" + text +"' provided");
 }
 
+void read_names(std::vector<string>& names, const char* filename)
+{
+    std::ifstream file(filename);
+    string line;
+    while (std::getline(file, line)) {
+        names.push_back(line);
+    }
+}
+
 std::vector<double> weather_file_to_list(const string& filename)
 {
     std::ifstream input(filename);
@@ -140,12 +171,12 @@ std::vector<double> weather_file_to_list(const string& filename)
     return output;
 }
 
-bool all_infected(Img& S_oaks_rast)
+bool all_infected(Img& S_rast)
 {
     bool allInfected = true;
-    for (int j = 0; j < S_oaks_rast.getHeight(); j++) {
-        for (int k = 0; k < S_oaks_rast.getWidth(); k++) {
-            if (S_oaks_rast(j, k) > 0)
+    for (int j = 0; j < S_rast.getHeight(); j++) {
+        for (int k = 0; k < S_rast.getWidth(); k++) {
+            if (S_rast(j, k) > 0)
                 allInfected = false;
         }
     }
@@ -173,6 +204,34 @@ void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf,
     }
     for (int j = 0; j < height; j++) {
         for (int k = 0; k < width; k++) {
+            weather[j * width + k] = mcf[j * width + k] * ccf[j * width + k];
+        }
+    }
+}
+
+// TODO: create image which is float/double/template
+void array_from_grass_raster(const char* name, double* array,
+                             unsigned width, unsigned height)
+{
+    int fd = Rast_open_old(name, "");
+
+    for (int row = 0; row < height; row++) {
+        Rast_get_d_row(fd, array + (row * width), row);
+    }
+
+    Rast_close(fd);
+}
+
+void weather_rasters_to_array(const string& moisture_name,
+                              const string& temperature_name,
+                              double* mcf, double* ccf, double* weather,
+                              unsigned width, unsigned height)
+{
+    // read the weather information
+    array_from_grass_raster(moisture_name.c_str(), mcf, width, height);
+    array_from_grass_raster(temperature_name.c_str(), ccf, width, height);
+    for (unsigned j = 0; j < height; j++) {
+        for (unsigned k = 0; k < width; k++) {
             weather[j * width + k] = mcf[j * width + k] * ccf[j * width + k];
         }
     }
@@ -242,19 +301,22 @@ void steering_client(tcp_client &c, string ip_address, int port, atomic<int> &in
 
 struct SodOptions
 {
-    struct Option *umca, *oaks, *lvtree, *ioaks;
-    struct Option *nc_weather, *weather_value, *weather_file;
+    struct Option *species, *lvtree, *infected, *outside_spores;
+    struct Option *nc_weather, *moisture_file, *temperature_file, *weather_value, *weather_file;
     struct Option *start_time, *end_time, *seasonality;
     struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
-    struct Option *seed;
-    struct Option *output_series;
+    struct Option *seed, *runs, *threads;
+    struct Option *output, *output_series;
+    struct Option *stddev, *stddev_series;
+    struct Option *output_probability;
     struct Option *ip_address, *port;
 };
 
 struct SodFlags
 {
     struct Flag *generate_seed;
+    struct Flag *series_as_single_run;
 };
 
 
@@ -273,15 +335,10 @@ int main(int argc, char *argv[])
     G_add_keyword(_("disease"));
     module->description = _("Stochastic landscape spread model of forest pathogen - Sudden Oak Death (SOD)");
 
-    opt.umca = G_define_standard_option(G_OPT_R_INPUT);
-    opt.umca->key = "umca";
-    opt.umca->description = _("Input bay laurel (UMCA) raster map");
-    opt.umca->guisection = _("Input");
-
-    opt.oaks = G_define_standard_option(G_OPT_R_INPUT);
-    opt.oaks->key = "oaks";
-    opt.oaks->description = _("Input SOD-oaks raster map");
-    opt.oaks->guisection = _("Input");
+    opt.species = G_define_standard_option(G_OPT_R_INPUT);
+    opt.species->key = "species";
+    opt.species->description = _("Input infected species raster map");
+    opt.species->guisection = _("Input");
 
     opt.lvtree = G_define_standard_option(G_OPT_R_INPUT);
     opt.lvtree->key = "lvtree";
@@ -289,16 +346,52 @@ int main(int argc, char *argv[])
     opt.lvtree->guisection = _("Input");
 
     // TODO: is this oaks?
-    opt.ioaks = G_define_standard_option(G_OPT_R_INPUT);
-    opt.ioaks->key = "ioaks";
-    opt.ioaks->description = _("Initial sources of infection raster map");
-    opt.ioaks->guisection = _("Input");
+    opt.infected = G_define_standard_option(G_OPT_R_INPUT);
+    opt.infected->key = "infected";
+    opt.infected->description = _("Initial sources of infection raster map");
+    opt.infected->guisection = _("Input");
+
+    opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.output->guisection = _("Output");
+    opt.output->required = NO;
 
     opt.output_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
     opt.output_series->key = "output_series";
     opt.output_series->description = _("Basename for output series");
     opt.output_series->required = NO;
     opt.output_series->guisection = _("Output");
+
+    opt.stddev = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.stddev->key = "stddev";
+    opt.stddev->description = _("Standard deviations");
+    opt.stddev->required = NO;
+    opt.stddev->guisection = _("Output");
+
+    opt.stddev_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
+    opt.stddev_series->key = "stddev_series";
+    opt.stddev_series->description
+            = _("Basename for output series of standard deviations");
+    opt.stddev_series->required = NO;
+    opt.stddev_series->guisection = _("Output");
+
+    flg.series_as_single_run = G_define_flag();
+    flg.series_as_single_run->key = 'l';
+    flg.series_as_single_run->label =
+        _("The output series as a single run only, not average");
+    flg.series_as_single_run->description =
+        _("The first run will be used for output instead of average");
+    flg.series_as_single_run->guisection = _("Output");
+
+    opt.output_probability = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.output_probability->key = "probability";
+    opt.output_probability->description = _("Infection probability (in percent)");
+    opt.output_probability->required = NO;
+    opt.output_probability->guisection = _("Output");
+
+    opt.outside_spores = G_define_standard_option(G_OPT_V_OUTPUT);
+    opt.outside_spores->key = "outside_spores";
+    opt.outside_spores->required = NO;
+    opt.outside_spores->guisection = _("Output");
 
     opt.wind = G_define_option();
     opt.wind->type = TYPE_STRING;
@@ -314,6 +407,24 @@ int main(int argc, char *argv[])
     opt.nc_weather->description = _("Weather data");
     opt.nc_weather->required = NO;
     opt.nc_weather->guisection = _("Weather");
+
+    opt.moisture_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.moisture_file->key = "moisture_file";
+    opt.moisture_file->label =
+        _("Input file with one moisture map name per line");
+    opt.moisture_file->description =
+        _("Moisture coefficient");
+    opt.moisture_file->required = NO;
+    opt.moisture_file->guisection = _("Weather");
+
+    opt.temperature_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.temperature_file->key = "temperature_file";
+    opt.temperature_file->label =
+        _("Input file with one temperature map name per line");
+    opt.temperature_file->description =
+        _("Temperature coefficient");
+    opt.temperature_file->required = NO;
+    opt.temperature_file->guisection = _("Weather");
 
     opt.weather_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.weather_file->key = "weather_file";
@@ -419,7 +530,26 @@ int main(int argc, char *argv[])
         _("Automatically generates random seed for random number"
           " generator (use when you don't want to provide the seed option)");
     flg.generate_seed->guisection = _("Randomness");
-    
+
+    opt.runs = G_define_option();
+    opt.runs->key = "runs";
+    opt.runs->type = TYPE_INTEGER;
+    opt.runs->required = NO;
+    opt.runs->label = _("Number of simulation runs");
+    opt.runs->description =
+        _("The individual runs will obtain different seeds"
+          " and will be avaraged for the output");
+    opt.runs->guisection = _("Randomness");
+
+    opt.threads = G_define_option();
+    opt.threads->key = "nprocs";
+    opt.threads->type = TYPE_INTEGER;
+    opt.threads->required = NO;
+    opt.threads->description =
+        _("Number of threads for parallel computing");
+    opt.threads->options = "1-";
+    opt.threads->guisection = _("Randomness");
+
     opt.ip_address = G_define_option();
     opt.ip_address->key = "ip_address";
     opt.ip_address->type = TYPE_STRING;
@@ -434,14 +564,34 @@ int main(int argc, char *argv[])
     opt.port->description = _("Port of steering server");
     opt.port->guisection = _("Steering");
 
+    G_option_required(opt.output, opt.output_series, opt.output_probability,
+                      opt.outside_spores, NULL);
+
     G_option_exclusive(opt.seed, flg.generate_seed, NULL);
     G_option_required(opt.seed, flg.generate_seed, NULL);
+
+    // weather
+    G_option_exclusive(opt.moisture_file, opt.nc_weather,
+                       opt.weather_file, opt.weather_value, NULL);
+    G_option_exclusive(opt.temperature_file, opt.nc_weather,
+                       opt.weather_file, opt.weather_value, NULL);
+    G_option_collective(opt.moisture_file, opt.temperature_file, NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
 
-    // set the start point of the program
-    clock_t begin = clock();
+    unsigned num_runs = 1;
+    if (opt.runs->answer)
+        num_runs = std::stoul(opt.runs->answer);
+
+    unsigned threads = 1;
+    if (opt.threads->answer)
+        threads = std::stoul(opt.threads->answer);
+
+    // check for file existence
+    file_exists_or_fatal_error(opt.moisture_file);
+    file_exists_or_fatal_error(opt.temperature_file);
+    file_exists_or_fatal_error(opt.weather_file);
 
     // Seasonality: Do you want the spread to be limited to certain months?
     bool ss = seasonality_from_string(opt.seasonality->answer);
@@ -493,39 +643,39 @@ int main(int argc, char *argv[])
     }
 
     // read the suspectible UMCA raster image
-    Img umca_rast = Img::fromGrassRaster(opt.umca->answer);
-
-    // read the SOD-affected oaks raster image
-    Img oaks_rast = Img::fromGrassRaster(opt.oaks->answer);
+    Img species_rast = Img::fromGrassRaster(opt.species->answer);
 
     // read the living trees raster image
     Img lvtree_rast = Img::fromGrassRaster(opt.lvtree->answer);
 
     // read the initial infected oaks image
-    Img I_oaks_rast = Img::fromGrassRaster(opt.ioaks->answer);
+    Img I_species_rast = Img::fromGrassRaster(opt.infected->answer);
 
     // create the initial suspectible oaks image
-    Img S_oaks_rast = oaks_rast - I_oaks_rast;
-
-    // create the initial infected umca image
-    Img I_umca_rast = initialize(umca_rast, I_oaks_rast);
-
-    // create the initial suspectible umca image
-    Img S_umca_rast = umca_rast - I_umca_rast;
+    Img S_species_rast = species_rast - I_species_rast;
 
     // SOD-immune trees image
     //Img SOD_rast = umca_rast + oaks_rast;
     //Img IMM_rast = lvtree_rast - SOD_rast;
 
     // retrieve the width and height of the images
-    int width = umca_rast.getWidth();
-    int height = umca_rast.getHeight();
+    int width = species_rast.getWidth();
+    int height = species_rast.getHeight();
 
     std::shared_ptr<NcFile> weather_coeff = nullptr;
+    std::vector<string> moisture_names;
+    std::vector<string> temperature_names;
+    double weather_from_rasters = false;
     std::vector<double> weather_values;
     double weather_value = 0;
+
     if (opt.nc_weather->answer)
         weather_coeff = std::make_shared<NcFile>(opt.nc_weather->answer, NcFile::ReadOnly);
+    else if (opt.moisture_file->answer && opt.temperature_file->answer) {
+        read_names(moisture_names, opt.moisture_file->answer);
+        read_names(temperature_names, opt.temperature_file->answer);
+        weather_from_rasters = true;
+    }
     else if (opt.weather_file->answer)
         weather_values = weather_file_to_list(opt.weather_file->answer);
     else if (opt.weather_value->answer)
@@ -554,13 +704,14 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
+    const unsigned max_weeks_in_year = 53;
     double *mcf = nullptr;
     double *ccf = nullptr;
     double *weather = nullptr;
-    if (weather_coeff) {
+    if (weather_coeff || weather_from_rasters) {
         mcf = new double[height * width];
         ccf = new double[height * width];
-        weather = new double[height * width];
+        weather = new double[max_weeks_in_year * height * width];
     }
 
     // setup steering variables
@@ -578,10 +729,19 @@ int main(int argc, char *argv[])
     client_thread = thread(steering_client, ref(c), ip, port, ref(instr_code), ref(load_name), ref(jump_date));
 
     // build the Sporulation object
-    Sporulation sp1(seed_value, I_umca_rast);
+    std::vector<Sporulation> sporulations;
+    std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
+    std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
+    sporulations.reserve(num_runs);
+    for (unsigned i = 0; i < num_runs; ++i)
+        sporulations.emplace_back(seed_value++, I_species_rast);
+    std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
+
+    std::vector<unsigned> unresolved_weeks;
+    unresolved_weeks.reserve(max_weeks_in_year);
 
     // main simulation loop (weekly steps)
-    int i = 0;
+    int current_week = 0;
     while (true) {
         int code = instr_code.load();
         if (code == 1) { // play from
@@ -600,7 +760,7 @@ int main(int argc, char *argv[])
         }
         else if (code == 4) { // load data
             cout << "loading data: " << load_name << endl;
-            reload_UMCA_input(umca_rast, load_name, I_umca_rast, S_umca_rast);
+            reload_UMCA_input(species_rast, load_name, I_species_rast, S_species_rast);
             instr_code.store(0);
         }
         else if (code == 5) { // complete stop
@@ -609,68 +769,104 @@ int main(int argc, char *argv[])
 
         string last_name = "";
         if (dd_current_end > dd_start && dd_current <= dd_current_end) {
+                if (!ss || !(dd_current.getMonth() > 9))
+                    unresolved_weeks.push_back(current_week);
+
             // here do spread
             // if all the oaks are infected, then exit
-            if (all_infected(S_oaks_rast)) {
-                cerr << "In the " << dd_start.getYear() << "-" << dd_start.
-                        getMonth() << "-" << dd_start.
-                        getDay() << " all suspectible oaks are infected!" << endl;
-                continue;
-            }
-
-            // check whether the spore occurs in the month
-            if (ss && dd_current.getMonth() > 9) {
-                if (dd_current.isYearEnd() && opt.output_series->answer)
-                {
-                    string name = generate_name(opt.output_series->answer, dd_current);
-                    I_oaks_rast.toGrassRaster(name.c_str());
-                    c.send_data("output:" + name + '|');
-                    last_name = name;
-                }
-                dd_current.increasedByWeek();
-                i += 1;
-                continue;
-            }
-
-            if (weather_coeff) {
-                // read the weather information
-                get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, weather, width, height, i);
-            } else if (!weather_values.empty()) {
-                weather_value = weather_values[i];
-            }
-
-            sp1.SporeGen(I_umca_rast, weather, weather_value, spore_rate);
-
-            sp1.SporeSpreadDisp(S_umca_rast, S_oaks_rast, I_umca_rast,
-                                I_oaks_rast, lvtree_rast, rtype, weather,
-                                weather_value, scale1, kappa, pwdir, scale2,
-                                gamma);
+            // TODO: this should be fixed
+//            if (all_infected(S_oaks_rast)) {
+//                cerr << "In the " << dd_start.getYear() << "-" << dd_start.
+//                        getMonth() << "-" << dd_start.
+//                        getDay() << " all suspectible oaks are infected!" << endl;
+//                continue;
+//            }
 
             if (dd_current.isYearEnd()) {
+                if (!unresolved_weeks.empty()) {
+                    
+                    unsigned week_in_chunk = 0;
+                    // get weather for all the weeks
+                    for (auto week : unresolved_weeks) {
+                        double *week_weather = weather + week_in_chunk * width * height;
+                        if (weather_coeff) {
+                            get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, week_weather, width, height, week);
+                        }
+                        else if (weather_from_rasters) {
+                            weather_rasters_to_array(moisture_names[week],
+                                                     temperature_names[week],
+                                                     mcf, ccf, week_weather,
+                                                     width, height);
+                        }
+                        ++week_in_chunk;
+                    }
+                    
+                    // stochastic simulation runs
+    #pragma omp parallel for num_threads(threads)
+                    for (unsigned run = 0; run < num_runs; run++) {
+                        unsigned week_in_chunk = 0;
+                        // actual runs of the simulation per week
+                        for (auto week : unresolved_weeks) {
+                            double *week_weather = weather + week_in_chunk * width * height;
+                            if (!weather_coeff && !weather_values.empty()) {
+                                weather_value = weather_values[week];
+                            }
+                            sporulations[run].SporeGen(inf_species_rasts[run], week_weather, weather_value, spore_rate);
+                            
+                            sporulations[run].SporeSpreadDisp_singleSpecies(sus_species_rasts[run], inf_species_rasts[run],
+                                                                            lvtree_rast, outside_spores[run],
+                                                                            rtype, week_weather,
+                                                                            weather_value, scale1, kappa, pwdir, scale2,
+                                                                            gamma);
+                            ++week_in_chunk;
+                        }
+                    }
+                    unresolved_weeks.clear();
+                }
+                if ((opt.output_series->answer && !flg.series_as_single_run->answer)
+                        || opt.stddev_series->answer) {
+                    // aggregate in the series
+                    I_species_rast.zero();
+                    for (unsigned i = 0; i < num_runs; i++)
+                        I_species_rast += inf_species_rasts[i];
+                    I_species_rast /= num_runs;
+                }
                 if (opt.output_series->answer) {
+                    // write result
+                    // date is always end of the year, even for seasonal spread
                     string name = generate_name(opt.output_series->answer, dd_current);
-                    I_oaks_rast.toGrassRaster(name.c_str());
+                    if (flg.series_as_single_run->answer)
+                        inf_species_rasts[0].toGrassRaster(name.c_str());
+                    else
+                        I_species_rast.toGrassRaster(name.c_str());
                     c.send_data("output:" + name + '|');
                     last_name = name;
                 }
+                if (opt.stddev_series->answer) {
+                    Img stddev(I_species_rast.getWidth(), I_species_rast.getHeight(),
+                               I_species_rast.getWEResolution(), I_species_rast.getNSResolution(), 0);
+                    for (unsigned i = 0; i < num_runs; i++) {
+                        Img tmp = inf_species_rasts[i] - I_species_rast;
+                        stddev += tmp * tmp;
+                    }
+                    stddev /= num_runs;
+                    stddev.for_each([](int& a){a = std::sqrt(a);});
+                    string name = generate_name(opt.stddev_series->answer, dd_current);
+                    stddev.toGrassRaster(name.c_str());
+                }
             }
-
+            
             dd_current.increasedByWeek();
-            i += 1;
+            current_week += 1;
             if (dd_current > dd_end)
                 c.send_data("info:last:" + last_name);
         }
         else {
             // paused
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     }
-
     client_thread.join();
-    // compute the time used when running the model
-    clock_t end = clock();
-    double elapsed_secs = double(end-begin) / CLOCKS_PER_SEC;
-
-    cout << "The elapsed time during the program running: " << elapsed_secs << endl;
 
     // clean the allocated memory
     if (weather) {
@@ -678,6 +874,7 @@ int main(int argc, char *argv[])
         delete[] ccf;
         delete[] weather;
     }
-
+    c.close_socket();
+    cout << "end" << endl;
     return 0;
 }
