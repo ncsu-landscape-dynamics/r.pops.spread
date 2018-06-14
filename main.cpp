@@ -243,6 +243,7 @@ struct SodOptions
     struct Option *species, *lvtree, *infected, *outside_spores;
     struct Option *nc_weather, *moisture_file, *temperature_file, *weather_value, *weather_file;
     struct Option *start_time, *end_time, *seasonality;
+    struct Option *step;
     struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
     struct Option *infected_to_dead_rate, *first_year_to_die;
@@ -409,6 +410,16 @@ int main(int argc, char *argv[])
     opt.seasonality->options = "yes,no";
     opt.seasonality->answer = "yes";
     opt.seasonality->guisection = _("Time");
+
+    opt.step = G_define_option();
+    opt.step->type = TYPE_STRING;
+    opt.step->key = "step";
+    opt.step->label = _("Step of simulation");
+    opt.step->description = _("How often the simulation computes new step");
+    opt.step->options = "week,month";
+    opt.step->descriptions = _("week;Compute next simulation step each week;month;Compute next simulation step each month");
+    opt.step->required = YES;
+    opt.step->guisection = _("Time");
 
     opt.spore_rate = G_define_option();
     opt.spore_rate->type = TYPE_DOUBLE;
@@ -609,10 +620,13 @@ int main(int argc, char *argv[])
         cerr << "Start date must precede the end date!!!" << endl;
         exit(EXIT_FAILURE);
     }
+
     Date dd_start(start_time, 01, 01);
     Date dd_end(end_time, 12, 31);
     // difference in years (in dates) but including both years
     auto num_years = dd_end.getYear() - dd_start.getYear() + 1;
+
+    string step = opt.step->answer;
 
     // mortality
     bool mortality = false;
@@ -759,7 +773,7 @@ int main(int argc, char *argv[])
     Date dd_current(dd_start);
 
     // main simulation loop (weekly steps)
-    for (int current_week = 0; ; current_week++, dd_current.increasedByWeek()) {
+    for (int current_week = 0; ; current_week++, step == "month" ? dd_current.increasedByMonth() : dd_current.increasedByWeek()) {
         if (dd_current < dd_end)
             if (!ss || !(dd_current.getMonth() > 9))
                 unresolved_weeks.push_back(current_week);
@@ -771,7 +785,7 @@ int main(int argc, char *argv[])
         }
 
         // check whether the spore occurs in the month
-        if (dd_current.isYearEnd() || dd_current >= dd_end) {
+        if ((step == "month" ? dd_current.isLastMonthOfYear() : dd_current.isYearEnd()) || dd_current >= dd_end) {
             if (!unresolved_weeks.empty()) {
 
                 unsigned week_in_chunk = 0;
