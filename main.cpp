@@ -135,15 +135,11 @@ Rtype radial_type_from_string(const string& text)
                                     " value '" + text +"' provided");
 }
 
-bool seasonality_from_string(const string& text)
+typedef std::pair<int, int> Season;
+
+inline Season seasonality_from_option(const Option* opt)
 {
-    if (text == "yes")
-        return true;
-    else if (text == "no")
-        return false;
-    else
-        throw std::invalid_argument("seasonality_from_string: Invalid"
-                                    " value '" + text +"' provided");
+    return {std::atoi(opt->answers[0]), std::atoi(opt->answers[1])};
 }
 
 void read_names(std::vector<string>& names, const char* filename)
@@ -405,10 +401,15 @@ int main(int argc, char *argv[])
     opt.seasonality = G_define_option();
     opt.seasonality->type = TYPE_STRING;
     opt.seasonality->key = "seasonality";
-    opt.seasonality->label = _("Seasonal spread");
-    opt.seasonality->description = _("Spread limited to certain months (season)");
-    opt.seasonality->options = "yes,no";
-    opt.seasonality->answer = "yes";
+    opt.seasonality->label = _("Seasonal spread (from,to)");
+    opt.seasonality->description =
+            _("Spread limited to certain months (season), for example"
+              " 5,9 for spread starting at the beginning of May and"
+              " ending at the end of September");
+    opt.seasonality->key_desc = "from,to";
+    //opt.seasonality->options = "1-12";
+    opt.seasonality->answer = "1,12";
+    opt.seasonality->multiple = NO;
     opt.seasonality->guisection = _("Time");
 
     opt.step = G_define_option();
@@ -588,7 +589,7 @@ int main(int argc, char *argv[])
     file_exists_or_fatal_error(opt.weather_file);
 
     // Seasonality: Do you want the spread to be limited to certain months?
-    bool ss = seasonality_from_string(opt.seasonality->answer);
+    Season season = seasonality_from_option(opt.seasonality);
 
     Direction pwdir = direction_enum_from_string(opt.wind->answer);
 
@@ -775,7 +776,7 @@ int main(int argc, char *argv[])
     // main simulation loop (weekly steps)
     for (int current_week = 0; ; current_week++, step == "month" ? dd_current.increasedByMonth() : dd_current.increasedByWeek()) {
         if (dd_current < dd_end)
-            if (!ss || !(dd_current.getMonth() > 9))
+            if (season.first >= dd_current.getMonth() && dd_current.getMonth() <= season.second)
                 unresolved_weeks.push_back(current_week);
 
         // if all the oaks are infected, then exit
