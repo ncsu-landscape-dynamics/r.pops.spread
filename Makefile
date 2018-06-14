@@ -1,12 +1,13 @@
 MODULE_TOPDIR = ../..
 
-PGM = sod-cpp
+PGM = r.spread.sod.steering
 
-LIBES = $(RASTERLIB) $(GISLIB) $(MATHLIB)
-DEPENDENCIES = $(RASTERDEP) $(GISDEP)
+LIBES = $(RASTERLIB) $(GISLIB) $(MATHLIB) $(VECTORLIB)
+DEPENDENCIES = $(RASTERDEP) $(GISDEP) $(VECTORDEP)
 # $(NETCDFLIBS) is only C
-EXTRA_LIBS = $(GDALLIBS) -lnetcdf_c++ -lpthread
-EXTRA_CFLAGS = $(GDALCFLAGS) -std=c++11 -Wall -Wextra -fpermissive
+EXTRA_LIBS = $(GDALLIBS) -lnetcdf_c++ $(OMPLIB) -lpthread
+EXTRA_CFLAGS = $(GDALCFLAGS) -std=c++11 -Wall -Wextra -fpermissive $(OMPCFLAGS) $(VECT_CFLAGS)
+EXTRA_INC = $(VECT_INC)
 
 include $(MODULE_TOPDIR)/include/Make/Module.make
 

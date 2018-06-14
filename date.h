@@ -4,7 +4,7 @@
  * Copyright (C) 2015-2017 by the authors.
  *
  * Authors: Zexi Chen (zchen22 ncsu edu)
- *          Anna Petrasova (kratochanna gmail com)
+ *          Anna Petrasova
  *
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -188,4 +188,3 @@ int Date::weeksFromDate(Date start) {
 }
 
 #endif // DATE
-

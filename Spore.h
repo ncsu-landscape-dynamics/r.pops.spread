@@ -5,6 +5,7 @@
  *
  * Authors: Zexi Chen (zchen22 ncsu edu)
  *          Vaclav Petras (wenzeslaus gmail com)
+ *          Anna Petrasova (kratochanna gmail com)
  *
  * The code contained herein is licensed under the GNU General Public
  * License. You may obtain a copy of the GNU General Public License
@@ -20,7 +21,6 @@
 
 #include "Img.h"
 
-#include <chrono>
 #include <random>
 
 
@@ -32,7 +32,6 @@ enum Rtype
 class Sporulation
 {
 private:
-    double vonmisesvariate(double mu, double kappa);
     int width;
     int height;
     // the west-east resolution of the pixel
@@ -43,10 +42,17 @@ private:
     std::default_random_engine generator;
 public:
     Sporulation(unsigned random_seed, const Img &size);
-    void SporeGen(Img& I, double *weather, double weather_value, double rate);
+    void SporeGen(const Img& I, const double *weather,
+                  double weather_value, double rate);
+    void SporeSpreadDisp_singleSpecies(Img& S, Img& I,
+                                       const Img& lvtree_rast, std::vector<std::tuple<int, int> > &outside_spores, Rtype rtype,
+                                       const double *weather, double weather_value,
+                                       double scale1, double kappa = 2,
+                                       Direction wdir = NONE, double scale2 = 0.0,
+                                       double gamma = 0.0);
     void SporeSpreadDisp(Img& S_umca, Img& S_oaks, Img& I_umca,
-                         Img& I_oaks, Img& lvtree_rast, Rtype rtype,
-                         double *weather, double weather_value,
+                         Img& I_oaks, const Img& lvtree_rast, Rtype rtype,
+                         const double *weather, double weather_value,
                          double scale1, double kappa = 2,
                          Direction wdir = NONE, double scale2 = 0.0,
                          double gamma = 0.0);

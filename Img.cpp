@@ -26,10 +26,22 @@ extern "C" {
 #include <gdal/gdal.h>
 #include <gdal/gdal_priv.h>
 
+#include <algorithm>
+
 using std::string;
 using std::cerr;
 using std::endl;
 
+/* Iterate over two ranges and apply a binary function which modifies
+ * the first parameter.
+ */
+template<class InputIt1, class InputIt2, class BinaryOperation>
+BinaryOperation for_each_zip(InputIt1 first1, InputIt1 last1, InputIt2 first2, BinaryOperation f) {
+    for (; first1 != last1; ++first1, ++first2) {
+        f(*first1, *first2);
+    }
+    return f;
+}
 
 Img::Img()
 {
@@ -38,6 +50,16 @@ Img::Img()
     w_e_res = 0;
     n_s_res = 0;
     data = NULL;
+}
+
+Img::Img(const Img& other)
+{
+    width = other.width;
+    height = other.height;
+    w_e_res = other.w_e_res;
+    n_s_res = other.n_s_res;
+    data = new int[width * height];
+    std::copy(other.data, other.data + (width * height), data);
 }
 
 Img::Img(Img&& other)
@@ -57,6 +79,15 @@ Img::Img(int width, int height, int w_e_res, int n_s_res)
     this->w_e_res = w_e_res;
     this->n_s_res = n_s_res;
     this->data = new int[width * height];
+}
+
+Img::Img(int width, int height, int w_e_res, int n_s_res, int value)
+{
+    this->width = width;
+    this->height = height;
+    this->w_e_res = w_e_res;
+    this->n_s_res = n_s_res;
+    this->data = new int[width * height]{value};
 }
 
 Img::Img(const char *fileName)
@@ -123,31 +154,27 @@ Img Img::fromGrassRaster(const char *name)
     return img;
 }
 
-int Img::getWidth() const
-{
-    return this->width;
-}
-
-int Img::getHeight() const
-{
-    return this->height;
-}
-
-int Img::getWEResolution() const
-{
-    return this->w_e_res;
-}
-
-int Img::getNSResolution() const
-{
-    return this->n_s_res;
-}
-
 /*
    const int ** Img::getData(){
    return this->data;
    }
  */
+
+Img& Img::operator=(const Img& other)
+{
+    if (this != &other)
+    {
+        if (data)
+            delete[] data;
+        width = other.width;
+        height = other.height;
+        w_e_res = other.w_e_res;
+        n_s_res = other.n_s_res;
+        data = new int[width * height];
+        std::copy(other.data, other.data + (width * height), data);
+    }
+    return *this;
+}
 
 Img& Img::operator=(Img&& other)
 {
@@ -155,13 +182,17 @@ Img& Img::operator=(Img&& other)
     {
         if (data)
             delete[] data;
+        width = other.width;
+        height = other.height;
+        w_e_res = other.w_e_res;
+        n_s_res = other.n_s_res;
         data = other.data;
         other.data = nullptr;
     }
     return *this;
 }
 
-Img Img::operator+(Img & image)
+Img Img::operator+(const Img& image) const
 {
     if (this->width != image.getWidth() || this->height != image.getHeight()) {
         cerr << "The height or width of one image do not match with that of the other one!" << endl;
@@ -181,7 +212,7 @@ Img Img::operator+(Img & image)
     }
 }
 
-Img Img::operator-(Img & image)
+Img Img::operator-(const Img& image) const
 {
     if (this->width != image.getWidth() || this->height != image.getHeight()) {
         cerr << "The height or width of one image do not match with that of the other one!" << endl;
@@ -201,7 +232,33 @@ Img Img::operator-(Img & image)
     }
 }
 
-Img Img::operator*(int factor)
+Img Img::operator*(const Img& image) const
+{
+    if (width != image.getWidth() || height != image.getHeight()) {
+        throw std::runtime_error("The height or width of one image do"
+                                 " not match with that of the other one.");
+    }
+    auto out = Img(width, height, w_e_res, n_s_res);
+
+    std::transform(data, data + (width * height), image.data, out.data,
+                   [](const int& a, const int& b) { return a * b; });
+    return out;
+}
+
+Img Img::operator/(const Img& image) const
+{
+    if (width != image.getWidth() || height != image.getHeight()) {
+        throw std::runtime_error("The height or width of one image do"
+                                 " not match with that of the other one.");
+    }
+    auto out = Img(width, height, w_e_res, n_s_res);
+
+    std::transform(data, data + (width * height), image.data, out.data,
+                   [](const int& a, const int& b) { return a / b; });
+    return out;
+}
+
+Img Img::operator*(double factor) const
 {
     auto re_width = this->width;
     auto re_height = this->height;
@@ -213,6 +270,71 @@ Img Img::operator*(int factor)
         }
     }
     return out;
+}
+
+Img Img::operator/(double value) const
+{
+    auto out = Img(width, height, w_e_res, n_s_res);
+
+    std::transform(data, data + (width * height), out.data,
+                   [&value](const int& a) { return a / value; });
+    return out;
+}
+
+Img& Img::operator+=(int value)
+{
+    std::for_each(data, data + (width * height),
+                  [&value](int& a) { a += value; });
+    return *this;
+}
+
+Img& Img::operator-=(int value)
+{
+    std::for_each(data, data + (width * height),
+                  [&value](int& a) { a -= value; });
+    return *this;
+}
+
+Img& Img::operator*=(double value)
+{
+    std::for_each(data, data + (width * height),
+                  [&value](int& a) { a *= value; });
+    return *this;
+}
+
+Img& Img::operator/=(double value)
+{
+    std::for_each(data, data + (width * height),
+                  [&value](int& a) { a /= value; });
+    return *this;
+}
+
+Img& Img::operator+=(const Img& image)
+{
+    for_each_zip(data, data + (width * height), image.data,
+                 [](int& a, int& b) { a += b; });
+    return *this;
+}
+
+Img& Img::operator-=(const Img& image)
+{
+    for_each_zip(data, data + (width * height), image.data,
+                 [](int& a, int& b) { a -= b; });
+    return *this;
+}
+
+Img& Img::operator*=(const Img& image)
+{
+    for_each_zip(data, data + (width * height), image.data,
+                 [](int& a, int& b) { a *= b; });
+    return *this;
+}
+
+Img& Img::operator/=(const Img& image)
+{
+    for_each_zip(data, data + (width * height), image.data,
+                 [](int& a, int& b) { a /= b; });
+    return *this;
 }
 
 Img::~Img()

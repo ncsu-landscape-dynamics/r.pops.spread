@@ -35,7 +35,8 @@ Run:
 
 * Francesco Tonini (original R version)
 * Zexi Chen (C++ version)
-* Anna Petrasova (steering)
+* Vaclav Petras (parallelization, GRASS interface)
+* Anna Petrasova (single species simulation)
 
 ## License
 
