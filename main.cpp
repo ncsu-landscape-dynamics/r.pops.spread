@@ -16,6 +16,10 @@
  */
 
 
+// define to support NetCDF format directly
+// (requires linking to netcdf_c++)
+// #define SOD_NETCDF_SUPPORT
+
 #include "date.h"
 #include "Img.h"
 #include "Spore.h"
@@ -28,7 +32,10 @@ extern "C" {
 #include <grass/raster.h>
 }
 
+#ifdef SOD_NETCDF_SUPPORT
 #include <netcdfcpp.h>
+#endif
+
 #include <atomic>
 #include <arpa/inet.h> //inet_addr
 #include <thread>
@@ -39,6 +46,7 @@ extern "C" {
 #include <memory>
 #include <stdexcept>
 #include <fstream>
+#include <sstream>
 #include <string>
 
 #include <sys/stat.h>
@@ -183,6 +191,7 @@ bool all_infected(Img& S_rast)
     return allInfected;
 }
 
+#ifdef SOD_NETCDF_SUPPORT
 void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf, double* weather, int width, int height, int step)
 {
     // read the weather information
@@ -208,6 +217,7 @@ void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf,
         }
     }
 }
+#endif
 
 // TODO: create image which is float/double/template
 void array_from_grass_raster(const char* name, double* array,
@@ -402,11 +412,13 @@ int main(int argc, char *argv[])
     opt.wind->required = YES;
     opt.wind->guisection = _("Weather");
 
+#ifdef SOD_NETCDF_SUPPORT
     opt.nc_weather = G_define_standard_option(G_OPT_F_BIN_INPUT);
     opt.nc_weather->key = "ncdf_weather";
     opt.nc_weather->description = _("Weather data");
     opt.nc_weather->required = NO;
     opt.nc_weather->guisection = _("Weather");
+#endif
 
     opt.moisture_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.moisture_file->key = "moisture_file";
@@ -662,15 +674,25 @@ int main(int argc, char *argv[])
     int width = species_rast.getWidth();
     int height = species_rast.getHeight();
 
+#ifdef SOD_NETCDF_SUPPORT
     std::shared_ptr<NcFile> weather_coeff = nullptr;
+#else
+    bool weather_coeff = false;
+#endif
     std::vector<string> moisture_names;
     std::vector<string> temperature_names;
     double weather_from_rasters = false;
     std::vector<double> weather_values;
     double weather_value = 0;
 
+#ifdef SOD_NETCDF_SUPPORT
     if (opt.nc_weather->answer)
         weather_coeff = std::make_shared<NcFile>(opt.nc_weather->answer, NcFile::ReadOnly);
+#else
+    if (false)
+        ;
+    // TODO: switch order of ifs to avoid this
+#endif
     else if (opt.moisture_file->answer && opt.temperature_file->answer) {
         read_names(moisture_names, opt.moisture_file->answer);
         read_names(temperature_names, opt.temperature_file->answer);
@@ -683,6 +705,7 @@ int main(int argc, char *argv[])
     else
         weather_value = 1;  // no change (used in multiplication)
 
+#ifdef SOD_NETCDF_SUPPORT
     if (weather_coeff && !weather_coeff->is_valid()) {
         cerr << "Can not open the weather coefficients file(.cn)!" << endl;
         exit(EXIT_FAILURE);
@@ -703,6 +726,7 @@ int main(int argc, char *argv[])
             endl;
         exit(EXIT_FAILURE);
     }
+#endif
 
     const unsigned max_weeks_in_year = 53;
     double *mcf = nullptr;
@@ -789,9 +813,15 @@ int main(int argc, char *argv[])
                     // get weather for all the weeks
                     for (auto week : unresolved_weeks) {
                         double *week_weather = weather + week_in_chunk * width * height;
+#ifdef SOD_NETCDF_SUPPORT
                         if (weather_coeff) {
                             get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, week_weather, width, height, week);
                         }
+#else
+                    if (false)
+                        ;
+                    // TODO: switch order of ifs to avoid this
+#endif
                         else if (weather_from_rasters) {
                             weather_rasters_to_array(moisture_names[week],
                                                      temperature_names[week],
