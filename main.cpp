@@ -444,7 +444,7 @@ int main(int argc, char *argv[])
               " ending at the end of September");
     opt.seasonality->key_desc = "from,to";
     //opt.seasonality->options = "1-12";
-    opt.seasonality->answer = "1,12";
+    opt.seasonality->answer = const_cast<char*>("1,12");
     opt.seasonality->multiple = NO;
     opt.seasonality->guisection = _("Time");
 
@@ -462,14 +462,14 @@ int main(int argc, char *argv[])
     opt.spore_rate->type = TYPE_DOUBLE;
     opt.spore_rate->key = "spore_rate";
     opt.spore_rate->label = _("Spore production rate per week for each infected tree");
-    opt.spore_rate->answer = "4.4";
+    opt.spore_rate->answer = const_cast<char*>("4.4");
     opt.spore_rate->guisection = _("Spores");
 
     opt.radial_type = G_define_option();
     opt.radial_type->type = TYPE_STRING;
     opt.radial_type->key = "radial_type";
     opt.radial_type->label = _("Radial distribution type");
-    opt.radial_type->answer = "cauchy";
+    opt.radial_type->answer = const_cast<char*>("cauchy");
     opt.radial_type->options = "cauchy,cauchy_mix";
     opt.radial_type->guisection = _("Spores");
 
@@ -477,7 +477,7 @@ int main(int argc, char *argv[])
     opt.scale_1->type = TYPE_DOUBLE;
     opt.scale_1->key = "scale_1";
     opt.scale_1->label = _("Scale parameter for the first Cauchy distribution");
-    opt.scale_1->answer = "20.57";
+    opt.scale_1->answer = const_cast<char*>("20.57");
     opt.scale_1->guisection = _("Spores");
 
     opt.scale_2 = G_define_option();
@@ -490,7 +490,7 @@ int main(int argc, char *argv[])
     opt.kappa->type = TYPE_DOUBLE;
     opt.kappa->key = "kappa";
     opt.kappa->label = _("Concentration parameter for the von Mises distribution");
-    opt.kappa->answer = "2";
+    opt.kappa->answer = const_cast<char*>("2");
     opt.kappa->guisection = _("Spores");
 
     opt.gamma = G_define_option();
