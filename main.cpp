@@ -238,6 +238,8 @@ struct SodOptions
 {
     struct Option *species, *lvtree, *infected, *outside_spores;
     struct Option *nc_weather, *moisture_file, *temperature_file, *weather_value, *weather_file;
+    struct Option *lethal_temperature_value, *lethal_temperature_months;
+    struct Option *actual_temperature_file;
     struct Option *start_time, *end_time, *seasonality;
     struct Option *step;
     struct Option *spore_rate, *wind;
@@ -381,6 +383,40 @@ int main(int argc, char *argv[])
               " (usually moisture times temperture)");
     opt.weather_value->required = NO;
     opt.weather_value->guisection = _("Weather");
+
+    opt.lethal_temperature_value = G_define_option();
+    opt.lethal_temperature_value->type = TYPE_DOUBLE;
+    opt.lethal_temperature_value->key = "lethal_temperature";
+    opt.lethal_temperature_value->label =
+        _("Temperature when the pest or patogen dies");
+    opt.lethal_temperature_value->description =
+        _("The temerature unit must be the same as for the"
+          "temerature raster map (typically degrees of Celsius)");
+    opt.lethal_temperature_value->required = NO;
+    opt.lethal_temperature_value->multiple = NO;
+    opt.lethal_temperature_value->guisection = _("Weather");
+
+    opt.lethal_temperature_months = G_define_option();
+    opt.lethal_temperature_months->type = TYPE_INTEGER;
+    opt.lethal_temperature_months->key = "lethal_month";
+    opt.lethal_temperature_months->label =
+        _("Month when the pest or patogen dies due to low temperature");
+    opt.lethal_temperature_months->description =
+        _("The temerature unit must be the same as for the"
+          "temerature raster map (typically degrees of Celsius)");
+    // TODO: implement this as multiple
+    opt.lethal_temperature_months->required = NO;
+    opt.lethal_temperature_months->guisection = _("Weather");
+
+    // TODO: rename coefs in interface and improve their descs
+    opt.actual_temperature_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.actual_temperature_file->key = "actual_temperature_file";
+    opt.actual_temperature_file->label =
+        _("Input file with one temperature raster map name per line");
+    opt.actual_temperature_file->description =
+        _("The temperature should be in actual temperature units (typically degrees of Celsius)");
+    opt.actual_temperature_file->required = NO;
+    opt.actual_temperature_file->guisection = _("Weather");
 
     opt.start_time = G_define_option();
     opt.start_time->type = TYPE_INTEGER;
@@ -736,6 +772,23 @@ int main(int argc, char *argv[])
     }
 #endif
 
+    double use_lethal_temperature = false;
+    double lethal_temperature_value;
+    int lethal_temperature_month = 0;  // invalid value for month
+    std::vector<string> actual_temperature_names;
+    std::vector<Img> actual_temperatures;  // TODO: make this type double
+    if (opt.lethal_temperature_value->answer)
+        lethal_temperature_value = std::stod(opt.lethal_temperature_value->answer);
+    if (opt.lethal_temperature_months->answer)
+        lethal_temperature_month = std::stod(opt.lethal_temperature_months->answer);
+    if (opt.actual_temperature_file->answer) {
+        read_names(actual_temperature_names, opt.actual_temperature_file->answer);
+        for (string name : actual_temperature_names) {
+            actual_temperatures.push_back(Img::fromGrassRaster(name.c_str()));
+        }
+        use_lethal_temperature = true;
+    }
+
     const unsigned max_weeks_in_year = 53;
     double *mcf = nullptr;
     double *ccf = nullptr;
@@ -778,6 +831,25 @@ int main(int argc, char *argv[])
         if (dd_current < dd_end)
             if (season.first >= dd_current.getMonth() && dd_current.getMonth() <= season.second)
                 unresolved_weeks.push_back(current_week);
+
+        // removal is out of sync with the actual runs but it does
+        // not matter as long as removal happends out of season
+        if (use_lethal_temperature
+                && dd_current.getMonth() == lethal_temperature_month
+                && (dd_current.getYear() <= dd_end.getYear())) {
+            // to avoid problem with Jan 1 of the following year
+            // we explicitely check if we are in a valid year range
+            unsigned simulation_year = dd_current.getYear() - dd_start.getYear();
+            if (simulation_year >= actual_temperatures.size())
+                G_fatal_error(_("Not enough temperatures"));
+            #pragma omp parallel for num_threads(threads)
+            for (unsigned run = 0; run < num_runs; run++) {
+                sporulations[run].SporeRemove(inf_species_rasts[run],
+                                              sus_species_rasts[run],
+                                              actual_temperatures[simulation_year],
+                                              lethal_temperature_value);
+            }
+        }
 
         // if all the oaks are infected, then exit
         if (all_infected(S_species_rast)) {
