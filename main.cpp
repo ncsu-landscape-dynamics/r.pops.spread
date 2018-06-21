@@ -21,7 +21,7 @@
 // #define SOD_NETCDF_SUPPORT
 
 #include "date.h"
-#include "Img.h"
+#include "raster.h"
 #include "Spore.h"
 
 extern "C" {
