@@ -776,7 +776,7 @@ int main(int argc, char *argv[])
     double lethal_temperature_value;
     int lethal_temperature_month = 0;  // invalid value for month
     std::vector<string> actual_temperature_names;
-    std::vector<Img> actual_temperatures;  // TODO: make this type double
+    std::vector<DImg> actual_temperatures;
     if (opt.lethal_temperature_value->answer)
         lethal_temperature_value = std::stod(opt.lethal_temperature_value->answer);
     if (opt.lethal_temperature_months->answer)
@@ -784,7 +784,7 @@ int main(int argc, char *argv[])
     if (opt.actual_temperature_file->answer) {
         read_names(actual_temperature_names, opt.actual_temperature_file->answer);
         for (string name : actual_temperature_names) {
-            actual_temperatures.push_back(Img::fromGrassRaster(name.c_str()));
+            actual_temperatures.push_back(DImg::fromGrassRaster(name.c_str()));
         }
         use_lethal_temperature = true;
     }
