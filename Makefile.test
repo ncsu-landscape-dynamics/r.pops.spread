@@ -6,7 +6,7 @@ LIBES = $(RASTERLIB) $(GISLIB) $(MATHLIB) $(VECTORLIB)
 DEPENDENCIES = $(RASTERDEP) $(GISDEP) $(VECTORDEP)
 # $(NETCDFLIBS) is only C
 EXTRA_LIBS = $(GDALLIBS) -lnetcdf_c++ $(OMPLIB)
-EXTRA_CFLAGS = $(GDALCFLAGS) -O0 -std=c++11 -Wall -Wextra -fpermissive $(OMPCFLAGS) $(VECT_CFLAGS)
+EXTRA_CFLAGS = $(GDALCFLAGS) -D SOD_TEST -O0 -std=c++11 -Wall -Wextra -fpermissive $(OMPCFLAGS) $(VECT_CFLAGS)
 EXTRA_INC = $(VECT_INC)
 
 r_spread_sod_OBJS = main.o Spore.o Img.o

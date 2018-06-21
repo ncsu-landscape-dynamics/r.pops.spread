@@ -34,6 +34,7 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
+#ifdef SOD_TEST
 
 int main(int argc, char *argv[])
 {
@@ -62,3 +63,5 @@ int main(int argc, char *argv[])
 
     return 0;
 }
+
+#endif  // SOD_TEST
