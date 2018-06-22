@@ -260,7 +260,7 @@ void reload_UMCA_input(Img &umca, string map, Img &I_umca, Img &S_umca)
     S_umca = umca - I_umca;
 }
 
-void steering_client(tcp_client &c, string ip_address, int port, atomic<int> &instr_code, string &load_name, int &jump_date)
+void steering_client(tcp_client &c, string ip_address, int port, atomic<int> &instr_code, string &load_name)
 {
     int rec_error;
     string received;
@@ -288,9 +288,13 @@ void steering_client(tcp_client &c, string ip_address, int port, atomic<int> &in
                     instr_code.store(2);
                     cout << "pause" << endl;
                 }
-                else if (cmd == "step") {
+                else if (cmd == "stepf") {
                     instr_code.store(3);
-                    cout << "step" << endl;
+                    cout << "stepf" << endl;
+                }
+                else if (cmd == "stepb") {
+                    instr_code.store(4);
+                    cout << "stepf" << endl;
                 }
                 else if (cmd == "stop") {
                     c.close_socket();
@@ -300,9 +304,7 @@ void steering_client(tcp_client &c, string ip_address, int port, atomic<int> &in
             } else if (received.substr(0, 4) == "load") {
                 string name = received.substr(5, received.length() - 5);
                 load_name = name;
-                instr_code.store(4);
-            } else if (received.substr(0, 4) == "move") {
-                jump_date = std::stoi(received.substr(5, received.length() - 5));
+                instr_code.store(6);
             } else
                 cout << "X" << received << "X" << rec_error << endl;
         }
@@ -748,9 +750,8 @@ int main(int argc, char *argv[])
     thread client_thread;
     string ip = string(opt.ip_address->answer);
     string load_name = "";
-    int jump_date = 0;
     int port = atoi(opt.port->answer);
-    client_thread = thread(steering_client, ref(c), ip, port, ref(instr_code), ref(load_name), ref(jump_date));
+    client_thread = thread(steering_client, ref(c), ip, port, ref(instr_code), ref(load_name));
 
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
@@ -773,7 +774,7 @@ int main(int argc, char *argv[])
             instr_code.store(0);
         }
         else if (code == 2) { // pause
-            dd_current_end = dd_current.getYearEnd();
+            dd_current_end = dd_current;
             instr_code.store(0);
         }
         else if (code == 3) { // 1 step forward
@@ -782,17 +783,25 @@ int main(int argc, char *argv[])
                 dd_current_end = dd_end;
             instr_code.store(0);
         }
-        else if (code == 4) { // load data
-            cout << "loading data: " << load_name << endl;
-            reload_UMCA_input(species_rast, load_name, I_species_rast, S_species_rast);
+        else if (code == 4) { // 1 step back
+            Date dd_current_tmp = dd_current.getLastYearBeginning();
+            if (dd_current_tmp >= dd_start) {
+                dd_current = dd_current_tmp;
+                dd_current_end = dd_current;
+            }
             instr_code.store(0);
         }
         else if (code == 5) { // complete stop
             break;
         }
+        else if (code == 6) { // load data
+            cout << "loading data: " << load_name << endl;
+            reload_UMCA_input(species_rast, load_name, I_species_rast, S_species_rast);
+            instr_code.store(0);
+        }
 
         string last_name = "";
-        if (dd_current_end > dd_start && dd_current <= dd_current_end) {
+        if (dd_current_end > dd_start && dd_current < dd_current_end) {
                 if (!ss || !(dd_current.getMonth() > 9))
                     unresolved_weeks.push_back(current_week);
 

@@ -37,8 +37,10 @@ public:
     Date(): year(2000), month(1), day(1){}
     bool compareDate(Date& endtime);
     void increasedByWeek();
+    void decreasedByWeek();
     Date getYearEnd();
     Date getNextYearEnd();
+    Date getLastYearBeginning();
     bool isYearEnd();
     int getMonth() const {return month;}
     int getYear() const { return year;}
@@ -75,6 +77,16 @@ Date Date::getNextYearEnd(){
         return Date(year, 12, 31);
     else
         return Date(year + 1, 12, 31);
+}
+
+Date Date::getLastYearBeginning(){
+    Date d = Date(year, month, day);
+    int current_year = d.year;
+    while (d.year >= current_year - 1) {
+        d.decreasedByWeek();
+    }
+    d.increasedByWeek();
+    return d;
 }
 
 bool operator> (const Date &d1, const Date &d2)
@@ -173,6 +185,31 @@ void Date::increasedByWeek()
                 year++;
                 month = 1;
             }
+        }
+    }
+}
+
+void Date::decreasedByWeek()
+{
+    day -= 7;
+    if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) {
+        if (day <= 0){
+            month--;
+            if (month < 1) {
+                month = 12;
+                year--;
+            }
+            day = day_in_month[1][month] + day;
+        }
+    }
+    else {
+        if (day <= 0){
+            month--;
+            if (month < 1) {
+                month = 12;
+                year--;
+            }
+            day = day_in_month[0][month] + day;
         }
     }
 }
