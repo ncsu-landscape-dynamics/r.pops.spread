@@ -801,7 +801,7 @@ int main(int argc, char *argv[])
         }
 
         string last_name = "";
-        if (dd_current_end > dd_start && dd_current < dd_current_end) {
+        if (dd_current_end > dd_start && dd_current <= dd_current_end) {
                 if (!ss || !(dd_current.getMonth() > 9))
                     unresolved_weeks.push_back(current_week);
 
