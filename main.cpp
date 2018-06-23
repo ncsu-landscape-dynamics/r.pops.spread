@@ -668,6 +668,10 @@ int main(int argc, char *argv[])
     // create the initial suspectible oaks image
     Img S_species_rast = species_rast - I_species_rast;
 
+    // save for the start checkpoint
+    const Img I_species_rast_start = I_species_rast;
+    const Img S_species_rast_start = S_species_rast;
+
     // SOD-immune trees image
     //Img SOD_rast = umca_rast + oaks_rast;
     //Img IMM_rast = lvtree_rast - SOD_rast;
@@ -757,6 +761,15 @@ int main(int argc, char *argv[])
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
+
+    // simulation years are closed interval
+    auto num_years = dd_end.getYear() - dd_start.getYear() + 1;
+    std::vector<std::vector<Img>> sus_checkpoint(
+        num_years, std::vector<Img>(num_runs, Img(S_species_rast)));
+    std::vector<std::vector<Img>> inf_checkpoint(
+        num_years, std::vector<Img>(num_runs, Img(S_species_rast)));
+    std::vector<int> week_checkpoint(num_years);
+    std::vector<Date> date_checkpoint(num_years);
     sporulations.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i)
         sporulations.emplace_back(seed_value++, I_species_rast);
@@ -782,6 +795,7 @@ int main(int argc, char *argv[])
             if (dd_current_end > dd_end)
                 dd_current_end = dd_end;
             instr_code.store(0);
+            cerr << "code == 3" << endl;
         }
         else if (code == 4) { // 1 step back
             Date dd_current_tmp = dd_current.getLastYearBeginning();
@@ -790,6 +804,30 @@ int main(int argc, char *argv[])
                 dd_current_end = dd_current;
             }
             instr_code.store(0);
+            for (unsigned run = 0; run < num_runs; run++) {
+                if (!(dd_current.getYear() <= dd_end.getYear()))
+                    break;
+                if (dd_current == dd_start) {
+                    sus_species_rasts[run] = S_species_rast_start;
+                    inf_species_rasts[run] = I_species_rast_start;
+                    unresolved_weeks.clear();  // TODO: probaly not needed?
+                    current_week = 0;
+                    // TODO: dates do not fit (off by one week)
+                    cerr << "year (sback, start): " << dd_current << endl;
+                    cerr << "original start date: " << dd_start << endl;
+                }
+                else {
+                    unsigned year = dd_current.getYear() - dd_start.getYear() - 1;
+                    sus_species_rasts[run] = sus_checkpoint[year][run];
+                    inf_species_rasts[run] = inf_checkpoint[year][run];
+                    unresolved_weeks.clear();  // TODO: probaly not needed?
+                    current_week = week_checkpoint[year];
+                    // TODO: dates do not fit (off by one week)
+                    cerr << "year (sback, normal): " << dd_current << endl;
+                    cerr << "check point date: " << date_checkpoint[year] << endl;
+                }
+                cerr << "week:" << current_week << endl;
+            }
         }
         else if (code == 5) { // complete stop
             break;
@@ -858,9 +896,20 @@ int main(int argc, char *argv[])
                                                                             weather_value, scale1, kappa, pwdir, scale2,
                                                                             gamma);
                             ++week_in_chunk;
+                            cerr << "week: " << week << " ";
                         }
+                        cerr << "end of run" << endl;
                     }
                     unresolved_weeks.clear();
+                }
+                for (unsigned run = 0; run < num_runs; run++) {
+                    if (!(dd_current.getYear() <= dd_end.getYear()))
+                        break;
+                    unsigned year = dd_current.getYear() - dd_start.getYear();
+                    sus_checkpoint[year][run] = sus_species_rasts[run];
+                    inf_checkpoint[year][run] = inf_species_rasts[run];
+                    week_checkpoint[year] = current_week;
+                    date_checkpoint[year] = dd_current;
                 }
                 if ((opt.output_series->answer && !flg.series_as_single_run->answer)
                         || opt.stddev_series->answer) {
@@ -878,6 +927,7 @@ int main(int argc, char *argv[])
                         inf_species_rasts[0].toGrassRaster(name.c_str());
                     else
                         I_species_rast.toGrassRaster(name.c_str());
+                    cerr << "output: " << name << endl;
                     c.send_data("output:" + name + '|');
                     last_name = name;
                 }
