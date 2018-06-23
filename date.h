@@ -54,6 +54,7 @@ public:
     friend bool operator>= (const Date &d1, const Date &d2);
     friend bool operator< (const Date &d1, const Date &d2);
     friend bool operator<= (const Date &d1, const Date &d2);
+    friend bool operator== (const Date &d1, const Date &d2);
 };
 
 std::ostream& operator<<(std::ostream& os, const Date &d)
@@ -139,6 +140,10 @@ bool operator>= (const Date &d1, const Date &d2)
     return !(d1 < d2);
 }
 
+bool operator== (const Date &d1, const Date &d2)
+{
+    return (d1.day == d2.day && d1.month == d2.month && d1.year == d2.year);
+}
 
 bool Date::compareDate(Date & endtime)
 {
