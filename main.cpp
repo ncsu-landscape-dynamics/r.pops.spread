@@ -799,12 +799,15 @@ int main(int argc, char *argv[])
         }
         else if (code == 4) { // 1 step back
             Date dd_current_tmp = dd_current.getLastYearBeginning();
+            // if we are at the start, do not move back more
             if (dd_current_tmp >= dd_start) {
                 dd_current = dd_current_tmp;
                 dd_current_end = dd_current;
             }
             instr_code.store(0);
             for (unsigned run = 0; run < num_runs; run++) {
+                // workaround the Jan 1 problem of the year after simulation end
+                // maybe not needed here, see mortality code where it is needed
                 if (!(dd_current.getYear() <= dd_end.getYear()))
                     break;
                 if (dd_current == dd_start) {
@@ -828,6 +831,9 @@ int main(int argc, char *argv[])
                 }
                 cerr << "week:" << current_week << endl;
             }
+            // we are at the end of year, but we have already computed
+            // the simulation for this year
+            continue;
         }
         else if (code == 5) { // complete stop
             break;
