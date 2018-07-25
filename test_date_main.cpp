@@ -15,7 +15,7 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-#include "date.h"
+#include "popss/date.h"
 
 extern "C" {
 #include <grass/gis.h>

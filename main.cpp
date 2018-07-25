@@ -20,9 +20,9 @@
 // (requires linking to netcdf_c++)
 // #define SOD_NETCDF_SUPPORT
 
-#include "date.h"
-#include "raster.h"
-#include "Spore.h"
+#include "popss/date.h"
+#include "popss/raster.h"
+#include "popss/Spore.h"
 
 extern "C" {
 #include <grass/gis.h>

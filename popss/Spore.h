@@ -66,4 +66,6 @@ public:
                          double gamma = 0.0);
 };
 
+#include "Spore.tcc"
+
 #endif
