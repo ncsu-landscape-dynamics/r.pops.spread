@@ -304,6 +304,7 @@ void steering_client(tcp_client &c, string ip_address, int port, atomic<int> &in
             } else if (received.substr(0, 4) == "load") {
                 string name = received.substr(5, received.length() - 5);
                 load_name = name;
+                cout << "received name: " << name << endl;
                 instr_code.store(6);
             } else
                 cout << "X" << received << "X" << rec_error << endl;
@@ -840,7 +841,12 @@ int main(int argc, char *argv[])
         }
         else if (code == 6) { // load data
             cout << "loading data: " << load_name << endl;
-            reload_UMCA_input(species_rast, load_name, I_species_rast, S_species_rast);
+            for (unsigned run = 0; run < num_runs; run++) {
+                reload_UMCA_input(species_rast, load_name,
+                                  inf_species_rasts[run],
+                                  sus_species_rasts[run]);
+            }
+
             instr_code.store(0);
         }
 
