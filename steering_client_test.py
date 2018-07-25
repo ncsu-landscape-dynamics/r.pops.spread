@@ -22,7 +22,7 @@ updateDisplay, EVT_UPDATE_DISPLAY = wx.lib.newevent.NewEvent()
 
 class SteeringFrame(wx.Frame):
     def __init__(self, parent, title):
-        wx.Frame.__init__(self, parent=parent, title=title,  size=(350, 200))
+        wx.Frame.__init__(self, parent=parent, title=title,  size=(500, 200))
         
         
         self.socket = None
@@ -39,6 +39,7 @@ class SteeringFrame(wx.Frame):
         btnPause = wx.Button(panel, label="Pause")
         btnForward = wx.Button(panel, label="Step forward")
         btnBack = wx.Button(panel, label="Step back")
+        btnLoad = wx.Button(panel, label="Load")
 
         btnStart.Bind(wx.EVT_BUTTON, lambda evt: self.socket.sendall('cmd:start'))
         btnStop.Bind(wx.EVT_BUTTON, lambda evt: self.socket.sendall('cmd:stop'))
@@ -46,6 +47,7 @@ class SteeringFrame(wx.Frame):
         btnPause.Bind(wx.EVT_BUTTON, lambda evt: self.socket.sendall('cmd:pause'))
         btnForward.Bind(wx.EVT_BUTTON, lambda evt: self.socket.sendall('cmd:stepf'))
         btnBack.Bind(wx.EVT_BUTTON, lambda evt: self.socket.sendall('cmd:stepb'))
+        btnLoad.Bind(wx.EVT_BUTTON, self._sendFile)
         
         self.Bind(EVT_UPDATE_DISPLAY, self._update)
 
@@ -62,6 +64,7 @@ class SteeringFrame(wx.Frame):
         box2.Add(btnPlay)
         box2.Add(btnPause)
         box2.Add(btnForward)
+        box2.Add(btnLoad)
         box.Add(box2)
 
         box3 = wx.BoxSizer(wx.HORIZONTAL)
@@ -71,6 +74,11 @@ class SteeringFrame(wx.Frame):
         panel.SetSizer(box)
         panel.Layout()
         self._connectSteering()
+
+    def _sendFile(self, event):
+        path = '/tmp/test.txt'
+        fsize = os.path.getsize(path)
+        self.socket.sendall('clientfile:{}:{}'.format(fsize, path))
 
     def _update(self, event):
         self.infoText.SetLabel(event.value)
@@ -148,6 +156,9 @@ class SteeringFrame(wx.Frame):
                     name = message[2]
                     evt = updateDisplay(value='last: ' + name)
                     wx.PostEvent(self, evt)
+            elif 'received' in message[0]:
+                evt = updateDisplay(value=message[0])
+                wx.PostEvent(self, evt)
 
     def OnClose(self, event):
         # first set variable to skip out of thread once possible
