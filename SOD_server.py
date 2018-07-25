@@ -50,16 +50,16 @@ def run_model(settings):
     params['species'] = 'UMCA_den_100m@PERMANENT'
     params['lvtree'] = 'TPH_den_100m@PERMANENT'
     params['infected'] = 'init_2000_cnt@PERMANENT'
-    params['output'] = 'output'
-    params['output_series'] = 'output'
+    params['output'] = 'output_2'
+    params['output_series'] = 'output_2'
     params['wind'] = 'NE'
     params['start_time'] = 2000
     params['end_time'] = 2010
     params['random_seed'] = 42
     params['ip_address'] = 'localhost'
     params['port'] = 8000
-    params['moisture'] = '/home/anna/Documents/Projects/SOD2/sonoma_weather_Mcoef.txt'
-    params['temperature'] = '/home/anna/Documents/Projects/SOD2/sonoma_weather_Ccoef.txt'
+    params['moisture'] = 'weather_Mcoef.txt'
+    params['temperature'] = 'weather_Ccoef.txt'
     params.update(settings)
     print params
     global PROCESS
@@ -79,7 +79,7 @@ def clientGUI(conn, connections, event):
             # receive file
             fsize, path = int(message[1]), message[2]
             conn.sendall(data)
-            f = open('/tmp/test_file.py', 'wb')
+            f = open('/tmp/test_file_receive.py', 'wb')
             data = conn.recv(1024)
             total_received = len(data)
             f.write(data)
@@ -88,9 +88,10 @@ def clientGUI(conn, connections, event):
                 total_received += len(data)
                 f.write(data)
             f.close()
-            conn.sendall('{} received: {} bytes'.format(path, os.path.getsize('/tmp/test_file.py')))
+            conn.sendall('{} received: {} bytes'.format(path, os.path.getsize('/tmp/test_file_receive.py')))
+            print('{} received: {} bytes'.format(path, os.path.getsize('/tmp/test_file_receive.py')))
             if 'computation' in connections:
-                connections['computation'].sendall('load:{}'.format(path))
+                connections['computation'].sendall('load:{}'.format('UMCA_treated'))
         if message[0] == 'serverfile':
             fsize, path = int(message[1]), message[2]
             with open(path, 'rb') as f:
