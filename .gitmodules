@@ -1,3 +1,4 @@
 [submodule "popss"]
 	path = popss
 	url = git@github.com:ncsu-landscape-dynamics/PoPSS.git
+	branch = master
