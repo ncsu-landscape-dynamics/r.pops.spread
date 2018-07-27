@@ -4,3 +4,4 @@ a.out
 *.creator
 *.files
 *.includes
+OBJ.*/
