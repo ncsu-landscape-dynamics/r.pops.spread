@@ -20,17 +20,21 @@ If you have already cloned, you can obtain the submodules using:
 git submodule update --init
 ```
 
-To update the submodule code together with this repository code use:
+## Updating submodule to latest version
 
-```
-git pull --recurse-submodules
-```
-
-To just update the submodule, use:
+To update the submodule, i.e. update submodule's commit used in this
+repository, use:
 
 ```
 git submodule update --remote
 ```
+
+Note that this change is recorded in the repository. In other words,
+the latest commit of a submodule is part of this repository.
+The reason for this is that the code in this repository is linked to a
+particular commit in the submodule repository (rather than the latest
+version). Git works this way to avoid breaking things unexpectedly due
+to changes in the submodule repository.
 
 ## The files
 The main.cpp contains the main program to run.
