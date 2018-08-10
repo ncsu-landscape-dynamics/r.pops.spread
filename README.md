@@ -7,7 +7,7 @@ The reference paper: Ross K. Meentemeyer, Nik J. Cunniffe, Alex R. Cook, Joao A.
 
 ## Obtaining the latest code
 
-The PoPSS library is in a submodule, so use `--recursive` when cloning,
+The PoPS library is in a submodule, so use `--recursive` when cloning,
 for example:
 
 ```
@@ -39,7 +39,7 @@ to changes in the submodule repository.
 ## Updating the code of the submodule
 
 ```
-cd popss
+cd pops
 git checkout master
 git add file.hpp
 git commit -m "this and that change"
@@ -48,7 +48,7 @@ git push
 
 ```
 cd ..
-git commit popss -m "update to latest popss commit"
+git commit pops -m "update to latest pops commit"
 git push
 ```
 

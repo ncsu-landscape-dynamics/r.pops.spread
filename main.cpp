@@ -20,11 +20,12 @@
 // (requires linking to netcdf_c++)
 // #define SOD_NETCDF_SUPPORT
 
-#define POPSS_RASTER_WITH_GRASS_GIS
+// activate support for GRASS GIS in the PoPS library
+#define POPS_RASTER_WITH_GRASS_GIS
 
-#include "popss/date.hpp"
-#include "popss/raster.hpp"
-#include "popss/simulation.hpp"
+#include "pops/date.hpp"
+#include "pops/raster.hpp"
+#include "pops/simulation.hpp"
 
 extern "C" {
 #include <grass/gis.h>
