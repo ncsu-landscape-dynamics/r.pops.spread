@@ -2,6 +2,7 @@
 a.out
 *.config
 *.creator
+*.creator.user
 *.files
 *.includes
 OBJ.*/
