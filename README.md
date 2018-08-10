@@ -36,6 +36,24 @@ particular commit in the submodule repository (rather than the latest
 version). Git works this way to avoid breaking things unexpectedly due
 to changes in the submodule repository.
 
+## Updating the code of the submodule
+
+```
+cd popss
+git checkout master
+git add file.hpp
+git commit -m "this and that change"
+git push
+```
+
+```
+cd ..
+git commit popss -m "update to latest popss commit"
+git push
+```
+
+
+
 ## The files
 The main.cpp contains the main program to run.
 
