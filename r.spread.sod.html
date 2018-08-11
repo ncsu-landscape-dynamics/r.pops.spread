@@ -50,6 +50,15 @@ Note the underscore which tells sort where to split the name for sorting
 and the number 2 which indicates which part of the name to use for
 sorting after splitting.
 
+If you have the weather-related timeseries in a separate mapset, you
+can add this mapset to the search path of your current mapset so that
+you can have the rasters in the list without specifying the mapset.
+To add to the search path, use for example:
+
+<div class="code"><pre>
+g.mapsets mapset=climate
+</pre></div>
+
 
 <h3>Generating a constant coefficient</h3>
 
