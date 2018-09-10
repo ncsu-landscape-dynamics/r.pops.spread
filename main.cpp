@@ -458,6 +458,7 @@ int main(int argc, char *argv[])
     opt.seasonality->key_desc = "from,to";
     //opt.seasonality->options = "1-12";
     opt.seasonality->answer = const_cast<char*>("1,12");
+    opt.seasonality->required = YES;
     opt.seasonality->multiple = NO;
     opt.seasonality->guisection = _("Time");
 
@@ -638,6 +639,9 @@ int main(int argc, char *argv[])
     file_exists_or_fatal_error(opt.weather_file);
 
     // Seasonality: Do you want the spread to be limited to certain months?
+    if (!opt.seasonality->answer || opt.seasonality->answer[0] == '\0')
+        G_fatal_error(_("The option %s cannot be empty"),
+                      opt.seasonality->key);
     Season season = seasonality_from_option(opt.seasonality);
 
     Direction pwdir = direction_enum_from_string(opt.wind->answer);
