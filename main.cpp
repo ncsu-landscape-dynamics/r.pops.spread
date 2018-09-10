@@ -135,7 +135,20 @@ Rtype radial_type_from_string(const string& text)
                                     " value '" + text +"' provided");
 }
 
-typedef std::pair<int, int> Season;
+class Season
+{
+public:
+    Season(int start, int end)
+        : m_start_month(start), m_end_month(end)
+    {}
+    inline bool month_in_season(int month)
+    {
+        return month >= m_start_month && month <= m_end_month;
+    }
+private:
+    int m_start_month;
+    int m_end_month;
+};
 
 inline Season seasonality_from_option(const Option* opt)
 {
@@ -830,7 +843,7 @@ int main(int argc, char *argv[])
     // main simulation loop (weekly steps)
     for (int current_week = 0; ; current_week++, step == "month" ? dd_current.increasedByMonth() : dd_current.increasedByWeek()) {
         if (dd_current < dd_end)
-            if (season.first <= dd_current.getMonth() && dd_current.getMonth() <= season.second)
+            if (season.month_in_season(dd_current.getMonth()))
                 unresolved_weeks.push_back(current_week);
 
         // removal is out of sync with the actual runs but it does
