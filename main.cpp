@@ -830,7 +830,7 @@ int main(int argc, char *argv[])
     // main simulation loop (weekly steps)
     for (int current_week = 0; ; current_week++, step == "month" ? dd_current.increasedByMonth() : dd_current.increasedByWeek()) {
         if (dd_current < dd_end)
-            if (season.first >= dd_current.getMonth() && dd_current.getMonth() <= season.second)
+            if (season.first <= dd_current.getMonth() && dd_current.getMonth() <= season.second)
                 unresolved_weeks.push_back(current_week);
 
         // removal is out of sync with the actual runs but it does
