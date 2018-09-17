@@ -568,14 +568,14 @@ int main(int argc, char *argv[])
     opt.ip_address = G_define_option();
     opt.ip_address->key = "ip_address";
     opt.ip_address->type = TYPE_STRING;
-    opt.ip_address->required = YES;
+    opt.ip_address->required = NO;
     opt.ip_address->description = _("IP address of steering server");
     opt.ip_address->guisection = _("Steering");
 
     opt.port = G_define_option();
     opt.port->key = "port";
     opt.port->type = TYPE_INTEGER;
-    opt.port->required = YES;
+    opt.port->required = NO;
     opt.port->description = _("Port of steering server");
     opt.port->guisection = _("Steering");
 
@@ -591,6 +591,7 @@ int main(int argc, char *argv[])
     G_option_exclusive(opt.temperature_file, opt.nc_weather,
                        opt.weather_file, opt.weather_value, NULL);
     G_option_collective(opt.moisture_file, opt.temperature_file, NULL);
+    G_option_collective(opt.ip_address, opt.port, NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -602,6 +603,11 @@ int main(int argc, char *argv[])
     unsigned threads = 1;
     if (opt.threads->answer)
         threads = std::stoul(opt.threads->answer);
+
+    // check if steering is on
+    bool steering = false;
+    if (opt.ip_address->answer)
+        steering = true;
 
     // check for file existence
     file_exists_or_fatal_error(opt.moisture_file);
@@ -747,17 +753,20 @@ int main(int argc, char *argv[])
 
     // setup steering variables
     Date dd_current(dd_start);
-    Date dd_current_end(dd_start);
+    Date dd_current_end(dd_end);
+    if (steering)
+        dd_current_end = dd_start;
 
     // setup client
-    tcp_client c;
     atomic<int> instr_code(0);
+    tcp_client c;
     thread client_thread;
-    string ip = string(opt.ip_address->answer);
+    string ip = steering ? string(opt.ip_address->answer) : "";
     string load_name = "";
-    int port = atoi(opt.port->answer);
-    client_thread = thread(steering_client, ref(c), ip, port, ref(instr_code), ref(load_name));
-
+    int port = steering ? atoi(opt.port->answer): 0;
+    if (steering) {
+        client_thread = thread(steering_client, ref(c), ip, port, ref(instr_code), ref(load_name));
+    }
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
@@ -830,7 +839,7 @@ int main(int argc, char *argv[])
                     cerr << "year (sback, normal): " << dd_current << endl;
                     cerr << "check point date: " << date_checkpoint[year] << endl;
                 }
-                cerr << "week:" << current_week << endl;
+//                cerr << "week:" << current_week << endl;
             }
             // we are at the end of year, but we have already computed
             // the simulation for this year
@@ -908,7 +917,7 @@ int main(int argc, char *argv[])
                                                                             weather_value, scale1, kappa, pwdir, scale2,
                                                                             gamma);
                             ++week_in_chunk;
-                            cerr << "week: " << week << " ";
+                            //cerr << "week: " << week << " ";
                         }
                         cerr << "end of run" << endl;
                     }
@@ -940,7 +949,8 @@ int main(int argc, char *argv[])
                     else
                         I_species_rast.toGrassRaster(name.c_str());
                     cerr << "output: " << name << endl;
-                    c.send_data("output:" + name + '|');
+                    if (steering)
+                        c.send_data("output:" + name + '|');
                     last_name = name;
                 }
                 if (opt.stddev_series->answer) {
@@ -959,15 +969,22 @@ int main(int argc, char *argv[])
             
             dd_current.increasedByWeek();
             current_week += 1;
-            if (dd_current > dd_end)
-                c.send_data("info:last:" + last_name);
+            if (dd_current > dd_end) {
+                if (steering)
+                    c.send_data("info:last:" + last_name);
+                else
+                    break;
+            }
         }
         else {
             // paused
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     }
-    client_thread.join();
+    if (steering) {
+        client_thread.join();
+        c.close_socket();
+    }
 
     // clean the allocated memory
     if (weather) {
@@ -975,7 +992,6 @@ int main(int argc, char *argv[])
         delete[] ccf;
         delete[] weather;
     }
-    c.close_socket();
     cout << "end" << endl;
     return 0;
 }
