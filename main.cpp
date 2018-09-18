@@ -138,7 +138,20 @@ Rtype radial_type_from_string(const string& text)
                                     " value '" + text +"' provided");
 }
 
-typedef std::pair<int, int> Season;
+class Season
+{
+public:
+    Season(int start, int end)
+        : m_start_month(start), m_end_month(end)
+    {}
+    inline bool month_in_season(int month)
+    {
+        return month >= m_start_month && month <= m_end_month;
+    }
+private:
+    int m_start_month;
+    int m_end_month;
+};
 
 inline Season seasonality_from_option(const Option* opt)
 {
@@ -448,6 +461,7 @@ int main(int argc, char *argv[])
     opt.seasonality->key_desc = "from,to";
     //opt.seasonality->options = "1-12";
     opt.seasonality->answer = const_cast<char*>("1,12");
+    opt.seasonality->required = YES;
     opt.seasonality->multiple = NO;
     opt.seasonality->guisection = _("Time");
 
@@ -628,6 +642,9 @@ int main(int argc, char *argv[])
     file_exists_or_fatal_error(opt.weather_file);
 
     // Seasonality: Do you want the spread to be limited to certain months?
+    if (!opt.seasonality->answer || opt.seasonality->answer[0] == '\0')
+        G_fatal_error(_("The option %s cannot be empty"),
+                      opt.seasonality->key);
     Season season = seasonality_from_option(opt.seasonality);
 
     Direction pwdir = direction_enum_from_string(opt.wind->answer);
@@ -694,9 +711,10 @@ int main(int argc, char *argv[])
         G_verbose_message(_("Read random seed from %s option: %ud"),
                           opt.seed->key, seed_value);
     } else {
-        // flag of option is required
-        std::random_device rd;
-        seed_value = rd();
+        // flag or option is required, so no check needed
+        // getting random seed using GRASS library
+        // std::random_device is deterministic in MinGW (#338)
+        seed_value = G_srand48_auto();
         G_verbose_message(_("Generated random seed (-%c): %ud"),
                           flg.generate_seed->key, seed_value);
     }
@@ -833,7 +851,7 @@ int main(int argc, char *argv[])
     // main simulation loop (weekly steps)
     for (int current_week = 0; ; current_week++, step == "month" ? dd_current.increasedByMonth() : dd_current.increasedByWeek()) {
         if (dd_current < dd_end)
-            if (season.first >= dd_current.getMonth() && dd_current.getMonth() <= season.second)
+            if (season.month_in_season(dd_current.getMonth()))
                 unresolved_weeks.push_back(current_week);
 
         // removal is out of sync with the actual runs but it does
