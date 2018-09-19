@@ -23,8 +23,6 @@
 #include "pops/raster.hpp"
 #include "pops/simulation.hpp"
 
-using namespace pops;
-
 extern "C" {
 #include <grass/gis.h>
 #include <grass/glocale.h>
@@ -47,6 +45,14 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
+using namespace pops;
+
+// TODO: update names
+// convenient definitions, names for backwards compatibility
+typedef Raster<int> Img;
+typedef Raster<double> DImg;
+// TODO: for backwards compatibility, update eventually
+typedef Simulation<Img, DImg> Sporulation;
 
 #define DIM 1
 
