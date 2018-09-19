@@ -119,12 +119,12 @@ Direction direction_enum_from_string(const string& text)
     }
 }
 
-Rtype radial_type_from_string(const string& text)
+DispersalKernel radial_type_from_string(const string& text)
 {
     if (text == "cauchy")
         return CAUCHY;
     else if (text == "cauchy_mix")
-        return CAUCHY_MIX;
+        return CAUCHY_DOUBLE_SCALE;
     else
         throw std::invalid_argument("radial_type_from_string: Invalid"
                                     " value '" + text +"' provided");
@@ -186,38 +186,10 @@ bool all_infected(Img& S_rast)
     return allInfected;
 }
 
-// TODO: create image which is float/double/template
-void array_from_grass_raster(const char* name, double* array,
-                             unsigned width, unsigned height)
-{
-    int fd = Rast_open_old(name, "");
-
-    for (int row = 0; row < height; row++) {
-        Rast_get_d_row(fd, array + (row * width), row);
-    }
-
-    Rast_close(fd);
-}
-
-void weather_rasters_to_array(const string& moisture_name,
-                              const string& temperature_name,
-                              double* mcf, double* ccf, double* weather,
-                              unsigned width, unsigned height)
-{
-    // read the weather information
-    array_from_grass_raster(moisture_name.c_str(), mcf, width, height);
-    array_from_grass_raster(temperature_name.c_str(), ccf, width, height);
-    for (unsigned j = 0; j < height; j++) {
-        for (unsigned k = 0; k < width; k++) {
-            weather[j * width + k] = mcf[j * width + k] * ccf[j * width + k];
-        }
-    }
-}
-
 struct SodOptions
 {
     struct Option *species, *lvtree, *infected, *outside_spores;
-    struct Option *moisture_file, *temperature_file, *weather_value, *weather_file;
+    struct Option *moisture_file, *temperature_file;
     struct Option *lethal_temperature_value, *lethal_temperature_months;
     struct Option *actual_temperature_file;
     struct Option *start_time, *end_time, *seasonality;
@@ -339,24 +311,6 @@ int main(int argc, char *argv[])
         _("Temperature coefficient");
     opt.temperature_file->required = NO;
     opt.temperature_file->guisection = _("Weather");
-
-    opt.weather_file = G_define_standard_option(G_OPT_F_INPUT);
-    opt.weather_file->key = "weather_file";
-    opt.weather_file->label = _("Text file with weather");
-    opt.weather_file->description =
-            _("Moisture and temperature");
-    opt.weather_file->required = NO;
-    opt.weather_file->guisection = _("Weather");
-
-    opt.weather_value = G_define_option();
-    opt.weather_value->type = TYPE_INTEGER;
-    opt.weather_value->key = "weather_value";
-    opt.weather_value->label = _("Value to be used as weather coeficient");
-    opt.weather_value->description =
-            _("Spatially and temporally constant weather coeficient"
-              " (usually moisture times temperture)");
-    opt.weather_value->required = NO;
-    opt.weather_value->guisection = _("Weather");
 
     opt.lethal_temperature_value = G_define_option();
     opt.lethal_temperature_value->type = TYPE_DOUBLE;
@@ -561,10 +515,6 @@ int main(int argc, char *argv[])
     G_option_required(opt.seed, flg.generate_seed, NULL);
 
     // weather
-    G_option_exclusive(opt.moisture_file,
-                       opt.weather_file, opt.weather_value, NULL);
-    G_option_exclusive(opt.temperature_file,
-                       opt.weather_file, opt.weather_value, NULL);
     G_option_collective(opt.moisture_file, opt.temperature_file, NULL);
 
     // mortality
@@ -590,7 +540,6 @@ int main(int argc, char *argv[])
     // check for file existence
     file_exists_or_fatal_error(opt.moisture_file);
     file_exists_or_fatal_error(opt.temperature_file);
-    file_exists_or_fatal_error(opt.weather_file);
 
     // Seasonality: Do you want the spread to be limited to certain months?
     if (!opt.seasonality->answer || opt.seasonality->answer[0] == '\0')
@@ -602,10 +551,10 @@ int main(int argc, char *argv[])
 
     // set the spore rate
     double spore_rate = std::stod(opt.spore_rate->answer);
-    Rtype rtype = radial_type_from_string(opt.radial_type->answer);
+    DispersalKernel rtype = radial_type_from_string(opt.radial_type->answer);
     double scale1 = std::stod(opt.scale_1->answer);
     double scale2 = 0;
-    if (rtype == CAUCHY_MIX && !opt.scale_2->answer)
+    if (rtype == CAUCHY_DOUBLE_SCALE && !opt.scale_2->answer)
         G_fatal_error(_("The option %s is required for %s=%s"),
                       opt.scale_2->key, opt.radial_type->key,
                       opt.radial_type->answer);
@@ -613,7 +562,7 @@ int main(int argc, char *argv[])
         scale2 = std::stod(opt.scale_2->answer);
     double kappa = std::stod(opt.kappa->answer);
     double gamma = 0.0;
-    if (rtype == CAUCHY_MIX && !opt.gamma->answer)
+    if (rtype == CAUCHY_DOUBLE_SCALE && !opt.gamma->answer)
         G_fatal_error(_("The option %s is required for %s=%s"),
                       opt.gamma->key, opt.radial_type->key,
                       opt.radial_type->answer);
@@ -690,24 +639,17 @@ int main(int argc, char *argv[])
     int width = species_rast.getWidth();
     int height = species_rast.getHeight();
 
-    bool weather_coeff = false;
     std::vector<string> moisture_names;
     std::vector<string> temperature_names;
-    double weather_from_rasters = false;
+    double weather = false;
     std::vector<double> weather_values;
     double weather_value = 0;
 
     if (opt.moisture_file->answer && opt.temperature_file->answer) {
         read_names(moisture_names, opt.moisture_file->answer);
         read_names(temperature_names, opt.temperature_file->answer);
-        weather_from_rasters = true;
+        weather = true;
     }
-    else if (opt.weather_file->answer)
-        weather_values = weather_file_to_list(opt.weather_file->answer);
-    else if (opt.weather_value->answer)
-        weather_value = std::stoi(opt.weather_value->answer);
-    else
-        weather_value = 1;  // no change (used in multiplication)
 
     double use_lethal_temperature = false;
     double lethal_temperature_value;
@@ -728,14 +670,9 @@ int main(int argc, char *argv[])
     }
 
     const unsigned max_weeks_in_year = 53;
-    double *mcf = nullptr;
-    double *ccf = nullptr;
-    double *weather = nullptr;
-    if (weather_coeff || weather_from_rasters) {
-        mcf = new double[height * width];
-        ccf = new double[height * width];
-        weather = new double[max_weeks_in_year * height * width];
-    }
+    std::vector<DImg> weather_coefficients;
+    if (weather)
+        weather_coefficients.resize(max_weeks_in_year);
 
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
@@ -782,10 +719,10 @@ int main(int argc, char *argv[])
                 G_fatal_error(_("Not enough temperatures"));
             #pragma omp parallel for num_threads(threads)
             for (unsigned run = 0; run < num_runs; run++) {
-                sporulations[run].SporeRemove(inf_species_rasts[run],
-                                              sus_species_rasts[run],
-                                              actual_temperatures[simulation_year],
-                                              lethal_temperature_value);
+                sporulations[run].remove(inf_species_rasts[run],
+                                         sus_species_rasts[run],
+                                         actual_temperatures[simulation_year],
+                                         lethal_temperature_value);
             }
         }
 
@@ -802,12 +739,10 @@ int main(int argc, char *argv[])
                 unsigned week_in_chunk = 0;
                 // get weather for all the weeks
                 for (auto week : unresolved_weeks) {
-                    double *week_weather = weather + week_in_chunk * width * height;
-                    if (weather_from_rasters) {
-                        weather_rasters_to_array(moisture_names[week],
-                                                 temperature_names[week],
-                                                 mcf, ccf, week_weather,
-                                                 width, height);
+                    if (weather) {
+                        DImg moisture(DImg::fromGrassRaster(moisture_names[week].c_str()));
+                        DImg temperature(DImg::fromGrassRaster(temperature_names[week].c_str()));
+                        weather_coefficients[week_in_chunk] = moisture * temperature;
                     }
                     ++week_in_chunk;
                 }
@@ -818,22 +753,22 @@ int main(int argc, char *argv[])
                     unsigned week_in_chunk = 0;
                     // actual runs of the simulation per week
                     for (auto week : unresolved_weeks) {
-                        double *week_weather = 0;
-                        if (weather) {
-                            week_weather = weather + week_in_chunk * width * height;
-                        }
-                        if (!weather_coeff && !weather_values.empty()) {
-                            weather_value = weather_values[week];
-                        }
-                        sporulations[run].SporeGen(inf_species_rasts[run], week_weather, weather_value, spore_rate);
+                        sporulations[run].generate(inf_species_rasts[run],
+                                                   weather,
+                                                   weather_coefficients[week_in_chunk],
+                                                   spore_rate);
 
                         auto current_age = dd_current.getYear() - dd_start.getYear();
-                        sporulations[run].SporeSpreadDisp_singleSpecies(sus_species_rasts[run], inf_species_rasts[run],
-                                                                        inf_species_cohort_rasts[run][current_age],
-                                                                        lvtree_rast, outside_spores[run],
-                                                                        rtype, week_weather,
-                                                                        weather_value, scale1, kappa, pwdir, scale2,
-                                                                        gamma);
+                        sporulations[run].disperse(sus_species_rasts[run],
+                                                   inf_species_rasts[run],
+                                                   inf_species_cohort_rasts[run][current_age],
+                                                   lvtree_rast,
+                                                   outside_spores[run],
+                                                   weather,
+                                                   weather_coefficients[week_in_chunk],
+                                                   rtype, scale1,
+                                                   gamma, scale2,
+                                                   pwdir, kappa);
                         ++week_in_chunk;
                     }
                 }
@@ -973,13 +908,6 @@ int main(int argc, char *argv[])
         Vect_close(&Map);
         Vect_destroy_line_struct(Points);
         Vect_destroy_cats_struct(Cats);
-    }
-
-    // clean the allocated memory
-    if (weather) {
-        delete[] mcf;
-        delete[] ccf;
-        delete[] weather;
     }
 
     return 0;
