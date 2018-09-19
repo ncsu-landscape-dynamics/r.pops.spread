@@ -55,6 +55,7 @@ git push
 
 
 ## The files
+
 The main.cpp contains the main program to run.
 
 ## To run the model
@@ -63,7 +64,7 @@ You can use Linux to run the model in the following way.
 
 Open an terminal and install dependencies:
 
-    sudo apt-get install libgdal-dev
+    sudo apt-get install grass-dev
 
 Download the model code as ZIP or using Git:
 
@@ -75,17 +76,17 @@ Change the current directory to the model directory:
 
 Compile:
 
-    make
+    grass --tmp-location XY --exec g.extension module=r.spread.sod url=.
 
 Run:
 
-    ./a.out > result.txt
+    grass .../modeling/scenario1 --exec r.spread.sod ...
 
 ## Authors
 
 * Francesco Tonini (original R version)
 * Zexi Chen (initial C++ version)
-* Vaclav Petras (parallelization, GRASS interface, raster handling)
+* Vaclav Petras (parallelization, GRASS interface, raster handling, ...)
 * Anna Petrasova (single species simulation)
 
 See [CHANGELOG.md](CHANGELOG.md) for details about contributions.
