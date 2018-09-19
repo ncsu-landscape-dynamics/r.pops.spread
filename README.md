@@ -63,7 +63,7 @@ You can use Linux to run the model in the following way.
 
 Open an terminal and install dependencies:
 
-    sudo apt-get install libgdal-dev libnetcdf-dev
+    sudo apt-get install libgdal-dev
 
 Download the model code as ZIP or using Git:
 

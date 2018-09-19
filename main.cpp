@@ -16,10 +16,6 @@
  */
 
 
-// define to support NetCDF format directly
-// (requires linking to netcdf_c++)
-// #define SOD_NETCDF_SUPPORT
-
 // activate support for GRASS GIS in the PoPS library
 #define POPS_RASTER_WITH_GRASS_GIS
 
@@ -33,10 +29,6 @@ extern "C" {
 #include <grass/vector.h>
 #include <grass/raster.h>
 }
-
-#ifdef SOD_NETCDF_SUPPORT
-#include <netcdfcpp.h>
-#endif
 
 #include <map>
 #include <iostream>
@@ -194,34 +186,6 @@ bool all_infected(Img& S_rast)
     return allInfected;
 }
 
-#ifdef SOD_NETCDF_SUPPORT
-void get_spatial_weather(NcVar *mcf_nc, NcVar *ccf_nc, double* mcf, double* ccf, double* weather, int width, int height, int step)
-{
-    // read the weather information
-    if (!mcf_nc->set_cur(step, 0, 0)) {
-        cerr << "Can not read the coefficients from the mcf_nc pointer to mcf array " << step << endl;
-        exit(EXIT_FAILURE);
-    }
-    if (!ccf_nc->set_cur(step, 0, 0)) {
-        cerr << "Can not read the coefficients from the ccf_nc pointer to ccf array "<< step << endl;
-        exit(EXIT_FAILURE);
-    }
-    if (!mcf_nc->get(mcf, 1, height, width)) {
-        cerr << "Can not get the record from mcf_nc " << step << endl;
-        exit(EXIT_FAILURE);
-    }
-    if (!ccf_nc->get(ccf, 1, height, width)) {
-        cerr << "Can not get the record from ccf_nc " << step << endl;
-        exit(EXIT_FAILURE);
-    }
-    for (int j = 0; j < height; j++) {
-        for (int k = 0; k < width; k++) {
-            weather[j * width + k] = mcf[j * width + k] * ccf[j * width + k];
-        }
-    }
-}
-#endif
-
 // TODO: create image which is float/double/template
 void array_from_grass_raster(const char* name, double* array,
                              unsigned width, unsigned height)
@@ -253,7 +217,7 @@ void weather_rasters_to_array(const string& moisture_name,
 struct SodOptions
 {
     struct Option *species, *lvtree, *infected, *outside_spores;
-    struct Option *nc_weather, *moisture_file, *temperature_file, *weather_value, *weather_file;
+    struct Option *moisture_file, *temperature_file, *weather_value, *weather_file;
     struct Option *lethal_temperature_value, *lethal_temperature_months;
     struct Option *actual_temperature_file;
     struct Option *start_time, *end_time, *seasonality;
@@ -357,12 +321,6 @@ int main(int argc, char *argv[])
     opt.wind->options = "N,NE,E,SE,S,SW,W,NW,NONE";
     opt.wind->required = YES;
     opt.wind->guisection = _("Weather");
-
-    opt.nc_weather = G_define_standard_option(G_OPT_F_BIN_INPUT);
-    opt.nc_weather->key = "ncdf_weather";
-    opt.nc_weather->description = _("Weather data");
-    opt.nc_weather->required = NO;
-    opt.nc_weather->guisection = _("Weather");
 
     opt.moisture_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.moisture_file->key = "moisture_file";
@@ -603,9 +561,9 @@ int main(int argc, char *argv[])
     G_option_required(opt.seed, flg.generate_seed, NULL);
 
     // weather
-    G_option_exclusive(opt.moisture_file, opt.nc_weather,
+    G_option_exclusive(opt.moisture_file,
                        opt.weather_file, opt.weather_value, NULL);
-    G_option_exclusive(opt.temperature_file, opt.nc_weather,
+    G_option_exclusive(opt.temperature_file,
                        opt.weather_file, opt.weather_value, NULL);
     G_option_collective(opt.moisture_file, opt.temperature_file, NULL);
 
@@ -620,13 +578,6 @@ int main(int argc, char *argv[])
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
-
-#ifndef SOD_NETCDF_SUPPORT
-    if (opt.nc_weather->answer) {
-        G_fatal_error(_("Direct NetCDF support is not available in this"
-                        " installation, import the data instead"));
-    }
-#endif
 
     unsigned num_runs = 1;
     if (opt.runs->answer)
@@ -739,26 +690,14 @@ int main(int argc, char *argv[])
     int width = species_rast.getWidth();
     int height = species_rast.getHeight();
 
-#ifdef SOD_NETCDF_SUPPORT
-    std::shared_ptr<NcFile> weather_coeff = nullptr;
-#else
     bool weather_coeff = false;
-#endif
     std::vector<string> moisture_names;
     std::vector<string> temperature_names;
     double weather_from_rasters = false;
     std::vector<double> weather_values;
     double weather_value = 0;
 
-#ifdef SOD_NETCDF_SUPPORT
-    if (opt.nc_weather->answer)
-        weather_coeff = std::make_shared<NcFile>(opt.nc_weather->answer, NcFile::ReadOnly);
-#else
-    if (false)
-        ;
-    // TODO: switch order of ifs to avoid this
-#endif
-    else if (opt.moisture_file->answer && opt.temperature_file->answer) {
+    if (opt.moisture_file->answer && opt.temperature_file->answer) {
         read_names(moisture_names, opt.moisture_file->answer);
         read_names(temperature_names, opt.temperature_file->answer);
         weather_from_rasters = true;
@@ -769,29 +708,6 @@ int main(int argc, char *argv[])
         weather_value = std::stoi(opt.weather_value->answer);
     else
         weather_value = 1;  // no change (used in multiplication)
-
-#ifdef SOD_NETCDF_SUPPORT
-    if (weather_coeff && !weather_coeff->is_valid()) {
-        cerr << "Can not open the weather coefficients file(.cn)!" << endl;
-        exit(EXIT_FAILURE);
-    }
-
-    // TODO: do we need to free this? docs is 404
-    NcVar *mcf_nc = nullptr;
-    NcVar *ccf_nc = nullptr;
-
-    if (weather_coeff && !(mcf_nc = weather_coeff->get_var("Mcoef"))) {
-        cerr << "Can not read the moisture coefficients from the file!" <<
-            endl;
-        exit(EXIT_FAILURE);
-    }
-
-    if (weather_coeff && !(ccf_nc = weather_coeff->get_var("Ccoef"))) {
-        cerr << "Can not read the temperature coefficients from the file!" <<
-            endl;
-        exit(EXIT_FAILURE);
-    }
-#endif
 
     double use_lethal_temperature = false;
     double lethal_temperature_value;
@@ -887,16 +803,7 @@ int main(int argc, char *argv[])
                 // get weather for all the weeks
                 for (auto week : unresolved_weeks) {
                     double *week_weather = weather + week_in_chunk * width * height;
-#ifdef SOD_NETCDF_SUPPORT
-                    if (weather_coeff) {
-                        get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, week_weather, width, height, week);
-                    }
-#else
-                    if (false)
-                        ;
-                    // TODO: switch order of ifs to avoid this
-#endif
-                    else if (weather_from_rasters) {
+                    if (weather_from_rasters) {
                         weather_rasters_to_array(moisture_names[week],
                                                  temperature_names[week],
                                                  mcf, ccf, week_weather,

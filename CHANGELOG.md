@@ -4,6 +4,12 @@ All notable changes to this project should be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 2018-09-18 - Update to next generation of PoPS library
+
+### Changed
+
+- The direct support for reading NetCDF was removed from the code.
+
 ## 2018-09-10 - Seasonality Fixes
 
 ### Added

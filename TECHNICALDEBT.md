@@ -84,13 +84,6 @@ optionally linked in an entry.
   previous line (perhaps some container optionally wrapping two images
   would be useful).
 
-## 2018-03-26 - March 2018 Update
-
-### Fix
-
-- Some of the code in NetCDF ifdefs has bad structure (additional empty
-  blocks).
-
 ## 2017-09-05 - September 2017 Update
 
 ### Fix
