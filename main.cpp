@@ -23,6 +23,8 @@
 #include "pops/raster.hpp"
 #include "pops/simulation.hpp"
 
+using namespace pops;
+
 extern "C" {
 #include <grass/gis.h>
 #include <grass/glocale.h>
