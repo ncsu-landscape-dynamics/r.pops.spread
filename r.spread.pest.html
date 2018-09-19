@@ -1,6 +1,6 @@
 <h2>DESCRIPTION</h2>
 
-<em>r.spread.sod</em> simulates spread of a plant pathogen, specifically
+<em>r.spread.pest</em> simulates spread of a plant pathogen, specifically
 it simulates spread of Sudden Oak Death disease in California and Oregon
 (USA).
 
@@ -85,9 +85,9 @@ for LINE in `seq 2 $NUM_LINES`; do echo const_1 >> moistures.txt; done;
 Example of the run of the model (unix-like command line):
 
 <div class="code"><pre>
-r.spread.sod species=lide lvtree=all infected=infected_2005 \
+r.spread.pest species=lide lvtree=all infected=infected_2005 \
     moisture_file=moistures.txt temperature_file=temperatures.txt \
-    output=spread_sod start_time=2005 end_time=2010 \
+    output=spread start_time=2005 end_time=2010 \
     rtype=cauchy wind=NE rseed=4
 </pre></div>
 

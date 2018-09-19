@@ -1,6 +1,6 @@
 MODULE_TOPDIR = ../..
 
-PGM = r.spread.sod
+PGM = r.spread.pest
 
 LIBES = $(RASTERLIB) $(GISLIB) $(MATHLIB) $(VECTORLIB)
 DEPENDENCIES = $(RASTERDEP) $(GISDEP) $(VECTORDEP)

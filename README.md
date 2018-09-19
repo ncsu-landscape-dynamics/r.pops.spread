@@ -1,4 +1,6 @@
-# r.spread.pest and r.spread.sod
+# r.spread.pest
+
+A former name of the r.spread.pest module is r.spread.sod.
 
 recoding the model to create a c++ version of the SOD-model base on https://github.com/f-tonini/SOD-modeling.
 This repository contains the c++ version scripts used to develop a stochastic landscape spread model of forest pathogen *P. ramorum*.
@@ -76,11 +78,11 @@ Change the current directory to the model directory:
 
 Compile:
 
-    grass --tmp-location XY --exec g.extension module=r.spread.sod url=.
+    grass --tmp-location XY --exec g.extension module=r.spread.pest url=.
 
 Run:
 
-    grass .../modeling/scenario1 --exec r.spread.sod ...
+    grass .../modeling/scenario1 --exec r.spread.pest ...
 
 ## Authors
 
