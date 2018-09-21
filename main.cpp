@@ -68,39 +68,6 @@ inline void file_exists_or_fatal_error(struct Option* option) {
                       option->key, option->answer);
 }
 
-// Initialize infected trees for each species
-// needed unless empirical info is available
-static Img initialize(Img& img1,Img& img2) {
-    if (img1.getWidth() != img2.getWidth() ||
-            img2.getHeight() != img2.getHeight()) {
-        cerr << "The height or width of one image do not match with that of the other one!" << endl;
-        return Img();
-    }
-    else {
-        auto re_width = img1.getWidth();
-        auto re_height = img1.getHeight();
-        auto out = Img(re_width, re_height, img1.getWEResolution(), img1.getNSResolution());
-
-        for (int i = 0; i < re_height; i++) {
-            for (int j = 0; j < re_width; j++) {
-                if (img2(i, j) > 0) {
-                    if (img1(i, j) > img2(i, j))
-                        out(i, j) =
-                            img1(i, j) <
-                            (img2(i, j) *
-                             2) ? img1(i, j) : (img2(i, j) * 2);
-                    else
-                        out(i, j) = img1(i, j);
-                }
-                else {
-                    out(i, j) = 0;
-                }
-            }
-        }
-        return out;
-    }
-}
-
 string generate_name(const string& basename, const Date& date)
 {
     // counting on year being 4 digits
