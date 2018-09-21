@@ -152,8 +152,8 @@ std::vector<double> weather_file_to_list(const string& filename)
 bool all_infected(Img& S_rast)
 {
     bool allInfected = true;
-    for (int j = 0; j < S_rast.getHeight(); j++) {
-        for (int k = 0; k < S_rast.getWidth(); k++) {
+    for (int j = 0; j < S_rast.rows(); j++) {
+        for (int k = 0; k < S_rast.cols(); k++) {
             if (S_rast(j, k) > 0)
                 allInfected = false;
         }
@@ -595,13 +595,13 @@ int main(int argc, char *argv[])
     }
 
     // read the suspectible UMCA raster image
-    Img species_rast = Img::fromGrassRaster(opt.species->answer);
+    Img species_rast = Img::from_grass_raster(opt.species->answer);
 
     // read the living trees raster image
-    Img lvtree_rast = Img::fromGrassRaster(opt.lvtree->answer);
+    Img lvtree_rast = Img::from_grass_raster(opt.lvtree->answer);
 
     // read the initial infected oaks image
-    Img I_species_rast = Img::fromGrassRaster(opt.infected->answer);
+    Img I_species_rast = Img::from_grass_raster(opt.infected->answer);
 
     // create the initial suspectible oaks image
     Img S_species_rast = species_rast - I_species_rast;
@@ -611,8 +611,8 @@ int main(int argc, char *argv[])
     //Img IMM_rast = lvtree_rast - SOD_rast;
 
     // retrieve the width and height of the images
-    int width = species_rast.getWidth();
-    int height = species_rast.getHeight();
+    int width = species_rast.cols();
+    int height = species_rast.rows();
 
     std::vector<string> moisture_names;
     std::vector<string> temperature_names;
@@ -639,7 +639,7 @@ int main(int argc, char *argv[])
         file_exists_or_fatal_error(opt.actual_temperature_file);
         read_names(actual_temperature_names, opt.actual_temperature_file->answer);
         for (string name : actual_temperature_names) {
-            actual_temperatures.push_back(DImg::fromGrassRaster(name.c_str()));
+            actual_temperatures.push_back(DImg::from_grass_raster(name.c_str()));
         }
         use_lethal_temperature = true;
     }
@@ -715,8 +715,8 @@ int main(int argc, char *argv[])
                 // get weather for all the weeks
                 for (auto week : unresolved_weeks) {
                     if (weather) {
-                        DImg moisture(DImg::fromGrassRaster(moisture_names[week].c_str()));
-                        DImg temperature(DImg::fromGrassRaster(temperature_names[week].c_str()));
+                        DImg moisture(DImg::from_grass_raster(moisture_names[week].c_str()));
+                        DImg temperature(DImg::from_grass_raster(temperature_names[week].c_str()));
                         weather_coefficients[week_in_chunk] = moisture * temperature;
                     }
                     ++week_in_chunk;
@@ -791,13 +791,12 @@ int main(int argc, char *argv[])
                 // date is always end of the year, even for seasonal spread
                 string name = generate_name(opt.output_series->answer, dd_current);
                 if (flg.series_as_single_run->answer)
-                    inf_species_rasts[0].toGrassRaster(name.c_str());
+                    inf_species_rasts[0].to_grass_raster(name.c_str());
                 else
-                    I_species_rast.toGrassRaster(name.c_str());
+                    I_species_rast.to_grass_raster(name.c_str());
             }
             if (opt.stddev_series->answer) {
-                Img stddev(I_species_rast.getWidth(), I_species_rast.getHeight(),
-                           I_species_rast.getWEResolution(), I_species_rast.getNSResolution(), 0);
+                Img stddev(I_species_rast, 0);
                 for (unsigned i = 0; i < num_runs; i++) {
                     Img tmp = inf_species_rasts[i] - I_species_rast;
                     stddev += tmp * tmp;
@@ -805,13 +804,13 @@ int main(int argc, char *argv[])
                 stddev /= num_runs;
                 stddev.for_each([](int& a){a = std::sqrt(a);});
                 string name = generate_name(opt.stddev_series->answer, dd_current);
-                stddev.toGrassRaster(name.c_str());
+                stddev.to_grass_raster(name.c_str());
             }
             if (mortality && opt.dead_series->answer) {
                 accumulated_dead += dead_in_current_year[0];
                 if (opt.dead_series->answer) {
                     string name = generate_name(opt.dead_series->answer, dd_current);
-                    accumulated_dead.toGrassRaster(name.c_str());
+                    accumulated_dead.to_grass_raster(name.c_str());
                 }
             }
         }
@@ -829,22 +828,20 @@ int main(int argc, char *argv[])
     }
     if (opt.output->answer) {
         // write final result
-        I_species_rast.toGrassRaster(opt.output->answer);
+        I_species_rast.to_grass_raster(opt.output->answer);
     }
     if (opt.stddev->answer) {
-        Img stddev(I_species_rast.getWidth(), I_species_rast.getHeight(),
-                   I_species_rast.getWEResolution(), I_species_rast.getNSResolution(), 0);
+        Img stddev(I_species_rast, 0);
         for (unsigned i = 0; i < num_runs; i++) {
             Img tmp = inf_species_rasts[i] - I_species_rast;
             stddev += tmp * tmp;
         }
         stddev /= num_runs;
         stddev.for_each([](int& a){a = std::sqrt(a);});
-        stddev.toGrassRaster(opt.stddev->answer);
+        stddev.to_grass_raster(opt.stddev->answer);
     }
     if (opt.output_probability->answer) {
-        Img probability(I_species_rast.getWidth(), I_species_rast.getHeight(),
-                        I_species_rast.getWEResolution(), I_species_rast.getNSResolution(), 0);
+        Img probability(I_species_rast, 0);
         for (unsigned i = 0; i < num_runs; i++) {
             Img tmp = inf_species_rasts[i];
             tmp.for_each([](int& a){a = bool(a);});
@@ -852,7 +849,7 @@ int main(int argc, char *argv[])
         }
         probability *= 100;  // prob from 0 to 100 (using ints)
         probability /= num_runs;
-        probability.toGrassRaster(opt.output_probability->answer);
+        probability.to_grass_raster(opt.output_probability->answer);
     }
     if (opt.outside_spores->answer) {
         Cell_head region;
