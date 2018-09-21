@@ -71,9 +71,9 @@ inline void file_exists_or_fatal_error(struct Option* option) {
 string generate_name(const string& basename, const Date& date)
 {
     // counting on year being 4 digits
-    auto year = G_double_to_basename_format(date.getYear(), 4, 0);
-    auto month = G_double_to_basename_format(date.getMonth(), 2, 0);
-    auto day = G_double_to_basename_format(date.getDay(), 2, 0);
+    auto year = G_double_to_basename_format(date.year(), 4, 0);
+    auto month = G_double_to_basename_format(date.month(), 2, 0);
+    auto day = G_double_to_basename_format(date.day(), 2, 0);
     auto sep = G_get_basename_separator();
     string name = basename + sep + year + "_" + month + "_" + day;
     return name;
@@ -556,7 +556,7 @@ int main(int argc, char *argv[])
     Date dd_start(start_time, 01, 01);
     Date dd_end(end_time, 12, 31);
     // difference in years (in dates) but including both years
-    auto num_years = dd_end.getYear() - dd_start.getYear() + 1;
+    auto num_years = dd_end.year() - dd_start.year() + 1;
 
     string step = opt.step->answer;
 
@@ -677,19 +677,19 @@ int main(int argc, char *argv[])
     Date dd_current(dd_start);
 
     // main simulation loop (weekly steps)
-    for (int current_week = 0; ; current_week++, step == "month" ? dd_current.increasedByMonth() : dd_current.increasedByWeek()) {
+    for (int current_week = 0; ; current_week++, step == "month" ? dd_current.increased_by_month() : dd_current.increased_by_week()) {
         if (dd_current < dd_end)
-            if (season.month_in_season(dd_current.getMonth()))
+            if (season.month_in_season(dd_current.month()))
                 unresolved_weeks.push_back(current_week);
 
         // removal is out of sync with the actual runs but it does
         // not matter as long as removal happends out of season
         if (use_lethal_temperature
-                && dd_current.getMonth() == lethal_temperature_month
-                && (dd_current.getYear() <= dd_end.getYear())) {
+                && dd_current.month() == lethal_temperature_month
+                && (dd_current.year() <= dd_end.year())) {
             // to avoid problem with Jan 1 of the following year
             // we explicitely check if we are in a valid year range
-            unsigned simulation_year = dd_current.getYear() - dd_start.getYear();
+            unsigned simulation_year = dd_current.year() - dd_start.year();
             if (simulation_year >= actual_temperatures.size())
                 G_fatal_error(_("Not enough temperatures"));
             #pragma omp parallel for num_threads(threads)
@@ -708,7 +708,7 @@ int main(int argc, char *argv[])
         }
 
         // check whether the spore occurs in the month
-        if ((step == "month" ? dd_current.isLastMonthOfYear() : dd_current.isYearEnd()) || dd_current >= dd_end) {
+        if ((step == "month" ? dd_current.is_last_month_of_year() : dd_current.is_last_week_of_year()) || dd_current >= dd_end) {
             if (!unresolved_weeks.empty()) {
 
                 unsigned week_in_chunk = 0;
@@ -733,7 +733,7 @@ int main(int argc, char *argv[])
                                                    weather_coefficients[week_in_chunk],
                                                    spore_rate);
 
-                        auto current_age = dd_current.getYear() - dd_start.getYear();
+                        auto current_age = dd_current.year() - dd_start.year();
                         sporulations[run].disperse(sus_species_rasts[run],
                                                    inf_species_rasts[run],
                                                    inf_species_cohort_rasts[run][current_age],
@@ -749,10 +749,10 @@ int main(int argc, char *argv[])
                 }
                 unresolved_weeks.clear();
             }
-            if (mortality && (dd_current.getYear() <= dd_end.getYear())) {
+            if (mortality && (dd_current.year() <= dd_end.year())) {
                 // to avoid problem with Jan 1 of the following year
                 // we explicitely check if we are in a valid year range
-                unsigned simulation_year = dd_current.getYear() - dd_start.getYear();
+                unsigned simulation_year = dd_current.year() - dd_start.year();
                 // only run to the current year of simulation
                 // (first year is 0):
                 //   max index == sim year
