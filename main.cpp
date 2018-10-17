@@ -40,6 +40,8 @@ extern "C" {
 #include <arpa/inet.h> //inet_addr
 #include <thread>
 #include <chrono>
+#include <mutex>
+#include <queue>
 
 #include <map>
 #include <iostream>
@@ -64,8 +66,8 @@ using std::ref;
 
 // check if a file exists
 inline bool file_exists(const char* name) {
-  struct stat buffer;
-  return (stat(name, &buffer) == 0);
+    struct stat buffer;
+    return (stat(name, &buffer) == 0);
 }
 
 inline void file_exists_or_fatal_error(struct Option* option) {
@@ -92,9 +94,9 @@ static Img initialize(Img& img1,Img& img2) {
                 if (img2(i, j) > 0) {
                     if (img1(i, j) > img2(i, j))
                         out(i, j) =
-                            img1(i, j) <
-                            (img2(i, j) *
-                             2) ? img1(i, j) : (img2(i, j) * 2);
+                                img1(i, j) <
+                                (img2(i, j) *
+                                 2) ? img1(i, j) : (img2(i, j) * 2);
                     else
                         out(i, j) = img1(i, j);
                 }
@@ -260,54 +262,90 @@ void reload_UMCA_input(Img &umca, string map, Img &I_umca, Img &S_umca)
     S_umca = umca - I_umca;
 }
 
-void steering_client(tcp_client &c, string ip_address, int port, atomic<int> &instr_code, string &load_name)
+std::vector<std::string> split(const std::string& s, char delimiter)
+{
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream tokenStream(s);
+    while (std::getline(tokenStream, token, delimiter))
+    {
+        tokens.push_back(token);
+    }
+    return tokens;
+}
+
+
+void store(int code, std::queue<int> &queue, std::mutex &mutex) {
+    std::lock_guard<std::mutex> lk(mutex);
+    queue.push(code);
+}
+
+void steering_client(tcp_client &c, string ip_address, int port, std::queue<int> &queue, std::mutex &mutex, string &load_name, string &base_name, int &goto_year)
 {
     int rec_error;
     string received;
-    
+    bool break_flag = false;
+
     //connect to host
     c.conn(ip_address, port);
 
     while (true) {
         cout << "to receive" << endl;
         received = c.receive(200, rec_error);
+        cout << "received: " <<received << " XXX"<< endl;
         if (rec_error <= 0){
             cerr << "receive failed\n";
             c.close_socket();
-            instr_code.store(5);
+            store(5, queue, mutex);
             break;
         }
         else {
-            if (received.substr(0, 3) == "cmd") {
-                string cmd = received.substr(4, received.length() - 4);
-                if (cmd == "play") {
-                    instr_code.store(1);
-                    cout << "play from " << endl;
-                }
-                else if (cmd == "pause") {
-                    instr_code.store(2);
-                    cout << "pause" << endl;
-                }
-                else if (cmd == "stepf") {
-                    instr_code.store(3);
-                    cout << "stepf" << endl;
-                }
-                else if (cmd == "stepb") {
-                    instr_code.store(4);
-                    cout << "stepf" << endl;
-                }
-                else if (cmd == "stop") {
-                    c.close_socket();
-                    instr_code.store(5);
-                    break;
-                }
-            } else if (received.substr(0, 4) == "load") {
-                string name = received.substr(5, received.length() - 5);
-                load_name = name;
-                cout << "received name: " << name << endl;
-                instr_code.store(6);
-            } else
-                cout << "X" << received << "X" << rec_error << endl;
+            std::vector<std::string> received_vec = split(received, ';');
+            for (int i = 0; i < received_vec.size(); i++) {
+                std::string message = received_vec[i];
+                //                cout << "mutex locked in client" << endl;
+                if (message.substr(0, 3) == "cmd") {
+                    string cmd = message.substr(4, message.length() - 4);
+                    if (cmd == "play") {
+                        store(1, queue, mutex);
+                        cout << "play from " << endl;
+                    }
+                    else if (cmd == "pause") {
+                        store(2, queue, mutex);
+                        cout << "pause" << endl;
+                    }
+                    else if (cmd == "stepf") {
+                        store(3, queue, mutex);
+                        cout << "stepf" << endl;
+                    }
+                    else if (cmd == "stepb") {
+                        store(4, queue, mutex);
+                        cout << "stepb" << endl;
+                    }
+                    else if (cmd == "stop") {
+                        store(5, queue, mutex);
+                        break_flag = true;
+                        break;
+                    }
+                } else if (message.substr(0, 4) == "load") {
+                    string name = message.substr(5, message.length() - 5);
+                    load_name = name;
+                    cout << "received load name: " << name << endl;
+                    store(6, queue, mutex);
+                } else if (message.substr(0, 4) == "name") {
+                    string name = message.substr(5, message.length() - 5);
+                    base_name = name;
+                    cout << "received base name: " << name << endl;
+                    store(7, queue, mutex);
+                } else if (message.substr(0, 4) == "goto") {
+                    string year = message.substr(5, message.length() - 5);
+                    goto_year = std::stoi(year);
+                    cout << "received goto year: " << year << endl;
+                    store(8, queue, mutex);
+                } else
+                    cout << "X" << message << "X" << rec_error << endl;
+            }
+            if (break_flag) break;
         }
     }
 }
@@ -390,9 +428,9 @@ int main(int argc, char *argv[])
     flg.series_as_single_run = G_define_flag();
     flg.series_as_single_run->key = 'l';
     flg.series_as_single_run->label =
-        _("The output series as a single run only, not average");
+            _("The output series as a single run only, not average");
     flg.series_as_single_run->description =
-        _("The first run will be used for output instead of average");
+            _("The first run will be used for output instead of average");
     flg.series_as_single_run->guisection = _("Output");
 
     opt.output_probability = G_define_standard_option(G_OPT_R_OUTPUT);
@@ -426,18 +464,18 @@ int main(int argc, char *argv[])
     opt.moisture_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.moisture_file->key = "moisture_file";
     opt.moisture_file->label =
-        _("Input file with one moisture map name per line");
+            _("Input file with one moisture map name per line");
     opt.moisture_file->description =
-        _("Moisture coefficient");
+            _("Moisture coefficient");
     opt.moisture_file->required = NO;
     opt.moisture_file->guisection = _("Weather");
 
     opt.temperature_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.temperature_file->key = "temperature_file";
     opt.temperature_file->label =
-        _("Input file with one temperature map name per line");
+            _("Input file with one temperature map name per line");
     opt.temperature_file->description =
-        _("Temperature coefficient");
+            _("Temperature coefficient");
     opt.temperature_file->required = NO;
     opt.temperature_file->guisection = _("Weather");
 
@@ -533,17 +571,17 @@ int main(int argc, char *argv[])
     opt.seed->required = NO;
     opt.seed->label = _("Seed for random number generator");
     opt.seed->description =
-        _("The same seed can be used to obtain same results"
-          " or random seed can be generated by other means.");
+            _("The same seed can be used to obtain same results"
+              " or random seed can be generated by other means.");
     opt.seed->guisection = _("Randomness");
 
     flg.generate_seed = G_define_flag();
     flg.generate_seed->key = 's';
     flg.generate_seed->label =
-        _("Generate random seed (result is non-deterministic)");
+            _("Generate random seed (result is non-deterministic)");
     flg.generate_seed->description =
-        _("Automatically generates random seed for random number"
-          " generator (use when you don't want to provide the seed option)");
+            _("Automatically generates random seed for random number"
+              " generator (use when you don't want to provide the seed option)");
     flg.generate_seed->guisection = _("Randomness");
 
     opt.runs = G_define_option();
@@ -552,8 +590,8 @@ int main(int argc, char *argv[])
     opt.runs->required = NO;
     opt.runs->label = _("Number of simulation runs");
     opt.runs->description =
-        _("The individual runs will obtain different seeds"
-          " and will be avaraged for the output");
+            _("The individual runs will obtain different seeds"
+              " and will be avaraged for the output");
     opt.runs->guisection = _("Randomness");
 
     opt.threads = G_define_option();
@@ -561,7 +599,7 @@ int main(int argc, char *argv[])
     opt.threads->type = TYPE_INTEGER;
     opt.threads->required = NO;
     opt.threads->description =
-        _("Number of threads for parallel computing");
+            _("Number of threads for parallel computing");
     opt.threads->options = "1-";
     opt.threads->guisection = _("Randomness");
 
@@ -730,13 +768,13 @@ int main(int argc, char *argv[])
 
     if (weather_coeff && !(mcf_nc = weather_coeff->get_var("Mcoef"))) {
         cerr << "Can not read the moisture coefficients from the file!" <<
-            endl;
+                endl;
         exit(EXIT_FAILURE);
     }
 
     if (weather_coeff && !(ccf_nc = weather_coeff->get_var("Ccoef"))) {
         cerr << "Can not read the temperature coefficients from the file!" <<
-            endl;
+                endl;
         exit(EXIT_FAILURE);
     }
 #endif
@@ -756,16 +794,19 @@ int main(int argc, char *argv[])
     Date dd_current_end(dd_end);
     if (steering)
         dd_current_end = dd_start;
+    string load_name = "";
+    string base_name = "";
+    int goto_year;
 
     // setup client
-    atomic<int> instr_code(0);
+    std::mutex mutex;
+    std::queue<int> myqueue;
     tcp_client c;
     thread client_thread;
     string ip = steering ? string(opt.ip_address->answer) : "";
-    string load_name = "";
     int port = steering ? atoi(opt.port->answer): 0;
     if (steering) {
-        client_thread = thread(steering_client, ref(c), ip, port, ref(instr_code), ref(load_name));
+        client_thread = thread(steering_client, ref(c), ip, port, ref(myqueue), ref(mutex), ref(load_name), ref(base_name), ref(goto_year));
     }
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
@@ -773,13 +814,21 @@ int main(int argc, char *argv[])
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
 
     // simulation years are closed interval
-    auto num_years = dd_end.getYear() - dd_start.getYear() + 1;
+    // size 4 for 2016 to 2018 - 0: beginning 2016, 1: end 2016, 2: end 2017, 3: end 2018
+    auto num_years = dd_end.getYear() - dd_start.getYear() + 2;
     std::vector<std::vector<Img>> sus_checkpoint(
-        num_years, std::vector<Img>(num_runs, Img(S_species_rast)));
+                num_years, std::vector<Img>(num_runs, Img(S_species_rast)));
     std::vector<std::vector<Img>> inf_checkpoint(
-        num_years, std::vector<Img>(num_runs, Img(S_species_rast)));
+                num_years, std::vector<Img>(num_runs, Img(S_species_rast)));
     std::vector<int> week_checkpoint(num_years);
     std::vector<Date> date_checkpoint(num_years);
+    unsigned last_checkpoint = 0;
+    for (unsigned run = 0; run < num_runs; run++) {
+        sus_checkpoint[last_checkpoint][run] = S_species_rast_start;
+        inf_checkpoint[last_checkpoint][run] = I_species_rast_start;
+        week_checkpoint[last_checkpoint] = 0;
+        date_checkpoint[last_checkpoint] = dd_start;
+    }
     sporulations.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i)
         sporulations.emplace_back(seed_value++, I_species_rast);
@@ -791,59 +840,46 @@ int main(int argc, char *argv[])
     // main simulation loop (weekly steps)
     int current_week = 0;
     while (true) {
-        int code = instr_code.load();
+        int code = 0;
+        {
+            std::lock_guard<std::mutex> lk(mutex);
+            if (!myqueue.empty()) {
+                code = myqueue.front();
+                cout << "queue size: " << myqueue.size() << endl;
+                myqueue.pop();
+            }
+        }
+
+        if (code != 0) {cout << "code " <<  code << endl;}
         if (code == 1) { // play from
             dd_current_end = dd_end;
-            instr_code.store(0);
         }
         else if (code == 2) { // pause
             dd_current_end = dd_current;
-            instr_code.store(0);
         }
         else if (code == 3) { // 1 step forward
             dd_current_end = dd_current.getNextYearEnd();
             if (dd_current_end > dd_end)
                 dd_current_end = dd_end;
-            instr_code.store(0);
             cerr << "code == 3" << endl;
         }
         else if (code == 4) { // 1 step back
-            Date dd_current_tmp = dd_current.getLastYearBeginning();
-            // if we are at the start, do not move back more
-            if (dd_current_tmp >= dd_start) {
-                dd_current = dd_current_tmp;
-                dd_current_end = dd_current;
-            }
-            instr_code.store(0);
-            for (unsigned run = 0; run < num_runs; run++) {
-                // workaround the Jan 1 problem of the year after simulation end
-                // maybe not needed here, see mortality code where it is needed
-                if (!(dd_current.getYear() <= dd_end.getYear()))
-                    break;
-                if (dd_current == dd_start) {
-                    sus_species_rasts[run] = S_species_rast_start;
-                    inf_species_rasts[run] = I_species_rast_start;
-                    unresolved_weeks.clear();  // TODO: probaly not needed?
-                    current_week = 0;
-                    // TODO: dates do not fit (off by one week)
-                    cerr << "year (sback, start): " << dd_current << endl;
-                    cerr << "original start date: " << dd_start << endl;
-                }
-                else {
-                    unsigned year = dd_current.getYear() - dd_start.getYear() - 1;
-                    sus_species_rasts[run] = sus_checkpoint[year][run];
-                    inf_species_rasts[run] = inf_checkpoint[year][run];
-                    unresolved_weeks.clear();  // TODO: probaly not needed?
-                    current_week = week_checkpoint[year];
-                    // TODO: dates do not fit (off by one week)
+            if (last_checkpoint - 1 >= 0) {
+                --last_checkpoint;
+                dd_current_end = date_checkpoint[last_checkpoint];
+                dd_current = date_checkpoint[last_checkpoint];
+                for (unsigned run = 0; run < num_runs; run++) {
+                    sus_species_rasts[run] = sus_checkpoint[last_checkpoint][run];
+                    inf_species_rasts[run] = inf_checkpoint[last_checkpoint][run];
+                    current_week = week_checkpoint[last_checkpoint];
+                    unresolved_weeks.clear();
                     cerr << "year (sback, normal): " << dd_current << endl;
-                    cerr << "check point date: " << date_checkpoint[year] << endl;
+                    cerr << "check point date: " << date_checkpoint[last_checkpoint] << endl;
                 }
-//                cerr << "week:" << current_week << endl;
             }
             // we are at the end of year, but we have already computed
             // the simulation for this year
-            continue;
+//            continue;
         }
         else if (code == 5) { // complete stop
             break;
@@ -855,28 +891,41 @@ int main(int argc, char *argv[])
                                   inf_species_rasts[run],
                                   sus_species_rasts[run]);
             }
-
-            instr_code.store(0);
+        }
+        else if (code == 7) { // base name changed
+            cout << "base name: " << base_name << endl;
+        }
+        else if (code == 8) { // go to specific checkpoint
+            cout << "goto year: " << goto_year << endl;
+            unsigned goto_checkpoint = goto_year;
+            if (goto_checkpoint < 0 || goto_checkpoint >= num_years) {/* do nothing */}
+            else if (goto_checkpoint <= last_checkpoint) {
+                // go back
+                for (unsigned run = 0; run < num_runs; run++) {
+                    sus_species_rasts[run] = sus_checkpoint[goto_checkpoint][run];
+                    inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
+                    current_week = week_checkpoint[goto_checkpoint];
+                    dd_current = date_checkpoint[goto_checkpoint];
+                    dd_current_end = date_checkpoint[goto_checkpoint];
+                    unresolved_weeks.clear();
+                    cerr << "year (sback, normal): " << dd_current << endl;
+                    cerr << "check point date: " << date_checkpoint[goto_checkpoint] << endl;
+                }
+            }
+            else {
+                // go forward
+                dd_current_end = Date(goto_year + dd_start.getYear() - 1, 12, 31);
+            }
         }
 
         string last_name = "";
-        if (dd_current_end > dd_start && dd_current <= dd_current_end) {
-                if (!ss || !(dd_current.getMonth() > 9))
-                    unresolved_weeks.push_back(current_week);
-
-            // here do spread
-            // if all the oaks are infected, then exit
-            // TODO: this should be fixed
-//            if (all_infected(S_oaks_rast)) {
-//                cerr << "In the " << dd_start.getYear() << "-" << dd_start.
-//                        getMonth() << "-" << dd_start.
-//                        getDay() << " all suspectible oaks are infected!" << endl;
-//                continue;
-//            }
+        if (dd_current_end > dd_start && dd_current < dd_current_end) {
+            if (!ss || !(dd_current.getMonth() > 9))
+                unresolved_weeks.push_back(current_week);
 
             if (dd_current.isYearEnd()) {
                 if (!unresolved_weeks.empty()) {
-                    
+
                     unsigned week_in_chunk = 0;
                     // get weather for all the weeks
                     for (auto week : unresolved_weeks) {
@@ -886,9 +935,9 @@ int main(int argc, char *argv[])
                             get_spatial_weather(mcf_nc, ccf_nc, mcf, ccf, week_weather, width, height, week);
                         }
 #else
-                    if (false)
-                        ;
-                    // TODO: switch order of ifs to avoid this
+                        if (false)
+                            ;
+                        // TODO: switch order of ifs to avoid this
 #endif
                         else if (weather_from_rasters) {
                             weather_rasters_to_array(moisture_names[week],
@@ -898,9 +947,9 @@ int main(int argc, char *argv[])
                         }
                         ++week_in_chunk;
                     }
-                    
+
                     // stochastic simulation runs
-    #pragma omp parallel for num_threads(threads)
+#pragma omp parallel for num_threads(threads)
                     for (unsigned run = 0; run < num_runs; run++) {
                         unsigned week_in_chunk = 0;
                         // actual runs of the simulation per week
@@ -910,7 +959,7 @@ int main(int argc, char *argv[])
                                 weather_value = weather_values[week];
                             }
                             sporulations[run].SporeGen(inf_species_rasts[run], week_weather, weather_value, spore_rate);
-                            
+
                             sporulations[run].SporeSpreadDisp_singleSpecies(sus_species_rasts[run], inf_species_rasts[run],
                                                                             lvtree_rast, outside_spores[run],
                                                                             rtype, week_weather,
@@ -924,13 +973,13 @@ int main(int argc, char *argv[])
                     unresolved_weeks.clear();
                 }
                 for (unsigned run = 0; run < num_runs; run++) {
-                    if (!(dd_current.getYear() <= dd_end.getYear()))
-                        break;
-                    unsigned year = dd_current.getYear() - dd_start.getYear();
-                    sus_checkpoint[year][run] = sus_species_rasts[run];
-                    inf_checkpoint[year][run] = inf_species_rasts[run];
-                    week_checkpoint[year] = current_week;
-                    date_checkpoint[year] = dd_current;
+//                    if (!(dd_current.getYear() <= dd_end.getYear()))
+//                        break;
+                    last_checkpoint = dd_current.getYear() - dd_start.getYear() + 1;
+                    sus_checkpoint[last_checkpoint][run] = sus_species_rasts[run];
+                    inf_checkpoint[last_checkpoint][run] = inf_species_rasts[run];
+                    week_checkpoint[last_checkpoint] = current_week;
+                    date_checkpoint[last_checkpoint] = dd_current;
                 }
                 if ((opt.output_series->answer && !flg.series_as_single_run->answer)
                         || opt.stddev_series->answer) {
@@ -943,7 +992,7 @@ int main(int argc, char *argv[])
                 if (opt.output_series->answer) {
                     // write result
                     // date is always end of the year, even for seasonal spread
-                    string name = generate_name(opt.output_series->answer, dd_current);
+                    string name = generate_name(base_name.empty() ? opt.output_series->answer : "infected_" + base_name, dd_current);
                     if (flg.series_as_single_run->answer)
                         inf_species_rasts[0].toGrassRaster(name.c_str());
                     else
@@ -962,11 +1011,24 @@ int main(int argc, char *argv[])
                     }
                     stddev /= num_runs;
                     stddev.for_each([](int& a){a = std::sqrt(a);});
-                    string name = generate_name(opt.stddev_series->answer, dd_current);
+                    string name = generate_name(base_name.empty() ? opt.stddev_series->answer : "stddev_" + base_name, dd_current);
                     stddev.toGrassRaster(name.c_str());
                 }
+                if (opt.output_probability->answer) {
+                    Img probability(I_species_rast.getWidth(), I_species_rast.getHeight(),
+                                    I_species_rast.getWEResolution(), I_species_rast.getNSResolution(), 0);
+                    for (unsigned i = 0; i < num_runs; i++) {
+                        Img tmp = inf_species_rasts[i];
+                        tmp.for_each([](int& a){a = bool(a);});
+                        probability += tmp;
+                    }
+                    probability *= 100;  // prob from 0 to 100 (using ints)
+                    probability /= num_runs;
+                    string name = generate_name(base_name.empty() ? opt.output_probability->answer : "probability_" + base_name, dd_current);
+                    probability.toGrassRaster(name.c_str());
+                }
             }
-            
+
             dd_current.increasedByWeek();
             current_week += 1;
             if (dd_current > dd_end) {

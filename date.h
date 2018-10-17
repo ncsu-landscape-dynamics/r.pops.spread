@@ -74,10 +74,7 @@ bool Date::isYearEnd(){
 }
 
 Date Date::getNextYearEnd(){
-    if (month == 1)
-        return Date(year, 12, 31);
-    else
-        return Date(year + 1, 12, 31);
+    return Date(year + 1, 12, 31);
 }
 
 Date Date::getLastYearBeginning(){
