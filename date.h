@@ -68,7 +68,7 @@ Date Date::getYearEnd() {
 }
 
 bool Date::isYearEnd(){
-    if (month == 12 && (day + 7) > 31)
+    if (month == 12 && (day + 7) >= 31)
         return true;
     return false;
 }

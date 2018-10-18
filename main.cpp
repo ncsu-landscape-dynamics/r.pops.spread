@@ -797,6 +797,9 @@ int main(int argc, char *argv[])
     string load_name = "";
     string base_name = "";
     int goto_year;
+    // don't process outputs at the end of year
+    // when we went there using checkpointing
+    bool after_loading_checkpoint = false;
 
     // setup client
     std::mutex mutex;
@@ -876,6 +879,7 @@ int main(int argc, char *argv[])
                     cerr << "year (sback, normal): " << dd_current << endl;
                     cerr << "check point date: " << date_checkpoint[last_checkpoint] << endl;
                 }
+                after_loading_checkpoint = true;
             }
             // we are at the end of year, but we have already computed
             // the simulation for this year
@@ -901,16 +905,17 @@ int main(int argc, char *argv[])
             if (goto_checkpoint < 0 || goto_checkpoint >= num_years) {/* do nothing */}
             else if (goto_checkpoint <= last_checkpoint) {
                 // go back
+                dd_current = date_checkpoint[goto_checkpoint];
+                dd_current_end = date_checkpoint[goto_checkpoint];
+                unresolved_weeks.clear();
+                cerr << "year (sback, normal): " << dd_current << endl;
+                cerr << "check point date: " << date_checkpoint[goto_checkpoint] << endl;
                 for (unsigned run = 0; run < num_runs; run++) {
                     sus_species_rasts[run] = sus_checkpoint[goto_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
                     current_week = week_checkpoint[goto_checkpoint];
-                    dd_current = date_checkpoint[goto_checkpoint];
-                    dd_current_end = date_checkpoint[goto_checkpoint];
-                    unresolved_weeks.clear();
-                    cerr << "year (sback, normal): " << dd_current << endl;
-                    cerr << "check point date: " << date_checkpoint[goto_checkpoint] << endl;
                 }
+                after_loading_checkpoint = true;
             }
             else {
                 // go forward
@@ -923,7 +928,7 @@ int main(int argc, char *argv[])
             if (!ss || !(dd_current.getMonth() > 9))
                 unresolved_weeks.push_back(current_week);
 
-            if (dd_current.isYearEnd()) {
+            if (dd_current.isYearEnd() && !after_loading_checkpoint) {
                 if (!unresolved_weeks.empty()) {
 
                     unsigned week_in_chunk = 0;
@@ -1028,6 +1033,8 @@ int main(int argc, char *argv[])
                     probability.toGrassRaster(name.c_str());
                 }
             }
+            if (after_loading_checkpoint)
+                after_loading_checkpoint = false;
 
             dd_current.increasedByWeek();
             current_week += 1;
