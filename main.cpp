@@ -1038,7 +1038,7 @@ int main(int argc, char *argv[])
 
             dd_current.increasedByWeek();
             current_week += 1;
-            if (dd_current > dd_end) {
+            if (dd_current >= dd_end) {
                 if (steering)
                     c.send_data("info:last:" + last_name);
                 else
