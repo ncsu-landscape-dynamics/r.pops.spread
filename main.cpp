@@ -139,6 +139,45 @@ inline Season seasonality_from_option(const Option* opt)
     return {std::atoi(opt->answers[0]), std::atoi(opt->answers[1])};
 }
 
+
+
+class Treatments
+{
+private:
+    std::map<int,Img> treatments;
+public:
+    Treatments(){}
+    void add_treatment(int year, Img map)
+    {
+        treatments[year] = map;
+    }
+    void clear_all()
+    {
+        treatments.erase(treatments.begin(), treatments.end());
+    }
+    void clear_after_year(int year)
+    {
+        for (auto it = treatments.begin(); it != treatments.end();) {
+            if (it->first > year) {
+                treatments.erase(it++);
+            }
+            else {
+                ++it;
+            }
+        }
+    }
+    void apply_treatment(int year, Img &host)
+    {
+        if (treatments.find(year) != treatments.end()) {
+            host = host - (host * treatments[year]);
+        }
+        // otherwise no treatment for that year
+    }
+};
+
+
+
+
 void read_names(std::vector<string>& names, const char* filename)
 {
     std::ifstream file(filename);
@@ -286,6 +325,7 @@ struct SodOptions
     struct Option *actual_temperature_file;
     struct Option *start_time, *end_time, *seasonality;
     struct Option *step;
+    struct Option *treatment_map, *treatment_year;
     struct Option *spore_rate, *wind;
     struct Option *radial_type, *scale_1, *scale_2, *kappa, *gamma;
     struct Option *infected_to_dead_rate, *first_year_to_die;
@@ -377,6 +417,21 @@ int main(int argc, char *argv[])
     opt.outside_spores->key = "outside_spores";
     opt.outside_spores->required = NO;
     opt.outside_spores->guisection = _("Output");
+
+    opt.treatment_map = G_define_standard_option(G_OPT_R_INPUT);
+    opt.treatment_map->key = "treatment_map";
+    opt.treatment_map->multiple = YES;
+    opt.treatment_map->description = _("Raster map of treatments (treated 1, otherwise 0)");
+    opt.treatment_map->required = NO;
+    opt.treatment_map->guisection = _("Treatments");
+
+    opt.treatment_year = G_define_option();
+    opt.treatment_year->key = "treatment_year";
+    opt.treatment_year->type = TYPE_INTEGER;
+    opt.treatment_year->multiple = YES;
+    opt.treatment_year->description = _("Years when treatment raster is applied");
+    opt.treatment_year->required = NO;
+    opt.treatment_year->guisection = _("Treatments");
 
     opt.wind = G_define_option();
     opt.wind->type = TYPE_STRING;
@@ -633,6 +688,7 @@ int main(int argc, char *argv[])
     G_option_requires(opt.first_year_to_die, flg.mortality, NULL);
     G_option_requires_all(opt.dead_series, flg.mortality,
                           flg.series_as_single_run, NULL);
+    G_option_requires(opt.treatment_map, opt.treatment_year, NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -808,6 +864,21 @@ int main(int argc, char *argv[])
     if (steering) {
         client_thread = thread(steering_client, ref(c), ip, port, ref(myqueue), ref(mutex), ref(load_name), ref(base_name), ref(goto_year));
     }
+    // treatments
+    Treatments treatments;
+    int i_t;
+    for (i_t = 0; opt.treatment_year->answers[i_t]; i_t++);
+    int num_treatments = i_t;
+    for (i_t = 0; opt.treatment_map->answers[i_t]; i_t++);
+    if (num_treatments != i_t)
+        G_fatal_error(_("%s= and %s= must have the same number of values"), opt.treatment_map->key, opt.treatment_year->key);
+    bool use_treatments = false;
+    for (i_t = 0; opt.treatment_year->answers[i_t]; i_t++) {
+        Img tr = Img::from_grass_raster(opt.treatment_map->answers[i_t]);
+        treatments.add_treatment(std::stoul(opt.treatment_year->answers[i_t]), tr);
+        use_treatments = true;
+    }
+
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
@@ -899,10 +970,10 @@ int main(int argc, char *argv[])
         }
         else if (code == 6) { // load data
             cout << "loading data: " << load_name << endl;
+            treatments.clear_after_year(dd_current.year());
             for (unsigned run = 0; run < num_runs; run++) {
-                reload_UMCA_input(species_rast, load_name,
-                                  inf_species_rasts[run],
-                                  sus_species_rasts[run]);
+                Img tr = Img::from_grass_raster(load_name.c_str());
+                treatments.add_treatment(dd_current.year(), tr);
             }
         }
         else if (code == 7) { // base name changed
@@ -1034,9 +1105,17 @@ int main(int argc, char *argv[])
                                 Img dead_in_cohort = infected_to_dead_rate * inf_species_cohort_rasts[run][age];
                                 inf_species_cohort_rasts[run][age] -= dead_in_cohort;
                                 dead_in_current_year[run] += dead_in_cohort;
+                                if (use_treatments)
+                                    treatments.apply_treatment(dd_current.year(), inf_species_cohort_rasts[run][age]);
                             }
                             inf_species_rasts[run] -= dead_in_current_year[run];
                         }
+                    }
+                }
+                if (use_treatments && (dd_current.year() <= dd_end.year())) {
+                    for (unsigned run = 0; run < num_runs; run++) {
+                        treatments.apply_treatment(dd_current.year(), sus_species_rasts[run]);
+                        treatments.apply_treatment(dd_current.year(), inf_species_rasts[run]);
                     }
                 }
                 if ((opt.output_series->answer && !flg.series_as_single_run->answer)
