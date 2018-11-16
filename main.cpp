@@ -22,6 +22,7 @@
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
 #include "pops/simulation.hpp"
+#include "pops/treatments.hpp"
 
 #include "tcp_client.h"
 
@@ -138,45 +139,6 @@ inline Season seasonality_from_option(const Option* opt)
 {
     return {std::atoi(opt->answers[0]), std::atoi(opt->answers[1])};
 }
-
-
-
-class Treatments
-{
-private:
-    std::map<int,Img> treatments;
-public:
-    Treatments(){}
-    void add_treatment(int year, Img map)
-    {
-        treatments[year] = map;
-    }
-    void clear_all()
-    {
-        treatments.erase(treatments.begin(), treatments.end());
-    }
-    void clear_after_year(int year)
-    {
-        for (auto it = treatments.begin(); it != treatments.end();) {
-            if (it->first > year) {
-                treatments.erase(it++);
-            }
-            else {
-                ++it;
-            }
-        }
-    }
-    void apply_treatment(int year, Img &host)
-    {
-        if (treatments.find(year) != treatments.end()) {
-            host = host - (host * treatments[year]);
-        }
-        // otherwise no treatment for that year
-    }
-};
-
-
-
 
 void read_names(std::vector<string>& names, const char* filename)
 {
@@ -865,7 +827,7 @@ int main(int argc, char *argv[])
         client_thread = thread(steering_client, ref(c), ip, port, ref(myqueue), ref(mutex), ref(load_name), ref(base_name), ref(goto_year));
     }
     // treatments
-    Treatments treatments;
+    Treatments<Img> treatments;
     int i_t;
     for (i_t = 0; opt.treatment_year->answers[i_t]; i_t++);
     int num_treatments = i_t;
