@@ -120,21 +120,6 @@ DispersalKernel radial_type_from_string(const string& text)
                                     " value '" + text +"' provided");
 }
 
-class Season
-{
-public:
-    Season(int start, int end)
-        : m_start_month(start), m_end_month(end)
-    {}
-    inline bool month_in_season(int month)
-    {
-        return month >= m_start_month && month <= m_end_month;
-    }
-private:
-    int m_start_month;
-    int m_end_month;
-};
-
 inline Season seasonality_from_option(const Option* opt)
 {
     return {std::atoi(opt->answers[0]), std::atoi(opt->answers[1])};
@@ -875,8 +860,10 @@ int main(int argc, char *argv[])
     Img accumulated_dead(Img(S_species_rast, 0));
 
     sporulations.reserve(num_runs);
+    struct Cell_head window;
+    G_get_window(&window);
     for (unsigned i = 0; i < num_runs; ++i)
-        sporulations.emplace_back(seed_value++, I_species_rast);
+        sporulations.emplace_back(seed_value++, I_species_rast, window.ew_res, window.ns_res);
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     std::vector<unsigned> unresolved_weeks;
