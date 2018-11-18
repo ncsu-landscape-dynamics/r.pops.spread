@@ -125,6 +125,15 @@ inline Season seasonality_from_option(const Option* opt)
     return {std::atoi(opt->answers[0]), std::atoi(opt->answers[1])};
 }
 
+
+unsigned int get_num_answers(struct Option *opt)
+{
+    unsigned int i = 0;
+    if (opt->answers)
+        for (i = 0; opt->answers[i]; i++);
+    return i;
+}
+
 void read_names(std::vector<string>& names, const char* filename)
 {
     std::ifstream file(filename);
@@ -161,20 +170,6 @@ bool all_infected(Img& S_rast)
     return allInfected;
 }
 
-
-void reload_UMCA_input(Img &umca, string map, Img &I_umca, Img &S_umca)
-{
-    umca = Img::from_grass_raster(map.c_str());
-    for (int i = 0; i < umca.rows(); i++) {
-        for (int j = 0; j < umca.cols(); j++) {
-            if (umca(i, j) < I_umca(i, j)) {
-                I_umca(i, j) = umca(i, j);
-            }
-        }
-    }
-    S_umca = umca - I_umca;
-}
-
 std::vector<std::string> split(const std::string& s, char delimiter)
 {
     std::vector<std::string> tokens;
@@ -193,7 +188,8 @@ void store(int code, std::queue<int> &queue, std::mutex &mutex) {
     queue.push(code);
 }
 
-void steering_client(tcp_client &c, string ip_address, int port, std::queue<int> &queue, std::mutex &mutex, string &load_name, string &base_name, int &goto_year)
+void steering_client(tcp_client &c, string ip_address, int port, std::queue<int> &queue,
+                     std::mutex &mutex, string &load_name, string &base_name, int &goto_year, int &treatment_year)
 {
     int rec_error;
     string received;
@@ -241,9 +237,10 @@ void steering_client(tcp_client &c, string ip_address, int port, std::queue<int>
                         break;
                     }
                 } else if (message.substr(0, 4) == "load") {
-                    string name = message.substr(5, message.length() - 5);
-                    load_name = name;
-                    cout << "received load name: " << name << endl;
+                    std::vector<std::string> received_load = split(message, ':');
+                    treatment_year = std::stoul(received_load[1]);
+                    load_name = received_load[2];
+                    cout << "received load name: " << load_name << endl;
                     store(6, queue, mutex);
                 } else if (message.substr(0, 4) == "name") {
                     string name = message.substr(5, message.length() - 5);
@@ -626,7 +623,6 @@ int main(int argc, char *argv[])
     // weather
     G_option_collective(opt.moisture_file, opt.temperature_file, NULL);
     G_option_collective(opt.ip_address, opt.port, NULL);
-
     // mortality
     // flag and rate required always
     // for simplicity of the code outputs allowed only with output
@@ -797,10 +793,23 @@ int main(int argc, char *argv[])
     string load_name = "";
     string base_name = "";
     int goto_year;
+    int treatment_year;
     // don't process outputs at the end of year
     // when we went there using checkpointing
     bool after_loading_checkpoint = false;
 
+    // treatments
+    if (get_num_answers(opt.treatment_map) != get_num_answers(opt.treatment_year)){
+        G_fatal_error(_("%s= and %s= must have the same number of values"), opt.treatment_map->key, opt.treatment_year->key);}
+    Treatments<Img> treatments;
+    bool use_treatments = false;
+    if (opt.treatment_map->answers) {
+        for (int i_t = 0; opt.treatment_year->answers[i_t]; i_t++) {
+            Img tr = Img::from_grass_raster(opt.treatment_map->answers[i_t]);
+            treatments.add_treatment(std::stoul(opt.treatment_year->answers[i_t]), tr);
+            use_treatments = true;
+        }
+    }
     // setup client
     std::mutex mutex;
     std::queue<int> myqueue;
@@ -809,23 +818,11 @@ int main(int argc, char *argv[])
     string ip = steering ? string(opt.ip_address->answer) : "";
     int port = steering ? atoi(opt.port->answer): 0;
     if (steering) {
-        client_thread = thread(steering_client, ref(c), ip, port, ref(myqueue), ref(mutex), ref(load_name), ref(base_name), ref(goto_year));
-    }
-    // treatments
-    Treatments<Img> treatments;
-    int i_t;
-    for (i_t = 0; opt.treatment_year->answers[i_t]; i_t++);
-    int num_treatments = i_t;
-    for (i_t = 0; opt.treatment_map->answers[i_t]; i_t++);
-    if (num_treatments != i_t)
-        G_fatal_error(_("%s= and %s= must have the same number of values"), opt.treatment_map->key, opt.treatment_year->key);
-    bool use_treatments = false;
-    for (i_t = 0; opt.treatment_year->answers[i_t]; i_t++) {
-        Img tr = Img::from_grass_raster(opt.treatment_map->answers[i_t]);
-        treatments.add_treatment(std::stoul(opt.treatment_year->answers[i_t]), tr);
         use_treatments = true;
+        client_thread = thread(steering_client, ref(c), ip, port, ref(myqueue),
+                               ref(mutex), ref(load_name), ref(base_name),
+                               ref(goto_year), ref(treatment_year));
     }
-
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
@@ -907,6 +904,10 @@ int main(int argc, char *argv[])
                     unresolved_weeks.clear();
                     cerr << "year (sback, normal): " << dd_current << endl;
                     cerr << "check point date: " << date_checkpoint[last_checkpoint] << endl;
+                    if (use_treatments) {
+                        treatments.apply_treatment(dd_current.year(), sus_species_rasts[run]);
+                        treatments.apply_treatment(dd_current.year(), inf_species_rasts[run]);
+                    }
                 }
                 after_loading_checkpoint = true;
             }
@@ -919,10 +920,10 @@ int main(int argc, char *argv[])
         }
         else if (code == 6) { // load data
             cout << "loading data: " << load_name << endl;
-            treatments.clear_after_year(dd_current.year());
+            treatments.clear_after_year(treatment_year);
             for (unsigned run = 0; run < num_runs; run++) {
                 Img tr = Img::from_grass_raster(load_name.c_str());
-                treatments.add_treatment(dd_current.year(), tr);
+                treatments.add_treatment(treatment_year, tr);
             }
         }
         else if (code == 7) { // base name changed
@@ -943,6 +944,11 @@ int main(int argc, char *argv[])
                     sus_species_rasts[run] = sus_checkpoint[goto_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
                     current_week = week_checkpoint[goto_checkpoint];
+                    if (use_treatments) {
+                        cout << "applying treatments " << dd_current.year() << endl;
+                        treatments.apply_treatment(dd_current.year(), sus_species_rasts[run]);
+                        treatments.apply_treatment(dd_current.year(), inf_species_rasts[run]);
+                    }
                 }
                 after_loading_checkpoint = true;
             }
