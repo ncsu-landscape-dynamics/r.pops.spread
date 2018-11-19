@@ -801,11 +801,11 @@ int main(int argc, char *argv[])
     // treatments
     if (get_num_answers(opt.treatment_map) != get_num_answers(opt.treatment_year)){
         G_fatal_error(_("%s= and %s= must have the same number of values"), opt.treatment_map->key, opt.treatment_year->key);}
-    Treatments<Img> treatments;
+    Treatments<Img, DImg> treatments;
     bool use_treatments = false;
     if (opt.treatment_map->answers) {
         for (int i_t = 0; opt.treatment_year->answers[i_t]; i_t++) {
-            Img tr = Img::from_grass_raster(opt.treatment_map->answers[i_t]);
+            DImg tr = DImg::from_grass_raster(opt.treatment_map->answers[i_t]);
             treatments.add_treatment(std::stoul(opt.treatment_year->answers[i_t]), tr);
             use_treatments = true;
         }
@@ -922,7 +922,7 @@ int main(int argc, char *argv[])
             cout << "loading data: " << load_name << endl;
             treatments.clear_after_year(treatment_year);
             for (unsigned run = 0; run < num_runs; run++) {
-                Img tr = Img::from_grass_raster(load_name.c_str());
+                DImg tr = DImg::from_grass_raster(load_name.c_str());
                 treatments.add_treatment(treatment_year, tr);
             }
         }
