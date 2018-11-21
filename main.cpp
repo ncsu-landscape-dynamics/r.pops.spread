@@ -252,6 +252,8 @@ void steering_client(tcp_client &c, string ip_address, int port, std::queue<int>
                     goto_year = std::stoi(year);
                     cout << "received goto year: " << year << endl;
                     store(8, queue, mutex);
+                } else if (message.substr(0, 4) == "sync") {
+                    store(9, queue, mutex);
                 } else
                     cout << "X" << message << "X" << rec_error << endl;
             }
@@ -961,6 +963,16 @@ int main(int argc, char *argv[])
             else {
                 // go forward
                 dd_current_end = Date(goto_year + dd_start.year() - 1, 12, 31);
+            }
+        }
+        else if (code == 9) {
+            // sync infectious and susceptible in all threads to selected one
+            unsigned selected_run = 0;
+            for (unsigned run = 0; run < num_runs; run++) {
+                if (run != selected_run) {
+                    sus_species_rasts[run] = sus_species_rasts[selected_run];
+                    inf_species_rasts[run] = inf_species_rasts[selected_run];
+                }
             }
         }
 
