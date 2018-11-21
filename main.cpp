@@ -913,8 +913,7 @@ int main(int argc, char *argv[])
                     cerr << "year (sback, normal): " << dd_current << endl;
                     cerr << "check point date: " << date_checkpoint[last_checkpoint] << endl;
                     if (use_treatments) {
-                        treatments.apply_treatment(dd_current.year(), sus_species_rasts[run]);
-                        treatments.apply_treatment(dd_current.year(), inf_species_rasts[run]);
+                        treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
                     }
                 }
                 after_loading_checkpoint = true;
@@ -954,8 +953,7 @@ int main(int argc, char *argv[])
                     current_week = week_checkpoint[goto_checkpoint];
                     if (use_treatments) {
                         cout << "applying treatments " << dd_current.year() << endl;
-                        treatments.apply_treatment(dd_current.year(), sus_species_rasts[run]);
-                        treatments.apply_treatment(dd_current.year(), inf_species_rasts[run]);
+                        treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
                     }
                 }
                 after_loading_checkpoint = true;
@@ -1079,7 +1077,7 @@ int main(int argc, char *argv[])
                                 inf_species_cohort_rasts[run][age] -= dead_in_cohort;
                                 dead_in_current_year[run] += dead_in_cohort;
                                 if (use_treatments)
-                                    treatments.apply_treatment(dd_current.year(), inf_species_cohort_rasts[run][age]);
+                                    treatments.apply_treatment_infected(dd_current.year(), inf_species_cohort_rasts[run][age]);
                             }
                             inf_species_rasts[run] -= dead_in_current_year[run];
                         }
@@ -1087,8 +1085,7 @@ int main(int argc, char *argv[])
                 }
                 if (use_treatments && (dd_current.year() <= dd_end.year())) {
                     for (unsigned run = 0; run < num_runs; run++) {
-                        treatments.apply_treatment(dd_current.year(), sus_species_rasts[run]);
-                        treatments.apply_treatment(dd_current.year(), inf_species_rasts[run]);
+                        treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
                     }
                 }
                 if ((opt.output_series->answer && !flg.series_as_single_run->answer)
