@@ -951,7 +951,8 @@ int main(int argc, char *argv[])
                     sus_species_rasts[run] = sus_checkpoint[goto_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
                     current_week = week_checkpoint[goto_checkpoint];
-                    if (use_treatments) {
+                    // first checkpoint (1/1/year) is beginning, so we don't want to apply treatments
+                    if (use_treatments && goto_checkpoint != 0) {
                         cout << "applying treatments " << dd_current.year() << endl;
                         treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
                     }
@@ -975,7 +976,7 @@ int main(int argc, char *argv[])
         }
 
         string last_name = "";
-        if (dd_current_end > dd_start && dd_current < dd_current_end) {
+        if (dd_current_end > dd_start && dd_current <= dd_current_end) {
             if (season.month_in_season(dd_current.month()))
                 unresolved_weeks.push_back(current_week);
 
@@ -1147,7 +1148,7 @@ int main(int argc, char *argv[])
             else
                 dd_current.increased_by_week();
             current_week += 1;
-            if (dd_current >= dd_end) {
+            if (dd_current > dd_end) {
                 if (steering)
                     c.send_data("info:last:" + last_name);
                 else
