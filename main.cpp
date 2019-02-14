@@ -574,7 +574,7 @@ int main(int argc, char *argv[])
     Date dd_start(start_time, 01, 01);
     Date dd_end(end_time, 12, 31);
     // difference in years (in dates) but including both years
-    auto num_years = dd_end.year() - dd_start.year() + 1;
+    unsigned num_years = dd_end.year() - dd_start.year() + 1;
 
     string step = opt.step->answer;
 
@@ -754,7 +754,7 @@ int main(int argc, char *argv[])
                 for (unsigned run = 0; run < num_runs; run++) {
                     unsigned week_in_chunk = 0;
                     // actual runs of the simulation per week
-                    for (auto week : unresolved_weeks) {
+                    for (unsigned week : unresolved_weeks) {
                         sporulations[run].generate(inf_species_rasts[run],
                                                    weather,
                                                    weather_coefficients[week_in_chunk],
