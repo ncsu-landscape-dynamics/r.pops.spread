@@ -79,6 +79,25 @@ echo const_1 > moistures.txt
 for LINE in `seq 2 $NUM_LINES`; do echo const_1 >> moistures.txt; done;
 </pre></div>
 
+<h3>Creating treatments</h3>
+To account for (vector) treatments partially covering host cells:
+
+<div class="code"><pre>
+# set resolution for treatments and convert to raster
+g.region res=10 -ap
+v.to.rast input=treatment output=treatment use=val
+
+# resample to lower resolution (match host map resolution)
+g.region align=host_map -p
+r.resamp.stats -w input=treatment output=treatment_resampled method=count
+# get maximum value, which is dependent on resolution
+# e.g. when resampling from 10m to 100m, max will be 100 (100 small cells in 1 big cell)
+r.info -r treatment_resampled
+# result will be 0 to 1
+r.mapcalc "treatment_float = test_treatment_resampled / 100"
+# adjust host layer
+r.mapcalc "treated_host = host - host * treatment_float"
+</pre></div>
 
 <h3>Running the model</h3>
 
