@@ -930,13 +930,11 @@ int main(int argc, char *argv[])
         else if (code == 5) { // complete stop
             break;
         }
-        else if (code == 6) { // load data
-            cout << "loading data: " << load_name << endl;
+        else if (code == 6) { // load treatments
+            cout << "loading treatments: " << load_name << endl;
             treatments.clear_after_year(treatment_year);
-            for (unsigned run = 0; run < num_runs; run++) {
-                DImg tr = DImg::from_grass_raster(load_name.c_str());
-                treatments.add_treatment(treatment_year, tr);
-            }
+            DImg tr = DImg::from_grass_raster(load_name.c_str());
+            treatments.add_treatment(treatment_year, tr);
         }
         else if (code == 7) { // base name changed
             cout << "base name: " << base_name << endl;
