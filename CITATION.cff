@@ -13,9 +13,9 @@ authors:
   - family-names: Tonini
     given-names: Francesco
     website: http://www.francescotonini.com/
-title: r.spread.pest - PoPS model implemented as a GRASS GIS module
+title: r.pops.spread - PoPS model implemented as a GRASS GIS module
 version: 29074a1
 date-released: 2018-06-21
-url: https://grass.osgeo.org/grass74/manuals/addons/r.spread.sod.html
-repository-code: https://github.com/ncsu-landscape-dynamics/r.spread.pest
+url: https://grass.osgeo.org/grass74/manuals/addons/r.pops.spread.html
+repository-code: https://github.com/ncsu-landscape-dynamics/r.pops.spread
 license: GPL-2.0-or-later

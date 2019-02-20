@@ -1,8 +1,29 @@
 <h2>DESCRIPTION</h2>
 
-<em>r.spread.pest</em> simulates spread of a plant pathogen, specifically
-it simulates spread of Sudden Oak Death disease in California and Oregon
-(USA).
+
+Module <em>r.pops.spread</em> 
+is a dynamic species distribution model for pest or pathogen spread in forest
+or agricultural ecosystems. The model is process based
+meaning that it uses understanding of the effect of weather on reproduction
+and survival of the pest/pathogen in order to simulate
+spread of the pest/pathogen into the future.
+
+
+<div align="center" style="margin: 10px">
+<a href="r_pops_spread.png">
+<img src="r_pops_spread.png" width="600"  alt="r.pops.spread example" border="0">
+</a><br>
+</div>
+
+<p>
+Module <em>r.pops.spread</em> is using <a href="https://github.com/ncsu-landscape-dynamics/PoPS">
+    Pest or Pathogen Spread library</a>.
+<div align="center" style="margin: 10px">
+    <a href="pops_logo.png">
+    <img src="pops_logo.png" width="100"  alt="PoPS logo" border="0">
+    </a><br>
+    <i>Figure: Logo of Pest or Pathogen Spread simulation</i>
+</div>
 
 
 <h2>NOTES</h2>
@@ -24,7 +45,9 @@ need to change the NULLs to (most likely) zeros, for example:
 <h2>EXAMPLES</h2>
 
 <h3>Obtaining list of rasters</h3>
-
+Use <a href="https://github.com/ncsu-landscape-dynamics/weather-coefficient">
+    R script</a> to create weather coefficients based on a defined polynomial.
+<p>
 Example of creating file with list of input maps (unix-like command
 line):
 
@@ -104,10 +127,10 @@ r.mapcalc "treated_host = host - host * treatment_float"
 Example of the run of the model (unix-like command line):
 
 <div class="code"><pre>
-r.spread.pest species=lide lvtree=all infected=infected_2005 \
-    moisture_file=moistures.txt temperature_file=temperatures.txt \
-    output=spread start_time=2005 end_time=2010 \
-    rtype=cauchy wind=NE rseed=4
+r.spread.pest host=host total_plants=all infected=infected_2005 \
+    moisture_coefficient_file=moistures.txt temperature_coefficient_file=temperatures.txt \
+    output=spread step=week start_time=2005 end_time=2010 \
+    reproductive_rate=4 dispersal_kernel=cauchy wind=NE random_seed=4
 </pre></div>
 
 

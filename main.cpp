@@ -707,7 +707,6 @@ int main(int argc, char *argv[])
     Date dd_end(end_time, 12, 31);
     // difference in years (in dates) but including both years
     auto num_years_mort = dd_end.year() - dd_start.year() + 1;
-
     string step = opt.step->answer;
 
     // mortality
