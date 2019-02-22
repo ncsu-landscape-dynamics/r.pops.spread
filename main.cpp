@@ -183,13 +183,61 @@ std::vector<std::string> split(const std::string& s, char delimiter)
 }
 
 
-void store(int code, std::queue<int> &queue, std::mutex &mutex) {
-    std::lock_guard<std::mutex> lk(mutex);
-    queue.push(code);
+enum class SteeringCommand {None, Play, Pause, StepForward, StepBack, Stop, GoTo,
+                            LoadData, ChangeName, SyncRuns};
+
+std::ostream &operator << (std::ostream &os, const SteeringCommand &cmd)
+{
+    switch(cmd)
+    {
+    case SteeringCommand::None: os << "None"; break;
+    case SteeringCommand::Play: os << "Play"; break;
+    case SteeringCommand::Pause: os << "Pause"; break;
+    case SteeringCommand::StepForward: os << "StepForward"; break;
+    case SteeringCommand::StepBack: os << "StepBack"; break;
+    case SteeringCommand::Stop: os << "Stop"; break;
+    case SteeringCommand::GoTo: os << "GoTo"; break;
+    case SteeringCommand::LoadData: os << "LoadData"; break;
+    case SteeringCommand::ChangeName: os << "ChangeName"; break;
+    case SteeringCommand::SyncRuns: os << "SyncRuns"; break;
+    }
+    return os;
 }
 
-void steering_client(tcp_client &c, string ip_address, int port, std::queue<int> &queue,
-                     std::mutex &mutex, string &load_name, string &base_name, int &goto_year, int &treatment_year)
+class Steering {
+private:
+    std::queue<SteeringCommand> command_queue;
+    std::mutex mutex;
+
+public:
+    string load_data;
+    string basename;
+    int goto_year;
+    int treatment_year;
+
+    inline void store(SteeringCommand cmd);
+    inline SteeringCommand get();
+};
+
+void Steering::store(SteeringCommand cmd) {
+    std::lock_guard<std::mutex> lk(mutex);
+    command_queue.push(cmd);
+    std::cout << "store command: " << cmd << std::endl;
+}
+
+SteeringCommand Steering::get() {
+    std::lock_guard<std::mutex> lk(mutex);
+    if (!command_queue.empty()) {
+        SteeringCommand cmd = command_queue.front();
+        command_queue.pop();
+        std::cout << "get command: " << cmd << std::endl;
+        return cmd;
+    }
+    else {
+        return SteeringCommand::None;
+    }
+}
+void steering_client(tcp_client &c, string ip_address, int port, Steering &steering)
 {
     int rec_error;
     string received;
@@ -205,7 +253,7 @@ void steering_client(tcp_client &c, string ip_address, int port, std::queue<int>
         if (rec_error <= 0){
             cerr << "receive failed\n";
             c.close_socket();
-            store(5, queue, mutex);
+            steering.store(SteeringCommand::Stop);
             break;
         }
         else {
@@ -216,44 +264,40 @@ void steering_client(tcp_client &c, string ip_address, int port, std::queue<int>
                 if (message.substr(0, 3) == "cmd") {
                     string cmd = message.substr(4, message.length() - 4);
                     if (cmd == "play") {
-                        store(1, queue, mutex);
-                        cout << "play from " << endl;
+                        steering.store(SteeringCommand::Play);
                     }
                     else if (cmd == "pause") {
-                        store(2, queue, mutex);
-                        cout << "pause" << endl;
+                        steering.store(SteeringCommand::Pause);
                     }
                     else if (cmd == "stepf") {
-                        store(3, queue, mutex);
-                        cout << "stepf" << endl;
+                        steering.store(SteeringCommand::StepForward);
                     }
                     else if (cmd == "stepb") {
-                        store(4, queue, mutex);
-                        cout << "stepb" << endl;
+                        steering.store(SteeringCommand::StepBack);
                     }
                     else if (cmd == "stop") {
-                        store(5, queue, mutex);
+                        steering.store(SteeringCommand::Stop);
                         break_flag = true;
                         break;
                     }
                 } else if (message.substr(0, 4) == "load") {
                     std::vector<std::string> received_load = split(message, ':');
-                    treatment_year = std::stoul(received_load[1]);
-                    load_name = received_load[2];
-                    cout << "received load name: " << load_name << endl;
-                    store(6, queue, mutex);
+                    steering.treatment_year = std::stoul(received_load[1]);
+                    steering.load_data = received_load[2];
+                    cout << "received load name: " << steering.load_data << endl;
+                    steering.store(SteeringCommand::LoadData);
                 } else if (message.substr(0, 4) == "name") {
                     string name = message.substr(5, message.length() - 5);
-                    base_name = name;
                     cout << "received base name: " << name << endl;
-                    store(7, queue, mutex);
+                    steering.basename = name;
+                    steering.store(SteeringCommand::ChangeName);
                 } else if (message.substr(0, 4) == "goto") {
                     string year = message.substr(5, message.length() - 5);
-                    goto_year = std::stoi(year);
                     cout << "received goto year: " << year << endl;
-                    store(8, queue, mutex);
+                    steering.goto_year = std::stoi(year);;
+                    steering.store(SteeringCommand::GoTo);
                 } else if (message.substr(0, 4) == "sync") {
-                    store(9, queue, mutex);
+                    steering.store(SteeringCommand::SyncRuns);
                 } else
                     cout << "X" << message << "X" << rec_error << endl;
             }
@@ -802,10 +846,7 @@ int main(int argc, char *argv[])
     Date dd_current_end(dd_end);
     if (steering)
         dd_current_end = dd_start;
-    string load_name = "";
-    string base_name = "";
-    int goto_year;
-    int treatment_year;
+    Steering steering_obj;
     // don't process outputs at the end of year
     // when we went there using checkpointing
     bool after_loading_checkpoint = false;
@@ -823,17 +864,13 @@ int main(int argc, char *argv[])
         }
     }
     // setup client
-    std::mutex mutex;
-    std::queue<int> myqueue;
     tcp_client c;
     thread client_thread;
     string ip = steering ? string(opt.ip_address->answer) : "";
     int port = steering ? atoi(opt.port->answer): 0;
     if (steering) {
         use_treatments = true;
-        client_thread = thread(steering_client, ref(c), ip, port, ref(myqueue),
-                               ref(mutex), ref(load_name), ref(base_name),
-                               ref(goto_year), ref(treatment_year));
+        client_thread = thread(steering_client, ref(c), ip, port, ref(steering_obj));
     }
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
@@ -881,30 +918,26 @@ int main(int argc, char *argv[])
     // main simulation loop (weekly steps)
     int current_week = 0;
     while (true) {
-        int code = 0;
+        SteeringCommand cmd = SteeringCommand::None;
         {
-            std::lock_guard<std::mutex> lk(mutex);
-            if (!myqueue.empty()) {
-                code = myqueue.front();
-                cout << "queue size: " << myqueue.size() << endl;
-                myqueue.pop();
-            }
+            cmd = steering_obj.get();
         }
-
-        if (code != 0) {cout << "code " <<  code << endl;}
-        if (code == 1) { // play from
+        if (cmd != SteeringCommand::None){
+            cout << "code " <<  cmd << endl;
+        }
+        if (cmd == SteeringCommand::Play) { // play from
             dd_current_end = dd_end;
         }
-        else if (code == 2) { // pause
+        else if (cmd == SteeringCommand::Pause) { // pause
             dd_current_end = dd_current;
         }
-        else if (code == 3) { // 1 step forward
+        else if (cmd == SteeringCommand::StepForward) { // 1 step forward
             dd_current_end = dd_current.get_next_year_end();
             if (dd_current_end > dd_end)
                 dd_current_end = dd_end;
             cerr << "code == 3" << endl;
         }
-        else if (code == 4) { // 1 step back
+        else if (cmd == SteeringCommand::StepBack) { // 1 step back
             if (last_checkpoint - 1 >= 0) {
                 --last_checkpoint;
                 dd_current_end = date_checkpoint[last_checkpoint];
@@ -926,21 +959,21 @@ int main(int argc, char *argv[])
             // the simulation for this year
 //            continue;
         }
-        else if (code == 5) { // complete stop
+        else if (cmd == SteeringCommand::Stop) { // complete stop
             break;
         }
-        else if (code == 6) { // load treatments
-            cout << "loading treatments: " << load_name << endl;
-            treatments.clear_after_year(treatment_year);
-            DImg tr = DImg::from_grass_raster(load_name.c_str());
-            treatments.add_treatment(treatment_year, tr);
+        else if (cmd == SteeringCommand::LoadData) { // load treatments
+            cout << "loading treatments: " << steering_obj.load_data << endl;
+            treatments.clear_after_year(steering_obj.treatment_year);
+            DImg tr = DImg::from_grass_raster(steering_obj.load_data.c_str());
+            treatments.add_treatment(steering_obj.treatment_year, tr);
         }
-        else if (code == 7) { // base name changed
-            cout << "base name: " << base_name << endl;
+        else if (cmd == SteeringCommand::ChangeName) { // base name changed
+            cout << "base name: " << steering_obj.basename << endl;
         }
-        else if (code == 8) { // go to specific checkpoint
-            cout << "goto year: " << goto_year << endl;
-            unsigned goto_checkpoint = goto_year;
+        else if (cmd == SteeringCommand::GoTo) { // go to specific checkpoint
+            cout << "goto year: " << steering_obj.goto_year << endl;
+            unsigned goto_checkpoint = steering_obj.goto_year;
             if (goto_checkpoint < 0 || goto_checkpoint >= num_years) {/* do nothing */}
             else if (goto_checkpoint <= last_checkpoint) {
                 // go back
@@ -963,10 +996,10 @@ int main(int argc, char *argv[])
             }
             else {
                 // go forward
-                dd_current_end = Date(goto_year + dd_start.year() - 1, 12, 31);
+                dd_current_end = Date(steering_obj.goto_year + dd_start.year() - 1, 12, 31);
             }
         }
-        else if (code == 9) {
+        else if (cmd == SteeringCommand::SyncRuns) {
             // sync infectious and susceptible in all threads to selected one
             unsigned selected_run = 0;
             for (unsigned run = 0; run < num_runs; run++) {
