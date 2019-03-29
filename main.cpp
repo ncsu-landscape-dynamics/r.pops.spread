@@ -1167,6 +1167,8 @@ int main(int argc, char *argv[])
                     probability /= num_runs;
                     string name = generate_name(opt.probability_series->answer, dd_current);
                     probability.to_grass_raster(name.c_str());
+                    if (steering)
+                        c.send_data("output:" + name + '|');
                 }
                 if (mortality && opt.dead_series->answer) {
                     accumulated_dead += dead_in_current_year[0];
