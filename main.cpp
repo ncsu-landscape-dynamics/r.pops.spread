@@ -170,6 +170,17 @@ bool all_infected(Img& S_rast)
     return allInfected;
 }
 
+unsigned infected_sum(Img& infected)
+{
+    unsigned sum = 0;
+    for (unsigned j = 0; j < infected.rows(); j++) {
+        for (unsigned k = 0; k < infected.cols(); k++) {
+            sum += infected(j, k);
+        }
+    }
+    return sum;
+}
+
 std::vector<std::string> split(const std::string& s, char delimiter)
 {
     std::vector<std::string> tokens;
@@ -1001,7 +1012,20 @@ int main(int argc, char *argv[])
         }
         else if (cmd == SteeringCommand::SyncRuns) {
             // sync infectious and susceptible in all threads to selected one
+
             unsigned selected_run = 0;
+            // compute sums of infected for each run
+            std::vector<unsigned> sums;
+            for (unsigned run = 0; run < num_runs; run++) {
+                sums.push_back(infected_sum(inf_species_rasts[run]));
+            }
+            // select index of median (or above median)
+            auto sums2 = sums;
+            auto median_it = sums2.begin() + sums2.size() / 2;
+            std::nth_element(sums2.begin(), median_it, sums2.end());
+            auto itOfMedian = std::find(sums.begin(), sums.end(), *median_it);
+            selected_run = itOfMedian - sums.begin();
+
             for (unsigned run = 0; run < num_runs; run++) {
                 if (run != selected_run) {
                     sus_species_rasts[run] = sus_species_rasts[selected_run];
