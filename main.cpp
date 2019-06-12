@@ -883,6 +883,8 @@ int main(int argc, char *argv[])
             use_treatments = true;
         }
     }
+    // syncing runs
+    bool sync = false;
     // setup client
     tcp_client c;
     thread client_thread;
@@ -1021,18 +1023,20 @@ int main(int argc, char *argv[])
         }
         else if (cmd == SteeringCommand::SyncRuns) {
             // compute sums of infected for each run
+            /* This doesn't work well, because the exported ones are always first
+               since we can't know the average run in advance. When going back the syncing
+               would sync it to different year than was exported
+               We would have to decide based on first year (after syncing or starting)
+               and the use that selection till next syncing
+            */
+/*
             std::vector<unsigned> sums;
             for (unsigned run = 0; run < num_runs; run++) {
                 sums.push_back(sum_of_infected(inf_species_rasts[run]));
             }
             unsigned selected_run = select_run(sums);
-            // sync infectious and susceptible in all threads to selected one
-            for (unsigned run = 0; run < num_runs; run++) {
-                if (run != selected_run) {
-                    sus_species_rasts[run] = sus_species_rasts[selected_run];
-                    inf_species_rasts[run] = inf_species_rasts[selected_run];
-                }
-            }
+*/
+            sync = true;
         }
 
         string last_name = "";
@@ -1148,6 +1152,17 @@ int main(int argc, char *argv[])
                     for (unsigned run = 0; run < num_runs; run++) {
                         treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
                     }
+                }
+                if (sync) {
+                    unsigned selected_run = 0;
+                    // sync infectious and susceptible in all threads to selected one
+                    for (unsigned run = 0; run < num_runs; run++) {
+                        if (run != selected_run) {
+                            sus_species_rasts[run] = sus_species_rasts[selected_run];
+                            inf_species_rasts[run] = inf_species_rasts[selected_run];
+                        }
+                    }
+                    sync = false;
                 }
                 if ((opt.output_series->answer && !flg.series_as_single_run->answer)
                         || opt.stddev_series->answer) {
