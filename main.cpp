@@ -120,6 +120,21 @@ DispersalKernel radial_type_from_string(const string& text)
                                     " value '" + text +"' provided");
 }
 
+inline TreatmentApplication treatment_app_enum_from_string(const string& text)
+{
+    std::map<string, TreatmentApplication> mapping{
+        {"ratio_to_all", TreatmentApplication::Ratio},
+        {"all_infected_in_cell", TreatmentApplication::AllInfectedInCell}
+    };
+    try {
+        return mapping.at(text);
+    }
+    catch (const std::out_of_range&) {
+        throw std::invalid_argument("treatment_application_enum_from_string:"
+                                    " Invalid value '" + text +"' provided");
+    }
+}
+
 inline Season seasonality_from_option(const Option* opt)
 {
     return {std::atoi(opt->answers[0]), std::atoi(opt->answers[1])};
@@ -335,7 +350,7 @@ struct PoPSOptions
     struct Option *temperature_file;
     struct Option *start_time, *end_time, *seasonality;
     struct Option *step;
-    struct Option *treatments, *treatment_year;
+    struct Option *treatments, *treatment_year, *treatment_app;
     struct Option *reproductive_rate, *wind;
     struct Option *dispersal_kernel, *short_distance_scale, *long_distance_scale, *kappa, *percent_short_dispersal;
     struct Option *infected_to_dead_rate, *first_year_to_die;
@@ -453,6 +468,16 @@ int main(int argc, char *argv[])
     opt.treatment_year->description = _("Years when treatment rasters are applied");
     opt.treatment_year->required = NO;
     opt.treatment_year->guisection = _("Treatments");
+
+    opt.treatment_app = G_define_option();
+    opt.treatment_app->key = "treatment_application";
+    opt.treatment_app->type = TYPE_STRING;
+    opt.treatment_app->multiple = NO;
+    opt.treatment_app->description = _("Type of treatmet application");
+    opt.treatment_app->options = "ratio_to_all,all_infected_in_cell";
+    opt.treatment_app->required = NO;
+    opt.treatment_app->answer = const_cast<char*>("ratio_to_all");
+    opt.treatment_app->guisection = _("Treatments");
 
     opt.wind = G_define_option();
     opt.wind->type = TYPE_STRING;
@@ -709,7 +734,10 @@ int main(int argc, char *argv[])
     G_option_requires(opt.first_year_to_die, flg.mortality, NULL);
     G_option_requires_all(opt.dead_series, flg.mortality,
                           flg.series_as_single_run, NULL);
-    G_option_requires(opt.treatments, opt.treatment_year, NULL);
+    G_option_requires(opt.treatments,
+                      opt.treatment_year,
+                      opt.treatment_app,
+                      NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -874,7 +902,11 @@ int main(int argc, char *argv[])
     // treatments
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_year)){
         G_fatal_error(_("%s= and %s= must have the same number of values"), opt.treatments->key, opt.treatment_year->key);}
-    Treatments<Img, DImg> treatments;
+    // the default here should be never used
+    TreatmentApplication treatment_app = TreatmentApplication::Ratio;
+    if (opt.treatment_app->answer)
+        treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
+    Treatments<Img, DImg> treatments(treatment_app);
     bool use_treatments = false;
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_year->answers[i_t]; i_t++) {
