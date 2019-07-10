@@ -733,33 +733,17 @@ int main(int argc, char *argv[])
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     std::vector<unsigned> unresolved_steps;
+    std::vector<Date> unresolved_dates;
     unresolved_steps.reserve(max_weeks_in_year);
+    unresolved_dates.reserve(max_weeks_in_year);
 
     Date dd_current(dd_start);
 
     // main simulation loop (weekly or monthly steps)
     for (int current_step = 0; ; current_step++, step_type == "month" ? dd_current.increased_by_month() : dd_current.increased_by_week()) {
-        if (dd_current < dd_end)
-            if (season.month_in_season(dd_current.month()))
-                unresolved_steps.push_back(current_step);
-
-        // removal is out of sync with the actual runs but it does
-        // not matter as long as removal happends out of season
-        if (use_lethal_temperature
-                && dd_current.month() == lethal_temperature_month
-                && (dd_current.year() <= dd_end.year())) {
-            // to avoid problem with Jan 1 of the following year
-            // we explicitely check if we are in a valid year range
-            unsigned simulation_year = dd_current.year() - dd_start.year();
-            if (simulation_year >= actual_temperatures.size())
-                G_fatal_error(_("Not enough temperatures"));
-            #pragma omp parallel for num_threads(threads)
-            for (unsigned run = 0; run < num_runs; run++) {
-                sporulations[run].remove(inf_species_rasts[run],
-                                         sus_species_rasts[run],
-                                         actual_temperatures[simulation_year],
-                                         lethal_temperature_value);
-            }
+        if (dd_current < dd_end) {
+            unresolved_steps.push_back(current_step);
+            unresolved_dates.push_back(dd_current);
         }
 
         // if all the oaks are infected, then exit
@@ -774,6 +758,13 @@ int main(int argc, char *argv[])
         if ((step_type == "month" ? dd_current.is_last_month_of_year() : dd_current.is_last_week_of_year()) || dd_current >= dd_end) {
             if (!unresolved_steps.empty()) {
 
+                // to avoid problem with Jan 1 of the following year
+                // we explicitely check if we are in a valid year range
+                // TODO: will this ever happen here?
+                unsigned simulation_year = dd_current.year() - dd_start.year();
+                if (simulation_year >= actual_temperatures.size())
+                    G_fatal_error(_("Not enough temperatures"));
+
                 unsigned step_in_chunk = 0;
                 // get weather for all the steps in chunk
                 for (auto step : unresolved_steps) {
@@ -786,14 +777,27 @@ int main(int argc, char *argv[])
                 }
 
                 // stochastic simulation runs
+                bool lethality_done_this_year = false;
+
                 #pragma omp parallel for num_threads(threads)
                 for (unsigned run = 0; run < num_runs; run++) {
-                    unsigned step_in_chunk = 0;
                     // actual runs of the simulation for each step
-                    for (unsigned step : unresolved_steps) {
+                    for (unsigned step = 0; step < unresolved_steps.size(); ++step) {
+                        Date date = unresolved_dates[step];
+                        // removal of dispersers
+                        if (use_lethal_temperature && !lethality_done_this_year
+                                && date.month() == lethal_temperature_month) {
+                            sporulations[run].remove(inf_species_rasts[run],
+                                                     sus_species_rasts[run],
+                                                     actual_temperatures[simulation_year],
+                                                     lethal_temperature_value);
+                            lethality_done_this_year = true;
+                        }
+                        if (!season.month_in_season(date.month()))
+                            continue;
                         sporulations[run].generate(inf_species_rasts[run],
                                                    weather,
-                                                   weather_coefficients[step_in_chunk],
+                                                   weather_coefficients[step],
                                                    spore_rate);
 
                         auto current_age = dd_current.year() - dd_start.year();
@@ -803,14 +807,14 @@ int main(int argc, char *argv[])
                                                    lvtree_rast,
                                                    outside_spores[run],
                                                    weather,
-                                                   weather_coefficients[step_in_chunk],
+                                                   weather_coefficients[step],
                                                    rtype, scale1,
                                                    gamma, scale2,
                                                    pwdir, kappa);
-                        ++step_in_chunk;
                     }
                 }
                 unresolved_steps.clear();
+                unresolved_dates.clear();
             }
             if (mortality && (dd_current.year() <= dd_end.year())) {
                 // to avoid problem with Jan 1 of the following year
