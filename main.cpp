@@ -604,7 +604,7 @@ int main(int argc, char *argv[])
     // difference in years (in dates) but including both years
     unsigned num_years = dd_end.year() - dd_start.year() + 1;
 
-    string step = opt.step->answer;
+    string step_type = opt.step->answer;
 
     // mortality
     bool mortality = false;
@@ -684,6 +684,8 @@ int main(int argc, char *argv[])
         use_lethal_temperature = true;
     }
 
+    // TODO: limit this by the actual max steps
+    // weeks are currently the worst case
     const unsigned max_weeks_in_year = 53;
     std::vector<DImg> weather_coefficients;
     if (weather)
@@ -730,16 +732,16 @@ int main(int argc, char *argv[])
         sporulations.emplace_back(seed_value++, I_species_rast, window.ew_res, window.ns_res);
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
-    std::vector<unsigned> unresolved_weeks;
-    unresolved_weeks.reserve(max_weeks_in_year);
+    std::vector<unsigned> unresolved_steps;
+    unresolved_steps.reserve(max_weeks_in_year);
 
     Date dd_current(dd_start);
 
-    // main simulation loop (weekly steps)
-    for (int current_week = 0; ; current_week++, step == "month" ? dd_current.increased_by_month() : dd_current.increased_by_week()) {
+    // main simulation loop (weekly or monthly steps)
+    for (int current_step = 0; ; current_step++, step_type == "month" ? dd_current.increased_by_month() : dd_current.increased_by_week()) {
         if (dd_current < dd_end)
             if (season.month_in_season(dd_current.month()))
-                unresolved_weeks.push_back(current_week);
+                unresolved_steps.push_back(current_step);
 
         // removal is out of sync with the actual runs but it does
         // not matter as long as removal happends out of season
@@ -767,29 +769,31 @@ int main(int argc, char *argv[])
         }
 
         // check whether the spore occurs in the month
-        if ((step == "month" ? dd_current.is_last_month_of_year() : dd_current.is_last_week_of_year()) || dd_current >= dd_end) {
-            if (!unresolved_weeks.empty()) {
+        // At the end of the year, run simulation for all unresolved
+        // steps in one chunk.
+        if ((step_type == "month" ? dd_current.is_last_month_of_year() : dd_current.is_last_week_of_year()) || dd_current >= dd_end) {
+            if (!unresolved_steps.empty()) {
 
-                unsigned week_in_chunk = 0;
-                // get weather for all the weeks
-                for (auto week : unresolved_weeks) {
+                unsigned step_in_chunk = 0;
+                // get weather for all the steps in chunk
+                for (auto step : unresolved_steps) {
                     if (weather) {
-                        DImg moisture(DImg::from_grass_raster(moisture_names[week].c_str()));
-                        DImg temperature(DImg::from_grass_raster(temperature_names[week].c_str()));
-                        weather_coefficients[week_in_chunk] = moisture * temperature;
+                        DImg moisture(DImg::from_grass_raster(moisture_names[step].c_str()));
+                        DImg temperature(DImg::from_grass_raster(temperature_names[step].c_str()));
+                        weather_coefficients[step_in_chunk] = moisture * temperature;
                     }
-                    ++week_in_chunk;
+                    ++step_in_chunk;
                 }
 
                 // stochastic simulation runs
                 #pragma omp parallel for num_threads(threads)
                 for (unsigned run = 0; run < num_runs; run++) {
-                    unsigned week_in_chunk = 0;
-                    // actual runs of the simulation per week
-                    for (unsigned week : unresolved_weeks) {
+                    unsigned step_in_chunk = 0;
+                    // actual runs of the simulation for each step
+                    for (unsigned step : unresolved_steps) {
                         sporulations[run].generate(inf_species_rasts[run],
                                                    weather,
-                                                   weather_coefficients[week_in_chunk],
+                                                   weather_coefficients[step_in_chunk],
                                                    spore_rate);
 
                         auto current_age = dd_current.year() - dd_start.year();
@@ -799,14 +803,14 @@ int main(int argc, char *argv[])
                                                    lvtree_rast,
                                                    outside_spores[run],
                                                    weather,
-                                                   weather_coefficients[week_in_chunk],
+                                                   weather_coefficients[step_in_chunk],
                                                    rtype, scale1,
                                                    gamma, scale2,
                                                    pwdir, kappa);
-                        ++week_in_chunk;
+                        ++step_in_chunk;
                     }
                 }
-                unresolved_weeks.clear();
+                unresolved_steps.clear();
             }
             if (mortality && (dd_current.year() <= dd_end.year())) {
                 // to avoid problem with Jan 1 of the following year
