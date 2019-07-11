@@ -777,10 +777,9 @@ int main(int argc, char *argv[])
                 }
 
                 // stochastic simulation runs
-                bool lethality_done_this_year = false;
-
                 #pragma omp parallel for num_threads(threads)
                 for (unsigned run = 0; run < num_runs; run++) {
+                    bool lethality_done_this_year = false;
                     // actual runs of the simulation for each step
                     for (unsigned step = 0; step < unresolved_steps.size(); ++step) {
                         Date date = unresolved_dates[step];
