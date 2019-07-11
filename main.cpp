@@ -179,7 +179,9 @@ struct PoPSOptions
     struct Option *temperature_file;
     struct Option *start_time, *end_time, *seasonality;
     struct Option *step;
-    struct Option *treatments, *treatment_year, *treatment_app;
+    struct Option *treatments;
+    struct Option *treatment_year, *treatment_month;
+    struct Option *treatment_app;
     struct Option *reproductive_rate, *wind;
     struct Option *dispersal_kernel, *short_distance_scale, *long_distance_scale, *kappa, *percent_short_dispersal;
     struct Option *infected_to_dead_rate, *first_year_to_die;
@@ -290,6 +292,17 @@ int main(int argc, char *argv[])
     opt.treatment_year->description = _("Years when treatment rasters are applied");
     opt.treatment_year->required = NO;
     opt.treatment_year->guisection = _("Treatments");
+
+    opt.treatment_month = G_define_option();
+    opt.treatment_month->type = TYPE_INTEGER;
+    opt.treatment_month->key = "treatment_month";
+    opt.treatment_month->label =
+        _("Month when the treatment is applied");
+    opt.treatment_month->description =
+        _("Treatment is applied at the beginning of the month");
+    // TODO: implement this as multiple or a season
+    opt.treatment_month->required = NO;
+    opt.treatment_month->guisection = _("Treatments");
 
     opt.treatment_app = G_define_option();
     opt.treatment_app->key = "treatment_application";
@@ -543,10 +556,13 @@ int main(int argc, char *argv[])
     G_option_requires(opt.first_year_to_die, flg.mortality, NULL);
     G_option_requires_all(opt.dead_series, flg.mortality,
                           flg.series_as_single_run, NULL);
-    G_option_requires(opt.treatments,
-                      opt.treatment_year,
-                      opt.treatment_app,
-                      NULL);
+    // TODO: requires_all does not understand the default?
+    // treatment_app needs to be removed from here and check separately
+    G_option_requires_all(opt.treatments,
+                          opt.treatment_year,
+                          opt.treatment_month,
+                          opt.treatment_app,
+                          NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -692,6 +708,7 @@ int main(int argc, char *argv[])
         weather_coefficients.resize(max_weeks_in_year);
 
     // treatments
+    int treatment_month = 0;  // invalid value for month
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_year)){
         G_fatal_error(_("%s= and %s= must have the same number of values"), opt.treatments->key, opt.treatment_year->key);}
     // the default here should be never used
@@ -707,6 +724,8 @@ int main(int argc, char *argv[])
             use_treatments = true;
         }
     }
+    if (opt.treatment_month->answer)
+        treatment_month = std::stod(opt.treatment_month->answer);
 
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
@@ -780,6 +799,7 @@ int main(int argc, char *argv[])
                 #pragma omp parallel for num_threads(threads)
                 for (unsigned run = 0; run < num_runs; run++) {
                     bool lethality_done_this_year = false;
+                    bool treatments_done_this_year = false;
                     // actual runs of the simulation for each step
                     for (unsigned step = 0; step < unresolved_steps.size(); ++step) {
                         Date date = unresolved_dates[step];
@@ -791,6 +811,24 @@ int main(int argc, char *argv[])
                                                      actual_temperatures[simulation_year],
                                                      lethal_temperature_value);
                             lethality_done_this_year = true;
+                        }
+                        if (use_treatments && !treatments_done_this_year
+                                && date.month() == treatment_month) {
+                            treatments.apply_treatment_host(date.year(), inf_species_rasts[run], sus_species_rasts[run]);
+                            if (mortality) {
+                                // same conditions as the mortality code below
+                                // TODO: make the mortality timing available as a separate function in the library
+                                // or simply go over all valid cohorts
+                                unsigned simulation_year = dd_current.year() - dd_start.year();
+                                if (simulation_year >= first_year_to_die - 1) {
+                                    auto max_index = simulation_year - (first_year_to_die - 1);
+                                    for (unsigned age = 0; age <= max_index; age++) {
+                                        if (use_treatments)
+                                            treatments.apply_treatment_infected(dd_current.year(), inf_species_cohort_rasts[run][age]);
+                                    }
+                                }
+                            }
+                            treatments_done_this_year = true;
                         }
                         if (!season.month_in_season(date.month()))
                             continue;
@@ -816,6 +854,7 @@ int main(int argc, char *argv[])
                 unresolved_dates.clear();
             }
             if (mortality && (dd_current.year() <= dd_end.year())) {
+                // TODO: use the library code to handle mortality
                 // to avoid problem with Jan 1 of the following year
                 // we explicitely check if we are in a valid year range
                 unsigned simulation_year = dd_current.year() - dd_start.year();
@@ -839,16 +878,9 @@ int main(int argc, char *argv[])
                             Img dead_in_cohort = infected_to_dead_rate * inf_species_cohort_rasts[run][age];
                             inf_species_cohort_rasts[run][age] -= dead_in_cohort;
                             dead_in_current_year[run] += dead_in_cohort;
-                            if (use_treatments)
-                                treatments.apply_treatment_infected(dd_current.year(), inf_species_cohort_rasts[run][age]);
                         }
                         inf_species_rasts[run] -= dead_in_current_year[run];
                     }
-                }
-            }
-            if (use_treatments && (dd_current.year() <= dd_end.year())) {
-                for (unsigned run = 0; run < num_runs; run++) {
-                    treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
                 }
             }
             if ((opt.output_series->answer && !flg.series_as_single_run->answer)
