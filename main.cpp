@@ -890,9 +890,13 @@ int main(int argc, char *argv[])
                 // date is always end of the year, even for seasonal spread
                 string name = generate_name(opt.output_series->answer, dd_current);
                 if (flg.series_as_single_run->answer)
-                    raster_to_grass(inf_species_rasts[0], name);
+                    raster_to_grass(inf_species_rasts[0], name,
+                            "Occurrence from a single stochastic run",
+                            dd_current);
                 else
-                    raster_to_grass(I_species_rast, name);
+                    raster_to_grass(I_species_rast, name,
+                                    "Average occurrence from a all stochastic runs",
+                                    dd_current);
             }
             if (opt.stddev_series->answer) {
                 Img stddev(I_species_rast, 0);
@@ -903,13 +907,17 @@ int main(int argc, char *argv[])
                 stddev /= num_runs;
                 stddev.for_each([](int& a){a = std::sqrt(a);});
                 string name = generate_name(opt.stddev_series->answer, dd_current);
-                raster_to_grass(stddev, name);
+                string title = "Standard deviation of average"
+                               " occurrence from a all stochastic runs";
+                raster_to_grass(stddev, name, title, dd_current);
             }
             if (mortality && opt.dead_series->answer) {
                 accumulated_dead += dead_in_current_year[0];
                 if (opt.dead_series->answer) {
                     string name = generate_name(opt.dead_series->answer, dd_current);
-                    raster_to_grass(accumulated_dead, name);
+                    raster_to_grass(accumulated_dead, name,
+                                    "Number of dead hosts to date",
+                                    dd_current);
                 }
             }
         }
@@ -927,7 +935,9 @@ int main(int argc, char *argv[])
     }
     if (opt.output->answer) {
         // write final result
-        raster_to_grass(I_species_rast, opt.output->answer);
+        raster_to_grass(I_species_rast, opt.output->answer,
+                        "Average occurrence from a all stochastic runs",
+                        dd_current);
     }
     if (opt.stddev->answer) {
         Img stddev(I_species_rast, 0);
@@ -937,7 +947,8 @@ int main(int argc, char *argv[])
         }
         stddev /= num_runs;
         stddev.for_each([](int& a){a = std::sqrt(a);});
-        raster_to_grass(stddev, opt.stddev->answer);
+        raster_to_grass(stddev, opt.stddev->answer,
+                        opt.stddev->description, dd_current);
     }
     if (opt.output_probability->answer) {
         Img probability(I_species_rast, 0);
@@ -948,7 +959,8 @@ int main(int argc, char *argv[])
         }
         probability *= 100;  // prob from 0 to 100 (using ints)
         probability /= num_runs;
-        raster_to_grass(probability, opt.output_probability->answer);
+        raster_to_grass(probability, opt.output_probability->answer,
+                        "Probability of occurrence", dd_current);
     }
     if (opt.outside_spores->answer) {
         Cell_head region;

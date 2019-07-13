@@ -17,6 +17,7 @@
 #define GRASTER_HPP
 
 #include "pops/raster.hpp"
+#include "pops/date.hpp"
 
 extern "C" {
 #include <grass/gis.h>
@@ -73,6 +74,9 @@ inline void grass_raster_put_row(int fd, CELL* buffer)
  * ```
  * raster_from_grass<double>(name)
  * ````
+ *
+ * Given the types of GRASS GIS raster maps, it supports only
+ * int, float, and double (CELL, FCELL, and DCELL).
  */
 template<typename Number>
 inline pops::Raster<Number> raster_from_grass(const char* name)
@@ -100,11 +104,13 @@ inline pops::Raster<Number> raster_from_grass(const std::string& name)
 
 /** Write a Raster to a GRASS GIS raster map.
  *
- * When used the template is resolved based on the parameter.
+ * When used, the template is resolved based on the parameter.
  */
 template<typename Number>
 void inline raster_to_grass(pops::Raster<Number> raster,
-                            const char* name)
+                            const char* name,
+                            const char* title = nullptr,
+                            struct TimeStamp* timestamp = nullptr)
 {
     Number* data = raster.data();
     unsigned rows = raster.rows();
@@ -114,14 +120,60 @@ void inline raster_to_grass(pops::Raster<Number> raster,
     for (unsigned i = 0; i < rows; i++)
         grass_raster_put_row(fd, data + (i * cols));
     Rast_close(fd);
+
+    // writing map title and history
+    if (title)
+        Rast_put_cell_title(name, title);
+    struct History history;
+    Rast_short_history(name, "raster", &history);
+    Rast_command_history(&history);
+    Rast_write_history(name, &history);
+    if (timestamp)
+        G_write_raster_timestamp(name, timestamp);
+    else
+        G_remove_raster_timestamp(name);
+    // we remove timestamp, because overwriting does not remove it
+    // it is a no-op when it does not exist
 }
 
-/** Overload of raster_to_grass(pops::Raster<Number>, const char *) */
+/** Overload of raster_to_grass() */
 template<typename Number>
 inline void raster_to_grass(pops::Raster<Number> raster,
                             const std::string& name)
 {
     raster_to_grass<Number>(raster, name.c_str());
+}
+
+/** Overload of raster_to_grass() */
+template<typename Number>
+inline void raster_to_grass(pops::Raster<Number> raster,
+                            const std::string& name,
+                            const std::string& title)
+{
+    raster_to_grass<Number>(raster, name.c_str(), title.c_str());
+}
+
+/** Overload of raster_to_grass()
+ *
+ * Converts PoPS date to GRASS GIS timestamp.
+ */
+template<typename Number>
+inline void raster_to_grass(pops::Raster<Number> raster,
+                            const std::string& name,
+                            const std::string& title,
+                            const pops::Date& date)
+{
+    struct TimeStamp timestamp;
+    struct DateTime date_time;
+    datetime_set_type(&date_time, DATETIME_ABSOLUTE,
+                      DATETIME_YEAR, DATETIME_DAY, 0);
+    datetime_set_year(&date_time, date.year());
+    datetime_set_month(&date_time, date.month());
+    datetime_set_day(&date_time, date.day());
+    G_init_timestamp(&timestamp);
+    G_set_timestamp(&timestamp, &date_time);
+    raster_to_grass<Number>(raster, name.c_str(), title.c_str(),
+                            &timestamp);
 }
 
 // these two determine the types of numbers used to represent the
