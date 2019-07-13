@@ -4,6 +4,15 @@ All notable changes to this project should be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 2018-09-18 - July 2019 improvements
+
+### Changed
+
+- The Raster class now allows access to internal structures which is
+  now used for initialization and saving of raster maps. (Vaclav Petras)
+ * The ability to change the raster types with one line is preserved.
+ * FCELL (float) rasters are now (properly) supported.
+
 ## 2018-09-18 - Update to the next generation of PoPS library
 
 ### Changed

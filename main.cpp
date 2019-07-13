@@ -15,9 +15,7 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-
-// activate support for GRASS GIS in the PoPS library
-#define POPS_RASTER_WITH_GRASS_GIS
+#include "graster.hpp"
 
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
@@ -48,10 +46,6 @@ using std::endl;
 
 using namespace pops;
 
-// TODO: update names
-// convenient definitions, names for backwards compatibility
-typedef Raster<int> Img;
-typedef Raster<double> DImg;
 // TODO: for backwards compatibility, update eventually
 typedef Simulation<Img, DImg> Sporulation;
 
@@ -657,13 +651,13 @@ int main(int argc, char *argv[])
     }
 
     // read the suspectible UMCA raster image
-    Img species_rast = Img::from_grass_raster(opt.host->answer);
+    Img species_rast = raster_from_grass_integer(opt.host->answer);
 
     // read the living trees raster image
-    Img lvtree_rast = Img::from_grass_raster(opt.total_plants->answer);
+    Img lvtree_rast = raster_from_grass_integer(opt.total_plants->answer);
 
     // read the initial infected oaks image
-    Img I_species_rast = Img::from_grass_raster(opt.infected->answer);
+    Img I_species_rast = raster_from_grass_integer(opt.infected->answer);
 
     // create the initial suspectible oaks image
     Img S_species_rast = species_rast - I_species_rast;
@@ -695,7 +689,7 @@ int main(int argc, char *argv[])
         file_exists_or_fatal_error(opt.temperature_file);
         read_names(actual_temperature_names, opt.temperature_file->answer);
         for (string name : actual_temperature_names) {
-            actual_temperatures.push_back(DImg::from_grass_raster(name.c_str()));
+            actual_temperatures.push_back(raster_from_grass_float(name));
         }
         use_lethal_temperature = true;
     }
@@ -719,7 +713,7 @@ int main(int argc, char *argv[])
     bool use_treatments = false;
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_year->answers[i_t]; i_t++) {
-            DImg tr = DImg::from_grass_raster(opt.treatments->answers[i_t]);
+            DImg tr = raster_from_grass_float(opt.treatments->answers[i_t]);
             treatments.add_treatment(std::stoul(opt.treatment_year->answers[i_t]), tr);
             use_treatments = true;
         }
@@ -788,8 +782,8 @@ int main(int argc, char *argv[])
                 // get weather for all the steps in chunk
                 for (auto step : unresolved_steps) {
                     if (weather) {
-                        DImg moisture(DImg::from_grass_raster(moisture_names[step].c_str()));
-                        DImg temperature(DImg::from_grass_raster(temperature_names[step].c_str()));
+                        DImg moisture(raster_from_grass_float(moisture_names[step]));
+                        DImg temperature(raster_from_grass_float(temperature_names[step]));
                         weather_coefficients[step_in_chunk] = moisture * temperature;
                     }
                     ++step_in_chunk;
@@ -896,9 +890,9 @@ int main(int argc, char *argv[])
                 // date is always end of the year, even for seasonal spread
                 string name = generate_name(opt.output_series->answer, dd_current);
                 if (flg.series_as_single_run->answer)
-                    inf_species_rasts[0].to_grass_raster(name.c_str());
+                    raster_to_grass(inf_species_rasts[0], name);
                 else
-                    I_species_rast.to_grass_raster(name.c_str());
+                    raster_to_grass(I_species_rast, name);
             }
             if (opt.stddev_series->answer) {
                 Img stddev(I_species_rast, 0);
@@ -909,13 +903,13 @@ int main(int argc, char *argv[])
                 stddev /= num_runs;
                 stddev.for_each([](int& a){a = std::sqrt(a);});
                 string name = generate_name(opt.stddev_series->answer, dd_current);
-                stddev.to_grass_raster(name.c_str());
+                raster_to_grass(stddev, name);
             }
             if (mortality && opt.dead_series->answer) {
                 accumulated_dead += dead_in_current_year[0];
                 if (opt.dead_series->answer) {
                     string name = generate_name(opt.dead_series->answer, dd_current);
-                    accumulated_dead.to_grass_raster(name.c_str());
+                    raster_to_grass(accumulated_dead, name);
                 }
             }
         }
@@ -933,7 +927,7 @@ int main(int argc, char *argv[])
     }
     if (opt.output->answer) {
         // write final result
-        I_species_rast.to_grass_raster(opt.output->answer);
+        raster_to_grass(I_species_rast, opt.output->answer);
     }
     if (opt.stddev->answer) {
         Img stddev(I_species_rast, 0);
@@ -943,7 +937,7 @@ int main(int argc, char *argv[])
         }
         stddev /= num_runs;
         stddev.for_each([](int& a){a = std::sqrt(a);});
-        stddev.to_grass_raster(opt.stddev->answer);
+        raster_to_grass(stddev, opt.stddev->answer);
     }
     if (opt.output_probability->answer) {
         Img probability(I_species_rast, 0);
@@ -954,7 +948,7 @@ int main(int argc, char *argv[])
         }
         probability *= 100;  // prob from 0 to 100 (using ints)
         probability /= num_runs;
-        probability.to_grass_raster(opt.output_probability->answer);
+        raster_to_grass(probability, opt.output_probability->answer);
     }
     if (opt.outside_spores->answer) {
         Cell_head region;
