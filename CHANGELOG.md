@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
  * FCELL (float) rasters are now (properly) supported.
 - Output rasters and vector now have metadata with the command used,
   simulation timestamp, and title. (Vaclav Petras)
+- The remaining susceptible hosts check is now faster. (Vaclav Petras)
 
 ## 2018-09-18 - Update to the next generation of PoPS library
 

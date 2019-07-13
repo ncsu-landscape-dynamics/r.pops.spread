@@ -153,16 +153,14 @@ std::vector<double> weather_file_to_list(const string& filename)
     return output;
 }
 
-bool all_infected(Img& S_rast)
+/** Checks if there are any susceptible hosts left */
+bool all_infected(Img& susceptible)
 {
-    bool allInfected = true;
-    for (int j = 0; j < S_rast.rows(); j++) {
-        for (int k = 0; k < S_rast.cols(); k++) {
-            if (S_rast(j, k) > 0)
-                allInfected = false;
-        }
-    }
-    return allInfected;
+    for (unsigned j = 0; j < susceptible.rows(); j++)
+        for (unsigned k = 0; k < susceptible.cols(); k++)
+            if (susceptible(j, k) > 0)
+                return false;
+    return true;
 }
 
 struct PoPSOptions
