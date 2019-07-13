@@ -12,8 +12,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
   now used for initialization and saving of raster maps. (Vaclav Petras)
  * The ability to change the raster types with one line is preserved.
  * FCELL (float) rasters are now (properly) supported.
-- Output rasters now have metadata with the command used, simulation
-  timestamp, and title. (Vaclav Petras)
+- Output rasters and vector now have metadata with the command used,
+  simulation timestamp, and title. (Vaclav Petras)
 
 ## 2018-09-18 - Update to the next generation of PoPS library
 

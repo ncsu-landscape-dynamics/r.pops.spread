@@ -987,8 +987,17 @@ int main(int argc, char *argv[])
                 Vect_write_line(&Map, GV_POINT, Points, Cats);
             }
         }
+        Vect_hist_command(&Map);
+        Vect_set_map_name(
+                    &Map,
+                    "Dispersers escaped outside computational region");
+        Vect_write_header(&Map);
         Vect_build(&Map);
         Vect_close(&Map);
+        struct TimeStamp timestamp;
+        date_to_grass(dd_current, &timestamp);
+        G_write_vector_timestamp(opt.outside_spores->answer,
+                                 NULL, &timestamp);
         Vect_destroy_line_struct(Points);
         Vect_destroy_cats_struct(Cats);
     }

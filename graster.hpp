@@ -27,6 +27,18 @@ extern "C" {
 
 #include <string>
 
+void date_to_grass(pops::Date date, struct TimeStamp* timestamp)
+{
+    struct DateTime date_time;
+    datetime_set_type(&date_time, DATETIME_ABSOLUTE,
+                      DATETIME_YEAR, DATETIME_DAY, 0);
+    datetime_set_year(&date_time, date.year());
+    datetime_set_month(&date_time, date.month());
+    datetime_set_day(&date_time, date.day());
+    G_init_timestamp(timestamp);
+    G_set_timestamp(timestamp, &date_time);
+}
+
 // The right C function to call in function templates is picked using
 // the following overloads based on the type of buffer.
 
@@ -164,14 +176,7 @@ inline void raster_to_grass(pops::Raster<Number> raster,
                             const pops::Date& date)
 {
     struct TimeStamp timestamp;
-    struct DateTime date_time;
-    datetime_set_type(&date_time, DATETIME_ABSOLUTE,
-                      DATETIME_YEAR, DATETIME_DAY, 0);
-    datetime_set_year(&date_time, date.year());
-    datetime_set_month(&date_time, date.month());
-    datetime_set_day(&date_time, date.day());
-    G_init_timestamp(&timestamp);
-    G_set_timestamp(&timestamp, &date_time);
+    date_to_grass(date, &timestamp);
     raster_to_grass<Number>(raster, name.c_str(), title.c_str(),
                             &timestamp);
 }
