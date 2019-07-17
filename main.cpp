@@ -773,7 +773,8 @@ int main(int argc, char *argv[])
                 // we explicitely check if we are in a valid year range
                 // TODO: will this ever happen here?
                 unsigned simulation_year = dd_current.year() - dd_start.year();
-                if (simulation_year >= actual_temperatures.size())
+                if (use_lethal_temperature
+                        && simulation_year >= actual_temperatures.size())
                     G_fatal_error(_("Not enough temperatures"));
 
                 unsigned step_in_chunk = 0;
