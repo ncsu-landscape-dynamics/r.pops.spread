@@ -36,7 +36,7 @@ The PoPS library is in a submodule, so use `--recursive` when cloning,
 for example:
 
 ```
-git clone --recursive git@github.com:ncsu-landscape-dynamics/r.spread.pest.git
+git clone --recursive git@github.com:ncsu-landscape-dynamics/r.pops.spread.git
 ```
 
 If you have already cloned, you can obtain the submodules using:
