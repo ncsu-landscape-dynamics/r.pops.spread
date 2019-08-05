@@ -181,7 +181,7 @@ struct PoPSOptions
     struct Option *seed, *runs, *threads;
     struct Option *output, *output_series;
     struct Option *stddev, *stddev_series;
-    struct Option *output_probability;
+    struct Option *probability, *probability_series;
 };
 
 struct PoPSFlags
@@ -258,11 +258,17 @@ int main(int argc, char *argv[])
         _("The first run will be used for output instead of average");
     flg.series_as_single_run->guisection = _("Output");
 
-    opt.output_probability = G_define_standard_option(G_OPT_R_OUTPUT);
-    opt.output_probability->key = "probability";
-    opt.output_probability->description = _("Infection probability (in percent)");
-    opt.output_probability->required = NO;
-    opt.output_probability->guisection = _("Output");
+    opt.probability = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.probability->key = "probability";
+    opt.probability->description = _("Infection probability (in percent)");
+    opt.probability->required = NO;
+    opt.probability->guisection = _("Output");
+
+    opt.probability_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
+    opt.probability_series->key = "probability_series";
+    opt.probability_series->description = _("Basename for output series of probabilities");
+    opt.probability_series->required = NO;
+    opt.probability_series->guisection = _("Output");
 
     opt.outside_spores = G_define_standard_option(G_OPT_V_OUTPUT);
     opt.outside_spores->key = "outside_spores";
@@ -531,7 +537,7 @@ int main(int argc, char *argv[])
     opt.threads->options = "1-";
     opt.threads->guisection = _("Randomness");
 
-    G_option_required(opt.output, opt.output_series, opt.output_probability,
+    G_option_required(opt.output, opt.output_series, opt.probability, opt.probability_series,
                       opt.outside_spores, NULL);
 
     G_option_exclusive(opt.seed, flg.generate_seed, NULL);
@@ -910,6 +916,19 @@ int main(int argc, char *argv[])
                                " occurrence from a all stochastic runs";
                 raster_to_grass(stddev, name, title, dd_current);
             }
+            if (opt.probability_series->answer) {
+                Img probability(I_species_rast, 0);
+                for (unsigned i = 0; i < num_runs; i++) {
+                    Img tmp = inf_species_rasts[i];
+                    tmp.for_each([](int& a){a = bool(a);});
+                    probability += tmp;
+                }
+                probability *= 100;  // prob from 0 to 100 (using ints)
+                probability /= num_runs;
+                string name = generate_name(opt.probability_series->answer, dd_current);
+                string title = "Probability of occurrence";
+                raster_to_grass(probability, name, title, dd_current);
+            }
             if (mortality && opt.dead_series->answer) {
                 accumulated_dead += dead_in_current_year[0];
                 if (opt.dead_series->answer) {
@@ -949,7 +968,7 @@ int main(int argc, char *argv[])
         raster_to_grass(stddev, opt.stddev->answer,
                         opt.stddev->description, dd_current);
     }
-    if (opt.output_probability->answer) {
+    if (opt.probability->answer) {
         Img probability(I_species_rast, 0);
         for (unsigned i = 0; i < num_runs; i++) {
             Img tmp = inf_species_rasts[i];
@@ -958,7 +977,7 @@ int main(int argc, char *argv[])
         }
         probability *= 100;  // prob from 0 to 100 (using ints)
         probability /= num_runs;
-        raster_to_grass(probability, opt.output_probability->answer,
+        raster_to_grass(probability, opt.probability->answer,
                         "Probability of occurrence", dd_current);
     }
     if (opt.outside_spores->answer) {
