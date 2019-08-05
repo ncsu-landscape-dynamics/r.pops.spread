@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Changed
 
+- The Raster class now allows access to internal structures which is
+  now used for initialization and saving of raster maps. (Vaclav Petras)
+ * The ability to change the raster types with one line is preserved.
+ * FCELL (float) rasters are now (properly) supported.
+- Output rasters and vector now have metadata with the command used,
+  simulation timestamp, and title. (Vaclav Petras)
+- The remaining susceptible hosts check is now faster. (Vaclav Petras)
+
+## 2018-09-18 - Update to the next generation of PoPS library
+
+### Changed
+
 - The direct support for reading NetCDF removed from the code (Vaclav Petras)
 - Weather coefficient value input removed (Vaclav Petras)
  - Not considered useful enough to keep around, can be replaced by
@@ -194,4 +206,3 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
   (Vaclav Petras)
 - Copy of GDAL code was removed from the repository, using system GDAL
   includes now. (Vaclav Petras)
-
