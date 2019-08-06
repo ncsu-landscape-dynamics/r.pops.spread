@@ -1020,9 +1020,6 @@ int main(int argc, char *argv[])
                     unresolved_steps.clear();
                     cerr << "year (sback, normal): " << dd_current << endl;
                     cerr << "check point date: " << date_checkpoint[last_checkpoint] << endl;
-                    if (use_treatments) {
-                        treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
-                    }
                 }
                 after_loading_checkpoint = true;
             }
@@ -1058,10 +1055,10 @@ int main(int argc, char *argv[])
                     inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
                     current_step = step_checkpoint[goto_checkpoint];
                     // first checkpoint (1/1/year) is beginning, so we don't want to apply treatments
-                    if (use_treatments && goto_checkpoint != 0) {
-                        cout << "applying treatments " << dd_current.year() << endl;
-                        treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
-                    }
+//                    if (use_treatments && goto_checkpoint != 0) {
+//                        cout << "applying treatments " << dd_current.year() << endl;
+//                        treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
+//                    }
                 }
                 after_loading_checkpoint = true;
             }
