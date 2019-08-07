@@ -21,6 +21,7 @@
 #include "pops/raster.hpp"
 #include "pops/simulation.hpp"
 #include "pops/treatments.hpp"
+#include "pops/postprocessing.hpp"
 
 extern "C" {
 #include <grass/gis.h>
@@ -36,6 +37,7 @@ extern "C" {
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cmath>
 
 #include <sys/stat.h>
 
@@ -182,6 +184,7 @@ struct PoPSOptions
     struct Option *output, *output_series;
     struct Option *stddev, *stddev_series;
     struct Option *probability, *probability_series;
+    struct Option *spread_rate_output;
 };
 
 struct PoPSFlags
@@ -275,6 +278,13 @@ int main(int argc, char *argv[])
     opt.outside_spores->description = _("Output vector map of spores or pest units outside of modeled area");
     opt.outside_spores->required = NO;
     opt.outside_spores->guisection = _("Output");
+
+    opt.spread_rate_output = G_define_standard_option(G_OPT_F_OUTPUT);
+    opt.spread_rate_output->key = "spread_rate_output";
+    opt.spread_rate_output->description =
+        _("Output CSV file containg yearly spread rate in N, S, E, W directions");
+    opt.spread_rate_output->required = NO;
+    opt.spread_rate_output->guisection = _("Output");
 
     opt.treatments = G_define_standard_option(G_OPT_R_INPUT);
     opt.treatments->key = "treatments";
@@ -725,6 +735,12 @@ int main(int argc, char *argv[])
     if (opt.treatment_month->answer)
         treatment_month = std::stod(opt.treatment_month->answer);
 
+    std::vector<std::vector<bbox_float>> spread_rate_table(num_years, std::vector<bbox_float>(num_runs));
+    //std::vector<bbox_float> spread_rate_table(num_years);
+    std::vector<bbox_int> spread_bboxes(num_runs);
+    for (unsigned i = 0; i < num_runs; ++i)
+        spread_bboxes[i] = infection_boundary(I_species_rast);
+
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
@@ -882,6 +898,17 @@ int main(int argc, char *argv[])
                     }
                 }
             }
+            // compute spread rate
+            volatile unsigned simulation_year = dd_current.year() - dd_start.year();
+            if (dd_current.year() <= dd_end.year()) {
+                for (unsigned i = 0; i < num_runs; i++) {
+                    bbox_int bbox = infection_boundary(inf_species_rasts[i]);
+                    bbox_float rate = spread_rate(spread_bboxes[i], bbox,
+                                                  window.ew_res, window.ns_res, 1);
+                    spread_rate_table[simulation_year][i] = rate;
+                    spread_bboxes[i] = bbox;
+                }
+            }
             if ((opt.output_series->answer && !flg.series_as_single_run->answer)
                      || opt.stddev_series->answer) {
                 // aggregate in the series
@@ -1018,6 +1045,16 @@ int main(int argc, char *argv[])
                                  NULL, &timestamp);
         Vect_destroy_line_struct(Points);
         Vect_destroy_cats_struct(Cats);
+    }
+    if (opt.spread_rate_output->answer) {
+        FILE *fp = G_open_option_file(opt.spread_rate_output);
+        fprintf(fp, "year,N,S,E,W\n");
+        for (int i = 0; i < num_years; i++) {
+            double n, s, e, w;
+            fprintf(fp, "%d,%d,%d,%d,%d\n", start_time + i, std::lround(n), std::lround(s),
+                    std::lround(e), std::lround(w));
+        }
+        G_close_option_file(fp);
     }
 
     return 0;
