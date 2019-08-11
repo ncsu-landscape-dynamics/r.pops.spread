@@ -21,7 +21,7 @@
 #include "pops/raster.hpp"
 #include "pops/simulation.hpp"
 #include "pops/treatments.hpp"
-#include "pops/postprocessing.hpp"
+#include "pops/spread_rate.hpp"
 
 extern "C" {
 #include <grass/gis.h>
@@ -31,6 +31,7 @@ extern "C" {
 }
 
 #include <map>
+#include <tuple>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -45,6 +46,8 @@ using std::string;
 using std::cout;
 using std::cerr;
 using std::endl;
+using std::round;
+using std::isnan;
 
 using namespace pops;
 
@@ -735,12 +738,6 @@ int main(int argc, char *argv[])
     if (opt.treatment_month->answer)
         treatment_month = std::stod(opt.treatment_month->answer);
 
-    std::vector<std::vector<bbox_float>> spread_rate_table(num_years, std::vector<bbox_float>(num_runs));
-    //std::vector<bbox_float> spread_rate_table(num_years);
-    std::vector<bbox_int> spread_bboxes(num_runs);
-    for (unsigned i = 0; i < num_runs; ++i)
-        spread_bboxes[i] = infection_boundary(I_species_rast);
-
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
@@ -764,6 +761,10 @@ int main(int argc, char *argv[])
     for (unsigned i = 0; i < num_runs; ++i)
         sporulations.emplace_back(seed_value++, I_species_rast, window.ew_res, window.ns_res);
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
+
+    // spread rate initialization
+    std::vector<SpreadRate<Img>> spread_rates(num_runs,
+                                              SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, num_years));
 
     std::vector<unsigned> unresolved_steps;
     std::vector<Date> unresolved_dates;
@@ -899,14 +900,10 @@ int main(int argc, char *argv[])
                 }
             }
             // compute spread rate
-            volatile unsigned simulation_year = dd_current.year() - dd_start.year();
+            unsigned simulation_year = dd_current.year() - dd_start.year();
             if (dd_current.year() <= dd_end.year()) {
                 for (unsigned i = 0; i < num_runs; i++) {
-                    bbox_int bbox = infection_boundary(inf_species_rasts[i]);
-                    bbox_float rate = spread_rate(spread_bboxes[i], bbox,
-                                                  window.ew_res, window.ns_res, 1);
-                    spread_rate_table[simulation_year][i] = rate;
-                    spread_bboxes[i] = bbox;
+                    spread_rates[i].compute_yearly_spread_rate(inf_species_rasts[i], simulation_year);
                 }
             }
             if ((opt.output_series->answer && !flg.series_as_single_run->answer)
@@ -1049,10 +1046,12 @@ int main(int argc, char *argv[])
     if (opt.spread_rate_output->answer) {
         FILE *fp = G_open_option_file(opt.spread_rate_output);
         fprintf(fp, "year,N,S,E,W\n");
-        for (int i = 0; i < num_years; i++) {
+        for (unsigned i = 0; i < num_years; i++) {
             double n, s, e, w;
-            fprintf(fp, "%d,%d,%d,%d,%d\n", start_time + i, std::lround(n), std::lround(s),
-                    std::lround(e), std::lround(w));
+            std::tie(n, s, e, w) = average_spread_rate(spread_rates, i);
+            fprintf(fp, "%d,%.0f,%.0f,%.0f,%.0f\n", start_time + i,
+                    isnan(n) ? n : round(n), isnan(s) ? s : round(s),
+                    isnan(e) ? e : round(e), isnan(w) ? w : round(w));
         }
         G_close_option_file(fp);
     }
