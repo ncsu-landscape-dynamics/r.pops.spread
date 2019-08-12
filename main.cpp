@@ -20,6 +20,7 @@
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
 #include "pops/simulation.hpp"
+#include "pops/kernel.hpp"
 #include "pops/treatments.hpp"
 #include "pops/spread_rate.hpp"
 
@@ -77,32 +78,6 @@ string generate_name(const string& basename, const Date& date)
     auto sep = G_get_basename_separator();
     string name = basename + sep + year + "_" + month + "_" + day;
     return name;
-}
-
-Direction direction_enum_from_string(const string& text)
-{
-    std::map<string, Direction> mapping{
-        {"N", N}, {"NE", NE}, {"E", E}, {"SE", SE}, {"S", S},
-        {"SW", SW}, {"W", W}, {"NW", NW}, {"NONE", NONE}
-    };
-    try {
-        return mapping.at(text);
-    }
-    catch (const std::out_of_range&) {
-        throw std::invalid_argument("direction_enum_from_string: Invalid"
-                                    " value '" + text +"' provided");
-    }
-}
-
-DispersalKernel radial_type_from_string(const string& text)
-{
-    if (text == "cauchy")
-        return CAUCHY;
-    else if (text == "cauchy_mix")
-        return CAUCHY_DOUBLE_SCALE;
-    else
-        throw std::invalid_argument("radial_type_from_string: Invalid"
-                                    " value '" + text +"' provided");
 }
 
 inline TreatmentApplication treatment_app_enum_from_string(const string& text)
@@ -596,14 +571,34 @@ int main(int argc, char *argv[])
                       opt.seasonality->key);
     Season season = seasonality_from_option(opt.seasonality);
 
-    Direction pwdir = direction_enum_from_string(opt.wind->answer);
+    Direction pwdir = direction_from_string(opt.wind->answer);
 
     // set the spore rate
     double spore_rate = std::stod(opt.reproductive_rate->answer);
-    DispersalKernel rtype = radial_type_from_string(opt.dispersal_kernel->answer);
+    // backwards compatibility functions
+    // (other PoPS kernels not yet implemented in the interface)
+    auto str_to_use_long = [](const std::string& text){
+        if (text == "cauchy")
+            return false;
+        else // (text == "cauchy_mix")
+            return true;
+    };
+    auto str_to_type = [](const std::string& text){
+        if (text == "cauchy")
+            return DispersalKernelType::Cauchy;
+        else // (text == "cauchy_mix")
+            return DispersalKernelType::Cauchy;
+    };
+    DispersalKernelType rtype = str_to_type(opt.dispersal_kernel->answer);
+    bool use_long_kernel = str_to_use_long(opt.dispersal_kernel->answer);
+    if (!DispersalKernel::supports_kernel(rtype)) {
+        G_fatal_error(_("The value %s is not yet supported for option %s"),
+                      opt.dispersal_kernel->answer,
+                      opt.dispersal_kernel->key);
+    }
     double scale1 = std::stod(opt.short_distance_scale->answer);
     double scale2 = 0;
-    if (rtype == CAUCHY_DOUBLE_SCALE && !opt.long_distance_scale->answer)
+    if (use_long_kernel && !opt.long_distance_scale->answer)
         G_fatal_error(_("The option %s is required for %s=%s"),
                       opt.long_distance_scale->key, opt.dispersal_kernel->key,
                       opt.dispersal_kernel->answer);
@@ -611,7 +606,8 @@ int main(int argc, char *argv[])
         scale2 = std::stod(opt.long_distance_scale->answer);
     double kappa = std::stod(opt.kappa->answer);
     double gamma = 0.0;
-    if (rtype == CAUCHY_DOUBLE_SCALE && !opt.percent_short_dispersal->answer)
+    if (use_long_kernel &&
+            !opt.percent_short_dispersal->answer)
         G_fatal_error(_("The option %s is required for %s=%s"),
                       opt.percent_short_dispersal->key, opt.dispersal_kernel->key,
                       opt.dispersal_kernel->answer);
@@ -759,7 +755,7 @@ int main(int argc, char *argv[])
     struct Cell_head window;
     G_get_window(&window);
     for (unsigned i = 0; i < num_runs; ++i)
-        sporulations.emplace_back(seed_value++, I_species_rast, window.ew_res, window.ns_res);
+        sporulations.emplace_back(seed_value++, I_species_rast);
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     // spread rate initialization
@@ -854,6 +850,18 @@ int main(int argc, char *argv[])
                                                    spore_rate);
 
                         auto current_age = dd_current.year() - dd_start.year();
+                        RadialDispersalKernel short_radial_kernel(window.ew_res, window.ns_res,
+                                                                  rtype, scale1, pwdir, kappa);
+                        RadialDispersalKernel long_radial_kernel(window.ew_res, window.ns_res,
+                                                                 rtype, scale2, pwdir, kappa);
+                        UniformDispersalKernel uniform_kernel(window.rows, window.cols);
+                        SwitchDispersalKernel short_selectable_kernel(rtype, short_radial_kernel, uniform_kernel);
+                        SwitchDispersalKernel long_selectable_kernel(rtype, long_radial_kernel, uniform_kernel);
+                        DispersalKernel kernel(short_selectable_kernel,
+                                               long_selectable_kernel,
+                                               use_long_kernel,
+                                               gamma);
+
                         sporulations[run].disperse(sus_species_rasts[run],
                                                    inf_species_rasts[run],
                                                    inf_species_cohort_rasts[run][current_age],
@@ -861,9 +869,7 @@ int main(int argc, char *argv[])
                                                    outside_spores[run],
                                                    weather,
                                                    weather_coefficients[step],
-                                                   rtype, scale1,
-                                                   gamma, scale2,
-                                                   pwdir, kappa);
+                                                   kernel);
                     }
                 }
                 unresolved_steps.clear();
