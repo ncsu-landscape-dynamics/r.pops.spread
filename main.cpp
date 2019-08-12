@@ -772,13 +772,13 @@ int main(int argc, char *argv[])
     unresolved_dates.reserve(max_weeks_in_year);
 
     Date dd_current(dd_start);
+    Date dd_current_last_day = step_type == "month" ? dd_current.get_last_day_of_month() : dd_current.get_last_day_of_week();
 
     // main simulation loop (weekly or monthly steps)
-    for (int current_step = 0; ; current_step++, step_type == "month" ? dd_current.increased_by_month() : dd_current.increased_by_week()) {
-        if (dd_current < dd_end) {
-            unresolved_steps.push_back(current_step);
-            unresolved_dates.push_back(dd_current);
-        }
+    for (int current_step = 0; dd_current < dd_end; current_step++, step_type == "month" ? dd_current.increased_by_month() : dd_current.increased_by_week()) {
+        unresolved_steps.push_back(current_step);
+        unresolved_dates.push_back(dd_current);
+        dd_current_last_day = step_type == "month" ? dd_current.get_last_day_of_month() : dd_current.get_last_day_of_week();
 
         // if all the oaks are infected, then exit
         if (all_infected(S_species_rast)) {
@@ -789,7 +789,7 @@ int main(int argc, char *argv[])
         // check whether the spore occurs in the month
         // At the end of the year, run simulation for all unresolved
         // steps in one chunk.
-        if ((step_type == "month" ? dd_current.is_last_month_of_year() : dd_current.is_last_week_of_year()) || dd_current >= dd_end) {
+        if ((step_type == "month" ? dd_current.is_last_month_of_year() : dd_current.is_last_week_of_year())) {
             if (!unresolved_steps.empty()) {
 
                 // to avoid problem with Jan 1 of the following year
@@ -869,10 +869,8 @@ int main(int argc, char *argv[])
                 unresolved_steps.clear();
                 unresolved_dates.clear();
             }
-            if (mortality && (dd_current.year() <= dd_end.year())) {
+            if (mortality) {
                 // TODO: use the library code to handle mortality
-                // to avoid problem with Jan 1 of the following year
-                // we explicitely check if we are in a valid year range
                 unsigned simulation_year = dd_current.year() - dd_start.year();
                 // only run to the current year of simulation
                 // (first year is 0):
@@ -901,10 +899,8 @@ int main(int argc, char *argv[])
             }
             // compute spread rate
             unsigned simulation_year = dd_current.year() - dd_start.year();
-            if (dd_current.year() <= dd_end.year()) {
-                for (unsigned i = 0; i < num_runs; i++) {
-                    spread_rates[i].compute_yearly_spread_rate(inf_species_rasts[i], simulation_year);
-                }
+            for (unsigned i = 0; i < num_runs; i++) {
+                spread_rates[i].compute_yearly_spread_rate(inf_species_rasts[i], simulation_year);
             }
             if ((opt.output_series->answer && !flg.series_as_single_run->answer)
                      || opt.stddev_series->answer) {
@@ -917,15 +913,15 @@ int main(int argc, char *argv[])
             if (opt.output_series->answer) {
                 // write result
                 // date is always end of the year, even for seasonal spread
-                string name = generate_name(opt.output_series->answer, dd_current);
+                string name = generate_name(opt.output_series->answer, dd_current_last_day);
                 if (flg.series_as_single_run->answer)
                     raster_to_grass(inf_species_rasts[0], name,
                             "Occurrence from a single stochastic run",
-                            dd_current);
+                            dd_current_last_day);
                 else
                     raster_to_grass(I_species_rast, name,
                                     "Average occurrence from a all stochastic runs",
-                                    dd_current);
+                                    dd_current_last_day);
             }
             if (opt.stddev_series->answer) {
                 Img stddev(I_species_rast, 0);
@@ -935,10 +931,10 @@ int main(int argc, char *argv[])
                 }
                 stddev /= num_runs;
                 stddev.for_each([](int& a){a = std::sqrt(a);});
-                string name = generate_name(opt.stddev_series->answer, dd_current);
+                string name = generate_name(opt.stddev_series->answer, dd_current_last_day);
                 string title = "Standard deviation of average"
                                " occurrence from a all stochastic runs";
-                raster_to_grass(stddev, name, title, dd_current);
+                raster_to_grass(stddev, name, title, dd_current_last_day);
             }
             if (opt.probability_series->answer) {
                 Img probability(I_species_rast, 0);
@@ -949,23 +945,20 @@ int main(int argc, char *argv[])
                 }
                 probability *= 100;  // prob from 0 to 100 (using ints)
                 probability /= num_runs;
-                string name = generate_name(opt.probability_series->answer, dd_current);
+                string name = generate_name(opt.probability_series->answer, dd_current_last_day);
                 string title = "Probability of occurrence";
-                raster_to_grass(probability, name, title, dd_current);
+                raster_to_grass(probability, name, title, dd_current_last_day);
             }
             if (mortality && opt.dead_series->answer) {
                 accumulated_dead += dead_in_current_year[0];
                 if (opt.dead_series->answer) {
-                    string name = generate_name(opt.dead_series->answer, dd_current);
+                    string name = generate_name(opt.dead_series->answer, dd_current_last_day);
                     raster_to_grass(accumulated_dead, name,
                                     "Number of dead hosts to date",
-                                    dd_current);
+                                    dd_current_last_day);
                 }
             }
         }
-
-        if (dd_current >= dd_end)
-            break;
     }
 
     if (opt.output->answer || opt.stddev->answer) {
@@ -979,7 +972,7 @@ int main(int argc, char *argv[])
         // write final result
         raster_to_grass(I_species_rast, opt.output->answer,
                         "Average occurrence from a all stochastic runs",
-                        dd_current);
+                        dd_current_last_day);
     }
     if (opt.stddev->answer) {
         Img stddev(I_species_rast, 0);
@@ -990,7 +983,7 @@ int main(int argc, char *argv[])
         stddev /= num_runs;
         stddev.for_each([](int& a){a = std::sqrt(a);});
         raster_to_grass(stddev, opt.stddev->answer,
-                        opt.stddev->description, dd_current);
+                        opt.stddev->description, dd_current_last_day);
     }
     if (opt.probability->answer) {
         Img probability(I_species_rast, 0);
@@ -1002,7 +995,7 @@ int main(int argc, char *argv[])
         probability *= 100;  // prob from 0 to 100 (using ints)
         probability /= num_runs;
         raster_to_grass(probability, opt.probability->answer,
-                        "Probability of occurrence", dd_current);
+                        "Probability of occurrence", dd_current_last_day);
     }
     if (opt.outside_spores->answer) {
         Cell_head region;
@@ -1037,7 +1030,7 @@ int main(int argc, char *argv[])
         Vect_build(&Map);
         Vect_close(&Map);
         struct TimeStamp timestamp;
-        date_to_grass(dd_current, &timestamp);
+        date_to_grass(dd_current_last_day, &timestamp);
         G_write_vector_timestamp(opt.outside_spores->answer,
                                  NULL, &timestamp);
         Vect_destroy_line_struct(Points);
