@@ -591,6 +591,10 @@ int main(int argc, char *argv[])
     file_exists_or_fatal_error(opt.moisture_coefficient_file);
     file_exists_or_fatal_error(opt.temperature_coefficient_file);
 
+    // get current computational region (for rows, cols and resolution)
+    struct Cell_head window;
+    G_get_window(&window);
+
     // Seasonality: Do you want the spread to be limited to certain months?
     if (!opt.seasonality->answer || opt.seasonality->answer[0] == '\0')
         G_fatal_error(_("The option %s cannot be empty"),
@@ -643,6 +647,30 @@ int main(int argc, char *argv[])
                       opt.natural_kernel->answer);
     else if (opt.percent_natural_dispersal->answer)
         gamma = std::stod(opt.percent_natural_dispersal->answer);
+
+    RadialDispersalKernel short_radial_kernel(
+                window.ew_res, window.ns_res, natural_kernel_type,
+                natural_scale, natural_direction, natural_kappa);
+    RadialDispersalKernel long_radial_kernel(
+                window.ew_res, window.ns_res, anthro_kernel_type,
+                anthro_scale, anthro_direction, anthro_kappa);
+    UniformDispersalKernel uniform_kernel(window.rows, window.cols);
+    SwitchDispersalKernel short_selectable_kernel(
+                natural_kernel_type,
+                short_radial_kernel, uniform_kernel);
+    SwitchDispersalKernel long_selectable_kernel(
+                natural_kernel_type,
+                long_radial_kernel, uniform_kernel);
+    // each run has its own copy, so a kernel can have a state
+    std::vector<DispersalKernel> kernels;
+    kernels.reserve(num_runs);
+    for (unsigned i = 0; i < num_runs; ++i) {
+        // each (sub)kernel is copied to the main kernel
+        kernels.emplace_back(short_selectable_kernel,
+                             long_selectable_kernel,
+                             use_long_kernel,
+                             gamma);
+    }
 
     // initialize the start Date and end Date object
     // options for times are required ints
@@ -782,8 +810,6 @@ int main(int argc, char *argv[])
     Img accumulated_dead(Img(S_species_rast, 0));
 
     sporulations.reserve(num_runs);
-    struct Cell_head window;
-    G_get_window(&window);
     for (unsigned i = 0; i < num_runs; ++i)
         sporulations.emplace_back(seed_value++, I_species_rast);
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
@@ -880,17 +906,6 @@ int main(int argc, char *argv[])
                                                    spore_rate);
 
                         auto current_age = dd_current.year() - dd_start.year();
-                        RadialDispersalKernel short_radial_kernel(window.ew_res, window.ns_res,
-                                                                  natural_kernel_type, natural_scale, natural_direction, natural_kappa);
-                        RadialDispersalKernel long_radial_kernel(window.ew_res, window.ns_res,
-                                                                 anthro_kernel_type, anthro_scale, anthro_direction, anthro_kappa);
-                        UniformDispersalKernel uniform_kernel(window.rows, window.cols);
-                        SwitchDispersalKernel short_selectable_kernel(natural_kernel_type, short_radial_kernel, uniform_kernel);
-                        SwitchDispersalKernel long_selectable_kernel(natural_kernel_type, long_radial_kernel, uniform_kernel);
-                        DispersalKernel kernel(short_selectable_kernel,
-                                               long_selectable_kernel,
-                                               use_long_kernel,
-                                               gamma);
 
                         sporulations[run].disperse(sus_species_rasts[run],
                                                    inf_species_rasts[run],
@@ -899,7 +914,7 @@ int main(int argc, char *argv[])
                                                    outside_spores[run],
                                                    weather,
                                                    weather_coefficients[step],
-                                                   kernel);
+                                                   kernels[run]);
                     }
                 }
                 unresolved_steps.clear();
