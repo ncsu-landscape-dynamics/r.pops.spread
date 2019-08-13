@@ -899,6 +899,7 @@ int main(int argc, char *argv[])
             }
             // compute spread rate
             unsigned simulation_year = dd_current.year() - dd_start.year();
+            #pragma omp parallel for num_threads(threads)
             for (unsigned i = 0; i < num_runs; i++) {
                 spread_rates[i].compute_yearly_spread_rate(inf_species_rasts[i], simulation_year);
             }
