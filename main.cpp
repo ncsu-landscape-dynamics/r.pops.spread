@@ -21,6 +21,7 @@
 #include "pops/raster.hpp"
 #include "pops/simulation.hpp"
 #include "pops/treatments.hpp"
+#include "pops/spread_rate.hpp"
 
 #include "tcp_client.h"
 
@@ -54,6 +55,8 @@ using std::string;
 using std::cout;
 using std::cerr;
 using std::endl;
+using std::round;
+using std::isnan;
 using std::atomic;
 using std::thread;
 using std::ref;
@@ -165,6 +168,34 @@ std::vector<double> weather_file_to_list(const string& filename)
         output.push_back(m * c);
     }
     return output;
+}
+
+void write_spread_rate(struct Option *opt, const std::vector<SpreadRate<Img>>& spread_rates,
+                       unsigned num_years, int start_time) {
+    FILE *fp = G_open_option_file(opt);
+    fprintf(fp, "year,N,S,E,W\n");
+    for (unsigned i = 0; i < num_years; i++) {
+        double n, s, e, w;
+        std::tie(n, s, e, w) = average_spread_rate(spread_rates, i);
+        fprintf(fp, "%d,%.0f,%.0f,%.0f,%.0f\n", start_time + i,
+                isnan(n) ? n : round(n), isnan(s) ? s : round(s),
+                isnan(e) ? e : round(e), isnan(w) ? w : round(w));
+    }
+    G_close_option_file(fp);
+}
+
+void write_spread_rate(struct Option *opt, const SpreadRate<Img>& spread_rate,
+                       unsigned num_years, int start_time) {
+    FILE *fp = G_open_option_file(opt);
+    fprintf(fp, "year,N,S,E,W\n");
+    for (unsigned i = 0; i < num_years; i++) {
+        double n, s, e, w;
+        std::tie(n, s, e, w) = spread_rate.yearly_rate(i);
+        fprintf(fp, "%d,%.0f,%.0f,%.0f,%.0f\n", start_time + i,
+                isnan(n) ? n : round(n), isnan(s) ? s : round(s),
+                isnan(e) ? e : round(e), isnan(w) ? w : round(w));
+    }
+    G_close_option_file(fp);
 }
 
 /** Checks if there are any susceptible hosts left */
@@ -353,6 +384,7 @@ struct PoPSOptions
     struct Option *output, *output_series;
     struct Option *stddev, *stddev_series;
     struct Option *probability, *probability_series;
+    struct Option *spread_rate_output;
     struct Option *ip_address, *port;
 };
 
@@ -447,6 +479,13 @@ int main(int argc, char *argv[])
     opt.outside_spores->description = _("Output vector map of spores or pest units outside of modeled area");
     opt.outside_spores->required = NO;
     opt.outside_spores->guisection = _("Output");
+
+    opt.spread_rate_output = G_define_standard_option(G_OPT_F_OUTPUT);
+    opt.spread_rate_output->key = "spread_rate_output";
+    opt.spread_rate_output->description =
+        _("Output CSV file containg yearly spread rate in N, S, E, W directions");
+    opt.spread_rate_output->required = NO;
+    opt.spread_rate_output->guisection = _("Output");
 
     opt.treatments = G_define_standard_option(G_OPT_R_INPUT);
     opt.treatments->key = "treatments";
@@ -760,11 +799,6 @@ int main(int argc, char *argv[])
     if (opt.threads->answer)
         threads = std::stoul(opt.threads->answer);
 
-    // check if steering is on
-    bool steering = false;
-    if (opt.ip_address->answer)
-        steering = true;
-
     // check for file existence
     file_exists_or_fatal_error(opt.moisture_coefficient_file);
     file_exists_or_fatal_error(opt.temperature_coefficient_file);
@@ -808,7 +842,8 @@ int main(int argc, char *argv[])
     Date dd_start(start_time, 01, 01);
     Date dd_end(end_time, 12, 31);
     // difference in years (in dates) but including both years
-    auto num_years_mort = dd_end.year() - dd_start.year() + 1;
+    unsigned num_years = dd_end.year() - dd_start.year() + 1;
+
     string step_type = opt.step->answer;
 
     // mortality
@@ -819,12 +854,12 @@ int main(int argc, char *argv[])
         mortality = true;
         if (opt.first_year_to_die->answer) {
             first_year_to_die = std::stoi(opt.first_year_to_die->answer);
-            if (first_year_to_die > num_years_mort) {
+            if (first_year_to_die > num_years) {
                 G_fatal_error(
                             _("%s is too large (%d). It must be smaller or "
                               " equal than number of simulation years (%d)."),
                             opt.first_year_to_die->key,
-                            first_year_to_die, num_years_mort);
+                            first_year_to_die, num_years);
             }
         }
         if (opt.infected_to_dead_rate->answer)
@@ -900,16 +935,6 @@ int main(int argc, char *argv[])
     if (weather)
         weather_coefficients.resize(max_weeks_in_year);
 
-    // setup steering variables
-    Date dd_current(dd_start);
-    Date dd_current_end(dd_end);
-    if (steering)
-        dd_current_end = dd_start;
-    Steering steering_obj;
-    // don't process outputs at the end of year
-    // when we went there using checkpointing
-    bool after_loading_checkpoint = false;
-
     // treatments
     int treatment_month = 0;  // invalid value for month
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_year)){
@@ -930,39 +955,11 @@ int main(int argc, char *argv[])
     if (opt.treatment_month->answer)
         treatment_month = std::stod(opt.treatment_month->answer);
 
-    // syncing runs
-    bool sync = false;
-
-    // setup client
-    tcp_client c;
-    thread client_thread;
-    string ip = steering ? string(opt.ip_address->answer) : "";
-    int port = steering ? atoi(opt.port->answer): 0;
-    if (steering) {
-        use_treatments = true;
-        client_thread = thread(steering_client, ref(c), ip, port, ref(steering_obj));
-    }
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
 
-    // simulation years are closed interval
-    // size 4 for 2016 to 2018 - 0: beginning 2016, 1: end 2016, 2: end 2017, 3: end 2018
-    auto num_years = dd_end.year() - dd_start.year() + 2;
-    std::vector<std::vector<Img>> sus_checkpoint(
-                num_years, std::vector<Img>(num_runs, Img(S_species_rast)));
-    std::vector<std::vector<Img>> inf_checkpoint(
-                num_years, std::vector<Img>(num_runs, Img(S_species_rast)));
-    std::vector<int> step_checkpoint(num_years);
-    std::vector<Date> date_checkpoint(num_years, dd_start);
-    int last_checkpoint = 0;
-    for (unsigned run = 0; run < num_runs; run++) {
-        sus_checkpoint[last_checkpoint][run] = S_species_rast_start;
-        inf_checkpoint[last_checkpoint][run] = I_species_rast_start;
-        step_checkpoint[last_checkpoint] = 0;
-        date_checkpoint[last_checkpoint] = dd_start;
-    }
     // infected cohort for each year (index is cohort age)
     // age starts with 0 (in year 1), 0 is oldest
     std::vector<std::vector<Img> > inf_species_cohort_rasts(
@@ -982,10 +979,60 @@ int main(int argc, char *argv[])
         sporulations.emplace_back(seed_value++, I_species_rast, window.ew_res, window.ns_res);
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
+    // spread rate initialization
+    std::vector<SpreadRate<Img>> spread_rates(num_runs,
+                                              SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, num_years));
+
     std::vector<unsigned> unresolved_steps;
     std::vector<Date> unresolved_dates;
     unresolved_steps.reserve(max_weeks_in_year);
     unresolved_dates.reserve(max_weeks_in_year);
+
+    // check if steering is on
+    bool steering = false;
+    if (opt.ip_address->answer)
+        steering = true;
+
+    // setup steering variables
+    Date dd_current(dd_start);
+    Date dd_current_end(dd_end);
+    if (steering)
+        dd_current_end = dd_start;
+    Date dd_current_last_day = step_type == "month" ? dd_current.get_last_day_of_month() : dd_current.get_last_day_of_week();
+    Steering steering_obj;
+    // don't process outputs at the end of year
+    // when we went there using checkpointing
+    bool after_loading_checkpoint = false;
+
+    // syncing runs
+    bool sync = false;
+
+    // setup client
+    tcp_client c;
+    thread client_thread;
+    string ip = steering ? string(opt.ip_address->answer) : "";
+    int port = steering ? atoi(opt.port->answer): 0;
+    if (steering) {
+        use_treatments = true;
+        client_thread = thread(steering_client, ref(c), ip, port, ref(steering_obj));
+    }
+
+    // simulation years are closed interval
+    // size 4 for 2016 to 2018 - 0: beginning 2016, 1: end 2016, 2: end 2017, 3: end 2018
+    auto num_checkpoints = dd_end.year() - dd_start.year() + 2;
+    std::vector<std::vector<Img>> sus_checkpoint(
+                num_checkpoints, std::vector<Img>(num_runs, Img(S_species_rast)));
+    std::vector<std::vector<Img>> inf_checkpoint(
+                num_checkpoints, std::vector<Img>(num_runs, Img(S_species_rast)));
+    std::vector<int> step_checkpoint(num_checkpoints);
+    std::vector<Date> date_checkpoint(num_checkpoints, dd_start);
+    int last_checkpoint = 0;
+    for (unsigned run = 0; run < num_runs; run++) {
+        sus_checkpoint[last_checkpoint][run] = S_species_rast_start;
+        inf_checkpoint[last_checkpoint][run] = I_species_rast_start;
+        step_checkpoint[last_checkpoint] = 0;
+        date_checkpoint[last_checkpoint] = dd_start;
+    }
     // main simulation loop (weekly or monthly steps)
     int current_step = 0;
     while (true) {
@@ -1042,7 +1089,7 @@ int main(int argc, char *argv[])
         else if (cmd == SteeringCommand::GoTo) { // go to specific checkpoint
             cout << "goto year: " << steering_obj.goto_year << endl;
             unsigned goto_checkpoint = steering_obj.goto_year;
-            if (goto_checkpoint < 0 || goto_checkpoint >= num_years) {/* do nothing */}
+            if (goto_checkpoint < 0 || goto_checkpoint >= num_checkpoints) {/* do nothing */}
             else if (goto_checkpoint <= last_checkpoint) {
                 // go back
                 dd_current = date_checkpoint[goto_checkpoint];
@@ -1089,6 +1136,7 @@ int main(int argc, char *argv[])
         if (dd_current_end > dd_start && dd_current <= dd_current_end) {
             unresolved_steps.push_back(current_step);
             unresolved_dates.push_back(dd_current);
+            dd_current_last_day = step_type == "month" ? dd_current.get_last_day_of_month() : dd_current.get_last_day_of_week();
 
             // if all the oaks are infected, then exit
             if (all_infected(S_species_rast)) {
@@ -1180,18 +1228,14 @@ int main(int argc, char *argv[])
                     unresolved_dates.clear();
                 }
                 for (unsigned run = 0; run < num_runs; run++) {
-                    //                    if (!(dd_current.getYear() <= dd_end.getYear()))
-                    //                        break;
                     last_checkpoint = dd_current.year() - dd_start.year() + 1;
                     sus_checkpoint[last_checkpoint][run] = sus_species_rasts[run];
                     inf_checkpoint[last_checkpoint][run] = inf_species_rasts[run];
                     step_checkpoint[last_checkpoint] = current_step;
                     date_checkpoint[last_checkpoint] = dd_current;
                 }
-                if (mortality && (dd_current.year() <= dd_end.year())) {
+                if (mortality) {
                     // TODO: use the library code to handle mortality
-                    // to avoid problem with Jan 1 of the following year
-                    // we explicitely check if we are in a valid year range
                     unsigned simulation_year = dd_current.year() - dd_start.year();
                     // only run to the current year of simulation
                     // (first year is 0):
@@ -1218,6 +1262,14 @@ int main(int argc, char *argv[])
                         }
                     }
                 }
+                // compute spread rate
+                if (opt.spread_rate_output->answer) {
+                    unsigned simulation_year = dd_current.year() - dd_start.year();
+                    #pragma omp parallel for num_threads(threads)
+                    for (unsigned i = 0; i < num_runs; i++) {
+                        spread_rates[i].compute_yearly_spread_rate(inf_species_rasts[i], simulation_year);
+                    }
+                }
                 if (sync) {
                     unsigned selected_run = 0;
                     // sync infectious and susceptible in all threads to selected one
@@ -1228,6 +1280,18 @@ int main(int argc, char *argv[])
                         }
                     }
                     sync = false;
+                    if (opt.spread_rate_output->answer) {
+                        unsigned num_years_spread = dd_current.year() - dd_start.year() + 1;
+                        write_spread_rate(opt.spread_rate_output, spread_rates[selected_run],
+                                          num_years_spread, start_time);
+                    }
+                }
+                else {
+                    if (opt.spread_rate_output->answer) {
+                        unsigned num_years_spread = dd_current.year() - dd_start.year() + 1;
+                        write_spread_rate(opt.spread_rate_output, spread_rates,
+                                          num_years_spread, start_time);
+                    }
                 }
                 if ((opt.output_series->answer && !flg.series_as_single_run->answer)
                         || opt.stddev_series->answer) {
@@ -1240,15 +1304,15 @@ int main(int argc, char *argv[])
                 if (opt.output_series->answer) {
                     // write result
                     // date is always end of the year, even for seasonal spread
-                    string name = generate_name(opt.output_series->answer, dd_current);
+                    string name = generate_name(opt.output_series->answer, dd_current_last_day);
                     if (flg.series_as_single_run->answer)
                         raster_to_grass(inf_species_rasts[0], name,
                             "Occurrence from a single stochastic run",
-                            dd_current);
+                            dd_current_last_day);
                     else
                         raster_to_grass(I_species_rast, name,
                                         "Average occurrence from a all stochastic runs",
-                                        dd_current);
+                                        dd_current_last_day);
                     cerr << "output: " << name << endl;
                     if (steering)
                         c.send_data("output:" + name + '|');
@@ -1262,10 +1326,10 @@ int main(int argc, char *argv[])
                     }
                     stddev /= num_runs;
                     stddev.for_each([](int& a){a = std::sqrt(a);});
-                    string name = generate_name(opt.stddev_series->answer, dd_current);
+                    string name = generate_name(opt.stddev_series->answer, dd_current_last_day);
                     string title = "Standard deviation of average"
                                    " occurrence from a all stochastic runs";
-                    raster_to_grass(stddev, name, title, dd_current);
+                    raster_to_grass(stddev, name, title, dd_current_last_day);
                 }
                 if (opt.probability_series->answer) {
                     Img probability(I_species_rast, 0);
@@ -1276,19 +1340,19 @@ int main(int argc, char *argv[])
                     }
                     probability *= 100;  // prob from 0 to 100 (using ints)
                     probability /= num_runs;
-                    string name = generate_name(opt.probability_series->answer, dd_current);
+                    string name = generate_name(opt.probability_series->answer, dd_current_last_day);
                     string title = "Probability of occurrence";
-                    raster_to_grass(probability, name, title, dd_current);
+                    raster_to_grass(probability, name, title, dd_current_last_day);
                     if (steering)
                         c.send_data("output:" + name + '|');
                 }
                 if (mortality && opt.dead_series->answer) {
                     accumulated_dead += dead_in_current_year[0];
                     if (opt.dead_series->answer) {
-                        string name = generate_name(opt.dead_series->answer, dd_current);
+                        string name = generate_name(opt.dead_series->answer, dd_current_last_day);
                         raster_to_grass(accumulated_dead, name,
                                         "Number of dead hosts to date",
-                                        dd_current);
+                                        dd_current_last_day);
                     }
                 }
             }
@@ -1323,7 +1387,7 @@ int main(int argc, char *argv[])
         // write final result
         raster_to_grass(I_species_rast, opt.output->answer,
                         "Average occurrence from a all stochastic runs",
-                        dd_current);
+                        dd_current_last_day);
     }
     if (opt.stddev->answer) {
         Img stddev(I_species_rast, 0);
@@ -1334,7 +1398,7 @@ int main(int argc, char *argv[])
         stddev /= num_runs;
         stddev.for_each([](int& a){a = std::sqrt(a);});
         raster_to_grass(stddev, opt.stddev->answer,
-                        opt.stddev->description, dd_current);
+                        opt.stddev->description, dd_current_last_day);
     }
     if (opt.probability->answer) {
         Img probability(I_species_rast, 0);
@@ -1346,7 +1410,7 @@ int main(int argc, char *argv[])
         probability *= 100;  // prob from 0 to 100 (using ints)
         probability /= num_runs;
         raster_to_grass(probability, opt.probability->answer,
-                        "Probability of occurrence", dd_current);
+                        "Probability of occurrence", dd_current_last_day);
     }
     if (opt.outside_spores->answer) {
         Cell_head region;
@@ -1381,7 +1445,7 @@ int main(int argc, char *argv[])
         Vect_build(&Map);
         Vect_close(&Map);
         struct TimeStamp timestamp;
-        date_to_grass(dd_current, &timestamp);
+        date_to_grass(dd_current_last_day, &timestamp);
         G_write_vector_timestamp(opt.outside_spores->answer,
                                  NULL, &timestamp);
         Vect_destroy_line_struct(Points);
