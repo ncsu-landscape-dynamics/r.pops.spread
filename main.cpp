@@ -118,6 +118,27 @@ void read_names(std::vector<string>& names, const char* filename)
     }
 }
 
+/*!
+ * Warns about depreciated option value
+ *
+ * It uses the answer member. If the answer is not set,
+ * nothing is tested.
+ *
+ * \param opt Pointer to a valid option structure
+ * \param depreciated Value which is depreciated
+ * \param current Value which should be used instead
+ */
+void warn_about_depreciated_option_value(const Option* opt,
+                                         const string& depreciated,
+                                         const string& current)
+{
+    if (opt->answer && opt->answer == depreciated) {
+        G_warning(_("The value <%s> for option %s is depreciated."
+                    " Use value <%s> instead."),
+                  opt->answer, opt->key, current.c_str());
+    }
+}
+
 std::vector<double> weather_file_to_list(const string& filename)
 {
     std::ifstream input(filename);
@@ -408,7 +429,7 @@ int main(int argc, char *argv[])
     opt.natural_kernel = G_define_option();
     opt.natural_kernel->type = TYPE_STRING;
     opt.natural_kernel->key = "natural_dispersal_kernel";
-    opt.natural_kernel->label = _("Type of dispersal kernel");
+    opt.natural_kernel->label = _("Natural dispersal kernel type");
     opt.natural_kernel->answer = const_cast<char*>("cauchy");
     opt.natural_kernel->options = "cauchy,exponential";
     opt.natural_kernel->guisection = _("Dispersal");
@@ -416,14 +437,18 @@ int main(int argc, char *argv[])
     opt.natural_scale = G_define_option();
     opt.natural_scale->type = TYPE_DOUBLE;
     opt.natural_scale->key = "natural_scale";
-    opt.natural_scale->label = _("Distance scale parameter for short range dispersal kernel");
+    opt.natural_scale->label =
+            _("Scale parameter for natural dispersal kernel");
     opt.natural_scale->guisection = _("Dispersal");
 
     opt.natural_direction = G_define_option();
     opt.natural_direction->type = TYPE_STRING;
     opt.natural_direction->key = "natural_direction";
-    opt.natural_direction->label = _("Prevailing wind direction");
-    opt.natural_direction->description = _("NONE means that there is no wind");
+    opt.natural_direction->label =
+            _("Direction of natural dispersal kernel");
+    opt.natural_direction->description =
+            _("Typically prevailing wind direction;"
+              " none means that there is no directionality or no wind");
     opt.natural_direction->options = "N,NE,E,SE,S,SW,W,NW,NONE,none";
     opt.natural_direction->required = YES;
     opt.natural_direction->answer = const_cast<char*>("none");
@@ -432,28 +457,37 @@ int main(int argc, char *argv[])
     opt.natural_kappa = G_define_option();
     opt.natural_kappa->type = TYPE_DOUBLE;
     opt.natural_kappa->key = "natural_kappa";
-    opt.natural_kappa->label = _("Strength of the wind direction in the von-mises distribution");
+    opt.natural_kappa->label =
+            _("Strength of direction of natural dispersal kernel");
+    opt.natural_kappa->description =
+            _("The kappa parameter of von Mises distribution"
+              " (concentration);"
+              " typically the strength of the wind direction");
     opt.natural_kappa->required = YES;
     opt.natural_kappa->guisection = _("Dispersal");
 
     opt.anthro_kernel = G_define_option();
     opt.anthro_kernel->type = TYPE_STRING;
     opt.anthro_kernel->key = "anthropogenic_dispersal_kernel";
-    opt.anthro_kernel->label = _("Type of dispersal kernel");
+    opt.anthro_kernel->label = _("Anthropogenic dispersal kernel type");
     opt.anthro_kernel->options = "cauchy,exponential";
     opt.anthro_kernel->guisection = _("Dispersal");
 
     opt.anthro_scale = G_define_option();
     opt.anthro_scale->type = TYPE_DOUBLE;
     opt.anthro_scale->key = "anthropogenic_scale";
-    opt.anthro_scale->label = _("Distance scale parameter for long range dispersal kernel");
+    opt.anthro_scale->label =
+            _("Scale parameter for anthropogenic dispersal kernel");
     opt.anthro_scale->guisection = _("Dispersal");
 
     opt.anthro_direction = G_define_option();
     opt.anthro_direction->type = TYPE_STRING;
     opt.anthro_direction->key = "anthropogenic_direction";
-    opt.anthro_direction->label = _("Prevailing wind direction");
-    opt.anthro_direction->description = _("NONE means that there is no wind");
+    opt.anthro_direction->label =
+            _("Direction of anthropogenic dispersal kernel");
+    opt.anthro_direction->description =
+            _("Typically prevailing wind direction;"
+              " none means that there is no directionality or no wind");
     opt.anthro_direction->options = "N,NE,E,SE,S,SW,W,NW,NONE,none";
     opt.anthro_direction->required = YES;
     opt.anthro_direction->answer = const_cast<char*>("none");
@@ -461,15 +495,23 @@ int main(int argc, char *argv[])
 
     opt.anthro_kappa = G_define_option();
     opt.anthro_kappa->type = TYPE_DOUBLE;
-    opt.anthro_kappa->key = "anthro_kappa";
-    opt.anthro_kappa->label = _("Strength of the wind direction in the von-mises distribution");
+    opt.anthro_kappa->key = "anthropogenic_kappa";
+    opt.anthro_kappa->label =
+            _("Strength of direction of anthropogenic dispersal kernel");
+    opt.anthro_kappa->description =
+            _("The kappa parameter of von Mises distribution"
+              " (concentration);"
+              " typically the strength of the wind direction");
     opt.anthro_kappa->guisection = _("Dispersal");
 
     opt.percent_natural_dispersal = G_define_option();
     opt.percent_natural_dispersal->type = TYPE_DOUBLE;
     opt.percent_natural_dispersal->key = "percent_natural_dispersal";
-    opt.percent_natural_dispersal->label = _("Percentage of short range dispersal");
-    opt.percent_natural_dispersal->description = _("What percentage of dispersal is short range versus long range");
+    opt.percent_natural_dispersal->label =
+            _("Percentage of natural dispersal");
+    opt.percent_natural_dispersal->description =
+            _("How often is the natural dispersal kernel used versus"
+              " the anthropogenic dispersal kernel");
     opt.percent_natural_dispersal->options = "0-1";
     opt.percent_natural_dispersal->guisection = _("Dispersal");
 
@@ -647,6 +689,15 @@ int main(int argc, char *argv[])
                       opt.natural_kernel->answer);
     else if (opt.percent_natural_dispersal->answer)
         gamma = std::stod(opt.percent_natural_dispersal->answer);
+
+    // warn about limits to backwards compatibility
+    // "none" is consistent with other GRASS GIS modules
+    warn_about_depreciated_option_value(
+                opt.natural_direction, "NONE", "none");
+    warn_about_depreciated_option_value(
+                opt.anthro_kernel, "NONE", "none");
+    warn_about_depreciated_option_value(
+                opt.anthro_direction, "NONE", "none");
 
     RadialDispersalKernel short_radial_kernel(
                 window.ew_res, window.ns_res, natural_kernel_type,
