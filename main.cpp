@@ -436,9 +436,9 @@ int main(int argc, char *argv[])
 
     opt.natural_scale = G_define_option();
     opt.natural_scale->type = TYPE_DOUBLE;
-    opt.natural_scale->key = "natural_scale";
+    opt.natural_scale->key = "natural_distance";
     opt.natural_scale->label =
-            _("Scale parameter for natural dispersal kernel");
+            _("Distance parameter for natural dispersal kernel");
     opt.natural_scale->guisection = _("Dispersal");
 
     opt.natural_direction = G_define_option();
@@ -456,7 +456,7 @@ int main(int argc, char *argv[])
 
     opt.natural_kappa = G_define_option();
     opt.natural_kappa->type = TYPE_DOUBLE;
-    opt.natural_kappa->key = "natural_kappa";
+    opt.natural_kappa->key = "natural_direction_strength";
     opt.natural_kappa->label =
             _("Strength of direction of natural dispersal kernel");
     opt.natural_kappa->description =
@@ -475,9 +475,9 @@ int main(int argc, char *argv[])
 
     opt.anthro_scale = G_define_option();
     opt.anthro_scale->type = TYPE_DOUBLE;
-    opt.anthro_scale->key = "anthropogenic_scale";
+    opt.anthro_scale->key = "anthropogenic_distance";
     opt.anthro_scale->label =
-            _("Scale parameter for anthropogenic dispersal kernel");
+            _("Distance parameter for anthropogenic dispersal kernel");
     opt.anthro_scale->guisection = _("Dispersal");
 
     opt.anthro_direction = G_define_option();
@@ -495,7 +495,7 @@ int main(int argc, char *argv[])
 
     opt.anthro_kappa = G_define_option();
     opt.anthro_kappa->type = TYPE_DOUBLE;
-    opt.anthro_kappa->key = "anthropogenic_kappa";
+    opt.anthro_kappa->key = "anthropogenic_direction_strength";
     opt.anthro_kappa->label =
             _("Strength of direction of anthropogenic dispersal kernel");
     opt.anthro_kappa->description =
