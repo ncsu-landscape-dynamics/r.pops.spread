@@ -244,22 +244,22 @@ std::vector<std::string> split(const std::string& s, char delimiter)
 enum class SteeringCommand {None, Play, Pause, StepForward, StepBack, Stop, GoTo,
                             LoadData, ChangeName, SyncRuns};
 
-std::ostream &operator << (std::ostream &os, const SteeringCommand &cmd)
+ const char* print_command(const SteeringCommand &cmd)
 {
     switch(cmd)
     {
-    case SteeringCommand::None: os << "None"; break;
-    case SteeringCommand::Play: os << "Play"; break;
-    case SteeringCommand::Pause: os << "Pause"; break;
-    case SteeringCommand::StepForward: os << "StepForward"; break;
-    case SteeringCommand::StepBack: os << "StepBack"; break;
-    case SteeringCommand::Stop: os << "Stop"; break;
-    case SteeringCommand::GoTo: os << "GoTo"; break;
-    case SteeringCommand::LoadData: os << "LoadData"; break;
-    case SteeringCommand::ChangeName: os << "ChangeName"; break;
-    case SteeringCommand::SyncRuns: os << "SyncRuns"; break;
+    case SteeringCommand::None: return "None";
+    case SteeringCommand::Play: return "Play";
+    case SteeringCommand::Pause: return "Pause";
+    case SteeringCommand::StepForward: return "StepForward";
+    case SteeringCommand::StepBack: return "StepBack";
+    case SteeringCommand::Stop: return "Stop";
+    case SteeringCommand::GoTo: return "GoTo";
+    case SteeringCommand::LoadData: return "LoadData";
+    case SteeringCommand::ChangeName: return "ChangeName";
+    case SteeringCommand::SyncRuns: return "SyncRuns";
+    default: return "Undefined";
     }
-    return os;
 }
 
 class Steering {
@@ -280,7 +280,6 @@ public:
 void Steering::store(SteeringCommand cmd) {
     std::lock_guard<std::mutex> lk(mutex);
     command_queue.push(cmd);
-    std::cout << "store command: " << cmd << std::endl;
 }
 
 SteeringCommand Steering::get() {
@@ -288,7 +287,6 @@ SteeringCommand Steering::get() {
     if (!command_queue.empty()) {
         SteeringCommand cmd = command_queue.front();
         command_queue.pop();
-        std::cout << "get command: " << cmd << std::endl;
         return cmd;
     }
     else {
@@ -305,9 +303,7 @@ void steering_client(tcp_client &c, string ip_address, int port, Steering &steer
     c.conn(ip_address, port);
 
     while (true) {
-        cout << "to receive" << endl;
         received = c.receive(200, rec_error);
-        cout << "received: " <<received << " XXX"<< endl;
         if (rec_error <= 0){
             cerr << "receive failed\n";
             c.close_socket();
@@ -318,7 +314,6 @@ void steering_client(tcp_client &c, string ip_address, int port, Steering &steer
             std::vector<std::string> received_vec = split(received, ';');
             for (int i = 0; i < received_vec.size(); i++) {
                 std::string message = received_vec[i];
-                //                cout << "mutex locked in client" << endl;
                 if (message.substr(0, 3) == "cmd") {
                     string cmd = message.substr(4, message.length() - 4);
                     if (cmd == "play") {
@@ -1041,7 +1036,7 @@ int main(int argc, char *argv[])
             cmd = steering_obj.get();
         }
         if (cmd != SteeringCommand::None){
-            cout << "code " <<  cmd << endl;
+            G_verbose_message("Code: %s", print_command(cmd));
         }
         if (cmd == SteeringCommand::Play) { // play from
             dd_current_end = dd_end;
@@ -1053,7 +1048,6 @@ int main(int argc, char *argv[])
             dd_current_end = dd_current.get_next_year_end();
             if (dd_current_end > dd_end)
                 dd_current_end = dd_end;
-            cerr << "code == 3" << endl;
         }
         else if (cmd == SteeringCommand::StepBack) { // 1 step back
             if (last_checkpoint - 1 >= 0) {
@@ -1065,9 +1059,8 @@ int main(int argc, char *argv[])
                     inf_species_rasts[run] = inf_checkpoint[last_checkpoint][run];
                     current_step = step_checkpoint[last_checkpoint];
                     unresolved_steps.clear();
-                    cerr << "year (sback, normal): " << dd_current << endl;
-                    cerr << "check point date: " << date_checkpoint[last_checkpoint] << endl;
                 }
+                G_verbose_message("Going back to date: %d-%d-%d", dd_current.year(), dd_current.month(), dd_current.day());
                 after_loading_checkpoint = true;
             }
             // we are at the end of year, but we have already computed
@@ -1078,16 +1071,16 @@ int main(int argc, char *argv[])
             break;
         }
         else if (cmd == SteeringCommand::LoadData) { // load treatments
-            cout << "loading treatments: " << steering_obj.load_data << endl;
+            G_verbose_message("Loading treatments: %s", steering_obj.load_data.c_str());
             treatments.clear_after_year(steering_obj.treatment_year);
             DImg tr = raster_from_grass_float(steering_obj.load_data);
             treatments.add_treatment(steering_obj.treatment_year, tr);
         }
         else if (cmd == SteeringCommand::ChangeName) { // base name changed
-            cout << "base name: " << steering_obj.basename << endl;
+            G_verbose_message("Base name: %s", steering_obj.basename.c_str());
         }
         else if (cmd == SteeringCommand::GoTo) { // go to specific checkpoint
-            cout << "goto year: " << steering_obj.goto_year << endl;
+            G_verbose_message("Go to checkpoint: %d", steering_obj.goto_year);
             unsigned goto_checkpoint = steering_obj.goto_year;
             if (goto_checkpoint < 0 || goto_checkpoint >= num_checkpoints) {/* do nothing */}
             else if (goto_checkpoint <= last_checkpoint) {
@@ -1095,17 +1088,11 @@ int main(int argc, char *argv[])
                 dd_current = date_checkpoint[goto_checkpoint];
                 dd_current_end = date_checkpoint[goto_checkpoint];
                 unresolved_steps.clear();
-                cerr << "year (sback, normal): " << dd_current << endl;
-                cerr << "check point date: " << date_checkpoint[goto_checkpoint] << endl;
+                G_verbose_message("Going to date: %d-%d-%d", dd_current.year(), dd_current.month(), dd_current.day());
                 for (unsigned run = 0; run < num_runs; run++) {
                     sus_species_rasts[run] = sus_checkpoint[goto_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
                     current_step = step_checkpoint[goto_checkpoint];
-                    // first checkpoint (1/1/year) is beginning, so we don't want to apply treatments
-//                    if (use_treatments && goto_checkpoint != 0) {
-//                        cout << "applying treatments " << dd_current.year() << endl;
-//                        treatments.apply_treatment_host(dd_current.year(), inf_species_rasts[run], sus_species_rasts[run]);
-//                    }
                 }
                 after_loading_checkpoint = true;
             }
@@ -1140,7 +1127,7 @@ int main(int argc, char *argv[])
 
             // if all the oaks are infected, then exit
             if (all_infected(S_species_rast)) {
-                cerr << "In the " << dd_current << " all suspectible oaks are infected!" << endl;
+                G_warning("All suspectible oaks are infected!");
                 break;
             }
 
@@ -1313,10 +1300,10 @@ int main(int argc, char *argv[])
                         raster_to_grass(I_species_rast, name,
                                         "Average occurrence from a all stochastic runs",
                                         dd_current_last_day);
-                    cerr << "output: " << name << endl;
                     if (steering)
                         c.send_data("output:" + name + '|');
                     last_name = name;
+                    G_verbose_message("Output raster %s written", name.c_str());
                 }
                 if (opt.stddev_series->answer) {
                     Img stddev(I_species_rast, 0);
@@ -1330,6 +1317,7 @@ int main(int argc, char *argv[])
                     string title = "Standard deviation of average"
                                    " occurrence from a all stochastic runs";
                     raster_to_grass(stddev, name, title, dd_current_last_day);
+                    G_verbose_message("Output raster %s written", name.c_str());
                 }
                 if (opt.probability_series->answer) {
                     Img probability(I_species_rast, 0);
@@ -1345,6 +1333,7 @@ int main(int argc, char *argv[])
                     raster_to_grass(probability, name, title, dd_current_last_day);
                     if (steering)
                         c.send_data("output:" + name + '|');
+                    G_verbose_message("Output raster %s written", name.c_str());
                 }
                 if (mortality && opt.dead_series->answer) {
                     accumulated_dead += dead_in_current_year[0];
@@ -1353,6 +1342,7 @@ int main(int argc, char *argv[])
                         raster_to_grass(accumulated_dead, name,
                                         "Number of dead hosts to date",
                                         dd_current_last_day);
+                        G_verbose_message("Output raster %s written", name.c_str());
                     }
                 }
             }
@@ -1388,6 +1378,7 @@ int main(int argc, char *argv[])
         raster_to_grass(I_species_rast, opt.output->answer,
                         "Average occurrence from a all stochastic runs",
                         dd_current_last_day);
+        G_verbose_message("Final output raster %s written", opt.output->answer);
     }
     if (opt.stddev->answer) {
         Img stddev(I_species_rast, 0);
@@ -1399,6 +1390,7 @@ int main(int argc, char *argv[])
         stddev.for_each([](int& a){a = std::sqrt(a);});
         raster_to_grass(stddev, opt.stddev->answer,
                         opt.stddev->description, dd_current_last_day);
+        G_verbose_message("Final output raster %s written", opt.stddev->answer);
     }
     if (opt.probability->answer) {
         Img probability(I_species_rast, 0);
@@ -1411,6 +1403,7 @@ int main(int argc, char *argv[])
         probability /= num_runs;
         raster_to_grass(probability, opt.probability->answer,
                         "Probability of occurrence", dd_current_last_day);
+        G_verbose_message("Final output raster %s written", opt.probability->answer);
     }
     if (opt.outside_spores->answer) {
         Cell_head region;
@@ -1456,6 +1449,6 @@ int main(int argc, char *argv[])
         client_thread.join();
         c.close_socket();
     }
-    cout << "end" << endl;
+    G_verbose_message("Simulation ended");
     return 0;
 }
