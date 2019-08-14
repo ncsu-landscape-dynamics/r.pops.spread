@@ -60,6 +60,27 @@ inline void grass_raster_get_row(int fd, CELL* buffer, int row)
     Rast_get_c_row(fd, buffer, row);
 }
 
+/** Overload for set null to zero function */
+inline void set_null_to_zero(DCELL* value)
+{
+    if (Rast_is_d_null_value(value))
+        *value = 0.;
+}
+
+/** Overload for set null to zero function */
+inline void set_null_to_zero(FCELL* value)
+{
+    if (Rast_is_f_null_value(value))
+        *value = 0.f;
+}
+
+/** Overload for set null to zero function */
+inline void set_null_to_zero(CELL* value)
+{
+    if (Rast_is_c_null_value(value))
+        *value = 0;
+}
+
 /** Overload for put row function */
 inline void grass_raster_put_row(int fd, DCELL* buffer)
 {
@@ -100,7 +121,14 @@ inline pops::Raster<Number> raster_from_grass(const char* name)
 
     int fd = Rast_open_old(name, "");
     for (unsigned row = 0; row < rows; row++) {
-        grass_raster_get_row(fd, data + (row * cols), row);
+        auto row_pointer = data + (row * cols);
+        grass_raster_get_row(fd, row_pointer, row);
+        // Null values in all inputs we have mean 0 for the model.
+        // the cost is small, so we do it without checking
+        // if the raster map actually has null (which is more involved)
+        for (unsigned col = 0; col < cols; ++col) {
+            set_null_to_zero(row_pointer + col);
+        }
     }
     Rast_close(fd);
 
