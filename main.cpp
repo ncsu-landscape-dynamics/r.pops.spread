@@ -20,6 +20,7 @@
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
 #include "pops/simulation.hpp"
+#include "pops/kernel.hpp"
 #include "pops/treatments.hpp"
 #include "pops/spread_rate.hpp"
 
@@ -91,32 +92,6 @@ string generate_name(const string& basename, const Date& date)
     return name;
 }
 
-Direction direction_enum_from_string(const string& text)
-{
-    std::map<string, Direction> mapping{
-        {"N", N}, {"NE", NE}, {"E", E}, {"SE", SE}, {"S", S},
-        {"SW", SW}, {"W", W}, {"NW", NW}, {"NONE", NONE}
-    };
-    try {
-        return mapping.at(text);
-    }
-    catch (const std::out_of_range&) {
-        throw std::invalid_argument("direction_enum_from_string: Invalid"
-                                    " value '" + text +"' provided");
-    }
-}
-
-DispersalKernel radial_type_from_string(const string& text)
-{
-    if (text == "cauchy")
-        return CAUCHY;
-    else if (text == "cauchy_mix")
-        return CAUCHY_DOUBLE_SCALE;
-    else
-        throw std::invalid_argument("radial_type_from_string: Invalid"
-                                    " value '" + text +"' provided");
-}
-
 inline TreatmentApplication treatment_app_enum_from_string(const string& text)
 {
     std::map<string, TreatmentApplication> mapping{
@@ -152,6 +127,27 @@ void read_names(std::vector<string>& names, const char* filename)
     string line;
     while (std::getline(file, line)) {
         names.push_back(line);
+    }
+}
+
+/*!
+ * Warns about depreciated option value
+ *
+ * It uses the answer member. If the answer is not set,
+ * nothing is tested.
+ *
+ * \param opt Pointer to a valid option structure
+ * \param depreciated Value which is depreciated
+ * \param current Value which should be used instead
+ */
+void warn_about_depreciated_option_value(const Option* opt,
+                                         const string& depreciated,
+                                         const string& current)
+{
+    if (opt->answer && opt->answer == depreciated) {
+        G_warning(_("The value <%s> for option %s is depreciated."
+                    " Use value <%s> instead."),
+                  opt->answer, opt->key, current.c_str());
     }
 }
 
@@ -371,8 +367,12 @@ struct PoPSOptions
     struct Option *treatments;
     struct Option *treatment_year, *treatment_month;
     struct Option *treatment_app;
-    struct Option *reproductive_rate, *wind;
-    struct Option *dispersal_kernel, *short_distance_scale, *long_distance_scale, *kappa, *percent_short_dispersal;
+    struct Option *reproductive_rate;
+    struct Option *natural_kernel, *natural_scale;
+    struct Option *natural_direction, *natural_kappa;
+    struct Option *anthro_kernel, *anthro_scale;
+    struct Option *anthro_direction, *anthro_kappa;
+    struct Option *percent_natural_dispersal;
     struct Option *infected_to_dead_rate, *first_year_to_die;
     struct Option *dead_series;
     struct Option *seed, *runs, *threads;
@@ -518,16 +518,6 @@ int main(int argc, char *argv[])
     opt.treatment_app->answer = const_cast<char*>("ratio_to_all");
     opt.treatment_app->guisection = _("Treatments");
 
-    opt.wind = G_define_option();
-    opt.wind->type = TYPE_STRING;
-    opt.wind->key = "wind";
-    opt.wind->label = _("Prevailing wind direction");
-    opt.wind->description = _("NONE means that there is no wind");
-    opt.wind->options = "N,NE,E,SE,S,SW,W,NW,NONE";
-    opt.wind->required = YES;
-    opt.wind->answer = const_cast<char*>("NONE");
-    opt.wind->guisection = _("Weather");
-
     opt.moisture_coefficient_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.moisture_coefficient_file->key = "moisture_coefficient_file";
     opt.moisture_coefficient_file->label =
@@ -629,41 +619,93 @@ int main(int argc, char *argv[])
     opt.reproductive_rate->answer = const_cast<char*>("4.4");
     opt.reproductive_rate->guisection = _("Dispersal");
 
-    opt.dispersal_kernel = G_define_option();
-    opt.dispersal_kernel->type = TYPE_STRING;
-    opt.dispersal_kernel->key = "dispersal_kernel";
-    opt.dispersal_kernel->label = _("Type of dispersal kernel");
-    opt.dispersal_kernel->answer = const_cast<char*>("cauchy");
-    opt.dispersal_kernel->options = "cauchy,cauchy_mix";
-    opt.dispersal_kernel->guisection = _("Dispersal");
+    opt.natural_kernel = G_define_option();
+    opt.natural_kernel->type = TYPE_STRING;
+    opt.natural_kernel->key = "natural_dispersal_kernel";
+    opt.natural_kernel->label = _("Natural dispersal kernel type");
+    opt.natural_kernel->answer = const_cast<char*>("cauchy");
+    opt.natural_kernel->options = "cauchy,exponential";
+    opt.natural_kernel->guisection = _("Dispersal");
 
-    opt.short_distance_scale = G_define_option();
-    opt.short_distance_scale->type = TYPE_DOUBLE;
-    opt.short_distance_scale->key = "short_distance_scale";
-    opt.short_distance_scale->label = _("Distance scale parameter for short range dispersal kernel");
-    opt.short_distance_scale->answer = const_cast<char*>("20.57");
-    opt.short_distance_scale->guisection = _("Dispersal");
+    opt.natural_scale = G_define_option();
+    opt.natural_scale->type = TYPE_DOUBLE;
+    opt.natural_scale->key = "natural_distance";
+    opt.natural_scale->label =
+            _("Distance parameter for natural dispersal kernel");
+    opt.natural_scale->guisection = _("Dispersal");
 
-    opt.long_distance_scale = G_define_option();
-    opt.long_distance_scale->type = TYPE_DOUBLE;
-    opt.long_distance_scale->key = "long_distance_scale";
-    opt.long_distance_scale->label = _("Distance scale parameter for long range dispersal kernel");
-    opt.long_distance_scale->guisection = _("Dispersal");
+    opt.natural_direction = G_define_option();
+    opt.natural_direction->type = TYPE_STRING;
+    opt.natural_direction->key = "natural_direction";
+    opt.natural_direction->label =
+            _("Direction of natural dispersal kernel");
+    opt.natural_direction->description =
+            _("Typically prevailing wind direction;"
+              " none means that there is no directionality or no wind");
+    opt.natural_direction->options = "N,NE,E,SE,S,SW,W,NW,NONE,none";
+    opt.natural_direction->required = YES;
+    opt.natural_direction->answer = const_cast<char*>("none");
+    opt.natural_direction->guisection = _("Dispersal");
 
-    opt.kappa = G_define_option();
-    opt.kappa->type = TYPE_DOUBLE;
-    opt.kappa->key = "kappa";
-    opt.kappa->label = _("Strength of the wind direction in the von-mises distribution");
-    opt.kappa->answer = const_cast<char*>("2");
-    opt.kappa->guisection = _("Dispersal");
+    opt.natural_kappa = G_define_option();
+    opt.natural_kappa->type = TYPE_DOUBLE;
+    opt.natural_kappa->key = "natural_direction_strength";
+    opt.natural_kappa->label =
+            _("Strength of direction of natural dispersal kernel");
+    opt.natural_kappa->description =
+            _("The kappa parameter of von Mises distribution"
+              " (concentration);"
+              " typically the strength of the wind direction");
+    opt.natural_kappa->required = YES;
+    opt.natural_kappa->guisection = _("Dispersal");
 
-    opt.percent_short_dispersal = G_define_option();
-    opt.percent_short_dispersal->type = TYPE_DOUBLE;
-    opt.percent_short_dispersal->key = "percent_short_dispersal";
-    opt.percent_short_dispersal->label = _("Percentage of short range dispersal");
-    opt.percent_short_dispersal->description = _("What percentage of dispersal is short range versus long range");
-    opt.percent_short_dispersal->options = "0-1";
-    opt.percent_short_dispersal->guisection = _("Dispersal");
+    opt.anthro_kernel = G_define_option();
+    opt.anthro_kernel->type = TYPE_STRING;
+    opt.anthro_kernel->key = "anthropogenic_dispersal_kernel";
+    opt.anthro_kernel->label = _("Anthropogenic dispersal kernel type");
+    opt.anthro_kernel->options = "cauchy,exponential";
+    opt.anthro_kernel->guisection = _("Dispersal");
+
+    opt.anthro_scale = G_define_option();
+    opt.anthro_scale->type = TYPE_DOUBLE;
+    opt.anthro_scale->key = "anthropogenic_distance";
+    opt.anthro_scale->label =
+            _("Distance parameter for anthropogenic dispersal kernel");
+    opt.anthro_scale->guisection = _("Dispersal");
+
+    opt.anthro_direction = G_define_option();
+    opt.anthro_direction->type = TYPE_STRING;
+    opt.anthro_direction->key = "anthropogenic_direction";
+    opt.anthro_direction->label =
+            _("Direction of anthropogenic dispersal kernel");
+    opt.anthro_direction->description =
+            _("Value none means that there is no directionality");
+    opt.anthro_direction->options = "N,NE,E,SE,S,SW,W,NW,NONE,none";
+    opt.anthro_direction->required = YES;
+    opt.anthro_direction->answer = const_cast<char*>("none");
+    opt.anthro_direction->guisection = _("Dispersal");
+
+    opt.anthro_kappa = G_define_option();
+    opt.anthro_kappa->type = TYPE_DOUBLE;
+    opt.anthro_kappa->key = "anthropogenic_direction_strength";
+    opt.anthro_kappa->label =
+            _("Strength of direction of anthropogenic dispersal kernel");
+    opt.anthro_kappa->description =
+            _("The kappa parameter of von Mises distribution"
+              " (concentration);"
+              " typically the strength of the wind direction");
+    opt.anthro_kappa->guisection = _("Dispersal");
+
+    opt.percent_natural_dispersal = G_define_option();
+    opt.percent_natural_dispersal->type = TYPE_DOUBLE;
+    opt.percent_natural_dispersal->key = "percent_natural_dispersal";
+    opt.percent_natural_dispersal->label =
+            _("Percentage of natural dispersal");
+    opt.percent_natural_dispersal->description =
+            _("How often is the natural dispersal kernel used versus"
+              " the anthropogenic dispersal kernel");
+    opt.percent_natural_dispersal->options = "0-1";
+    opt.percent_natural_dispersal->guisection = _("Dispersal");
 
     opt.infected_to_dead_rate = G_define_option();
     opt.infected_to_dead_rate->type = TYPE_DOUBLE;
@@ -798,33 +840,95 @@ int main(int argc, char *argv[])
     file_exists_or_fatal_error(opt.moisture_coefficient_file);
     file_exists_or_fatal_error(opt.temperature_coefficient_file);
 
+    // get current computational region (for rows, cols and resolution)
+    struct Cell_head window;
+    G_get_window(&window);
+
     // Seasonality: Do you want the spread to be limited to certain months?
     if (!opt.seasonality->answer || opt.seasonality->answer[0] == '\0')
         G_fatal_error(_("The option %s cannot be empty"),
                       opt.seasonality->key);
     Season season = seasonality_from_option(opt.seasonality);
 
-    Direction pwdir = direction_enum_from_string(opt.wind->answer);
-
     // set the spore rate
     double spore_rate = std::stod(opt.reproductive_rate->answer);
-    DispersalKernel rtype = radial_type_from_string(opt.dispersal_kernel->answer);
-    double scale1 = std::stod(opt.short_distance_scale->answer);
-    double scale2 = 0;
-    if (rtype == CAUCHY_DOUBLE_SCALE && !opt.long_distance_scale->answer)
+
+    // TODO: how to support DispersalKernelType::None for natural_kernel?
+    // perhaps the long-short should take the type instead of bool,
+    // then T is anything else than None
+    // TODO: should all kernels support None?
+    DispersalKernelType natural_kernel_type =
+            kernel_type_from_string(opt.natural_kernel->answer);
+    double natural_scale = std::stod(opt.natural_scale->answer);
+    Direction natural_direction = direction_from_string(opt.natural_direction->answer);
+    double natural_kappa = std::stod(opt.natural_kappa->answer);
+
+    DispersalKernelType anthro_kernel_type =
+            kernel_type_from_string(opt.anthro_kernel->answer);
+    bool use_long_kernel = false;
+    if (anthro_kernel_type != DispersalKernelType::None)
+        use_long_kernel = true;
+
+    double anthro_scale = 0;
+    if (use_long_kernel && !opt.anthro_scale->answer)
         G_fatal_error(_("The option %s is required for %s=%s"),
-                      opt.long_distance_scale->key, opt.dispersal_kernel->key,
-                      opt.dispersal_kernel->answer);
-    else if (opt.long_distance_scale->answer)
-        scale2 = std::stod(opt.long_distance_scale->answer);
-    double kappa = std::stod(opt.kappa->answer);
+                      opt.anthro_scale->key, opt.anthro_kernel->key,
+                      opt.anthro_kernel->answer);
+    else if (opt.anthro_scale->answer)
+        anthro_scale = std::stod(opt.anthro_scale->answer);
+
+    // we allow none and an empty string
+    Direction anthro_direction = direction_from_string(opt.anthro_direction->answer);
+
+    double anthro_kappa = 0;
+    if (use_long_kernel && !opt.anthro_kappa->answer)
+        G_fatal_error(_("The option %s is required for %s=%s"),
+                      opt.anthro_kappa->key, opt.anthro_kernel->key,
+                      opt.anthro_kernel->answer);
+    else if (opt.anthro_kappa->answer)
+        anthro_kappa= std::stod(opt.anthro_kappa->answer);
+
     double gamma = 0.0;
-    if (rtype == CAUCHY_DOUBLE_SCALE && !opt.percent_short_dispersal->answer)
+    if (use_long_kernel &&
+            !opt.percent_natural_dispersal->answer)
         G_fatal_error(_("The option %s is required for %s=%s"),
-                      opt.percent_short_dispersal->key, opt.dispersal_kernel->key,
-                      opt.dispersal_kernel->answer);
-    else if (opt.percent_short_dispersal->answer)
-        gamma = std::stod(opt.percent_short_dispersal->answer);
+                      opt.percent_natural_dispersal->key, opt.natural_kernel->key,
+                      opt.natural_kernel->answer);
+    else if (opt.percent_natural_dispersal->answer)
+        gamma = std::stod(opt.percent_natural_dispersal->answer);
+
+    // warn about limits to backwards compatibility
+    // "none" is consistent with other GRASS GIS modules
+    warn_about_depreciated_option_value(
+                opt.natural_direction, "NONE", "none");
+    warn_about_depreciated_option_value(
+                opt.anthro_kernel, "NONE", "none");
+    warn_about_depreciated_option_value(
+                opt.anthro_direction, "NONE", "none");
+
+    RadialDispersalKernel short_radial_kernel(
+                window.ew_res, window.ns_res, natural_kernel_type,
+                natural_scale, natural_direction, natural_kappa);
+    RadialDispersalKernel long_radial_kernel(
+                window.ew_res, window.ns_res, anthro_kernel_type,
+                anthro_scale, anthro_direction, anthro_kappa);
+    UniformDispersalKernel uniform_kernel(window.rows, window.cols);
+    SwitchDispersalKernel short_selectable_kernel(
+                natural_kernel_type,
+                short_radial_kernel, uniform_kernel);
+    SwitchDispersalKernel long_selectable_kernel(
+                natural_kernel_type,
+                long_radial_kernel, uniform_kernel);
+    // each run has its own copy, so a kernel can have a state
+    std::vector<DispersalKernel> kernels;
+    kernels.reserve(num_runs);
+    for (unsigned i = 0; i < num_runs; ++i) {
+        // each (sub)kernel is copied to the main kernel
+        kernels.emplace_back(short_selectable_kernel,
+                             long_selectable_kernel,
+                             use_long_kernel,
+                             gamma);
+    }
 
     // initialize the start Date and end Date object
     // options for times are required ints
@@ -968,10 +1072,8 @@ int main(int argc, char *argv[])
     Img accumulated_dead(Img(S_species_rast, 0));
 
     sporulations.reserve(num_runs);
-    struct Cell_head window;
-    G_get_window(&window);
     for (unsigned i = 0; i < num_runs; ++i)
-        sporulations.emplace_back(seed_value++, I_species_rast, window.ew_res, window.ns_res);
+        sporulations.emplace_back(seed_value++, I_species_rast);
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     // spread rate initialization
@@ -1206,9 +1308,7 @@ int main(int argc, char *argv[])
                                                        outside_spores[run],
                                                        weather,
                                                        weather_coefficients[step],
-                                                       rtype, scale1,
-                                                       gamma, scale2,
-                                                       pwdir, kappa);
+                                                       kernels[run]);
                         }
                     }
                     unresolved_steps.clear();
