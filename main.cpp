@@ -957,7 +957,6 @@ int main(int argc, char *argv[])
                                                    spore_rate);
 
                         auto current_age = dd_current.year() - dd_start.year();
-
                         sporulations[run].disperse(sus_species_rasts[run],
                                                    inf_species_rasts[run],
                                                    inf_species_cohort_rasts[run][current_age],
