@@ -486,8 +486,7 @@ int main(int argc, char *argv[])
     opt.anthro_direction->label =
             _("Direction of anthropogenic dispersal kernel");
     opt.anthro_direction->description =
-            _("Typically prevailing wind direction;"
-              " none means that there is no directionality or no wind");
+            _("Value none means that there is no directionality");
     opt.anthro_direction->options = "N,NE,E,SE,S,SW,W,NW,NONE,none";
     opt.anthro_direction->required = YES;
     opt.anthro_direction->answer = const_cast<char*>("none");
