@@ -43,12 +43,14 @@ extern "C" {
 
 
 #include <map>
+#include <tuple>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cmath>
 
 #include <sys/stat.h>
 
@@ -360,6 +362,7 @@ struct PoPSOptions
 {
     struct Option *host, *total_plants, *infected, *outside_spores;
     struct Option *moisture_coefficient_file, *temperature_coefficient_file;
+    struct Option *weather_coefficient_file;
     struct Option *lethal_temperature, *lethal_temperature_months;
     struct Option *temperature_file;
     struct Option *start_time, *end_time, *seasonality;
@@ -535,6 +538,15 @@ int main(int argc, char *argv[])
             _("Temperature coefficient");
     opt.temperature_coefficient_file->required = NO;
     opt.temperature_coefficient_file->guisection = _("Weather");
+
+    opt.weather_coefficient_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.weather_coefficient_file->key = "weather_coefficient_file";
+    opt.weather_coefficient_file->label =
+        _("Input file with one weather coefficient map name per line");
+    opt.weather_coefficient_file->description =
+        _("Weather coefficient");
+    opt.weather_coefficient_file->required = NO;
+    opt.weather_coefficient_file->guisection = _("Weather");
 
     opt.lethal_temperature = G_define_option();
     opt.lethal_temperature->type = TYPE_DOUBLE;
@@ -808,6 +820,8 @@ int main(int argc, char *argv[])
 
     // weather
     G_option_collective(opt.moisture_coefficient_file, opt.temperature_coefficient_file, NULL);
+    G_option_exclusive(opt.moisture_coefficient_file, opt.weather_coefficient_file, NULL);
+    G_option_exclusive(opt.temperature_coefficient_file, opt.weather_coefficient_file, NULL);
 
     // mortality
     // flag and rate required always
@@ -839,6 +853,7 @@ int main(int argc, char *argv[])
     // check for file existence
     file_exists_or_fatal_error(opt.moisture_coefficient_file);
     file_exists_or_fatal_error(opt.temperature_coefficient_file);
+    file_exists_or_fatal_error(opt.weather_coefficient_file);
 
     // get current computational region (for rows, cols and resolution)
     struct Cell_head window;
@@ -1001,11 +1016,17 @@ int main(int argc, char *argv[])
 
     std::vector<string> moisture_names;
     std::vector<string> temperature_names;
-    double weather = false;
+    std::vector<string> weather_names;
+    bool weather = false;
+    bool moisture_temperature = false;
 
     if (opt.moisture_coefficient_file->answer && opt.temperature_coefficient_file->answer) {
         read_names(moisture_names, opt.moisture_coefficient_file->answer);
         read_names(temperature_names, opt.temperature_coefficient_file->answer);
+        moisture_temperature = true;
+    }
+    if (opt.weather_coefficient_file->answer) {
+        read_names(weather_names, opt.weather_coefficient_file->answer);
         weather = true;
     }
 
@@ -1031,7 +1052,7 @@ int main(int argc, char *argv[])
     // weeks are currently the worst case
     const unsigned max_weeks_in_year = 53;
     std::vector<DImg> weather_coefficients;
-    if (weather)
+    if (weather || moisture_temperature)
         weather_coefficients.resize(max_weeks_in_year);
 
     // treatments
@@ -1250,11 +1271,13 @@ int main(int argc, char *argv[])
                     unsigned step_in_chunk = 0;
                     // get weather for all the steps in chunk
                     for (auto step : unresolved_steps) {
-                        if (weather) {
+                        if (moisture_temperature) {
                             DImg moisture(raster_from_grass_float(moisture_names[step]));
                             DImg temperature(raster_from_grass_float(temperature_names[step]));
                             weather_coefficients[step_in_chunk] = moisture * temperature;
                         }
+                        else if (weather)
+                            weather_coefficients[step_in_chunk] = raster_from_grass_float(weather_names[step]);
                         ++step_in_chunk;
                     }
 
@@ -1296,7 +1319,7 @@ int main(int argc, char *argv[])
                             if (!season.month_in_season(date.month()))
                                 continue;
                             sporulations[run].generate(inf_species_rasts[run],
-                                                       weather,
+                                                       weather || moisture_temperature,
                                                        weather_coefficients[step],
                                                        spore_rate);
 
@@ -1306,7 +1329,7 @@ int main(int argc, char *argv[])
                                                        inf_species_cohort_rasts[run][current_age],
                                                        lvtree_rast,
                                                        outside_spores[run],
-                                                       weather,
+                                                       weather || moisture_temperature,
                                                        weather_coefficients[step],
                                                        kernels[run]);
                         }
