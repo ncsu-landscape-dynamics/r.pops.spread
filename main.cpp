@@ -838,7 +838,7 @@ int main(int argc, char *argv[])
     // weeks are currently the worst case
     const unsigned max_weeks_in_year = 53;
     std::vector<DImg> weather_coefficients;
-    if (weather)
+    if (weather || moisture_temperature)
         weather_coefficients.resize(max_weeks_in_year);
 
     // treatments
@@ -971,7 +971,7 @@ int main(int argc, char *argv[])
                         if (!season.month_in_season(date.month()))
                             continue;
                         sporulations[run].generate(inf_species_rasts[run],
-                                                   weather,
+                                                   weather || moisture_temperature,
                                                    weather_coefficients[step],
                                                    spore_rate);
 
@@ -981,7 +981,7 @@ int main(int argc, char *argv[])
                                                    inf_species_cohort_rasts[run][current_age],
                                                    lvtree_rast,
                                                    outside_spores[run],
-                                                   weather,
+                                                   weather || moisture_temperature,
                                                    weather_coefficients[step],
                                                    kernels[run]);
                     }
