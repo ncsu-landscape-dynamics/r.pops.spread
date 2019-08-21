@@ -268,7 +268,7 @@ private:
 public:
     string load_data;
     string basename;
-    int goto_year;
+    int goto_checkpoint;
     int treatment_year;
 
     inline void store(SteeringCommand cmd);
@@ -345,7 +345,7 @@ void steering_client(tcp_client &c, string ip_address, int port, Steering &steer
                 } else if (message.substr(0, 4) == "goto") {
                     string year = message.substr(5, message.length() - 5);
                     cout << "received goto year: " << year << endl;
-                    steering.goto_year = std::stoi(year);;
+                    steering.goto_checkpoint = std::stoi(year);;
                     steering.store(SteeringCommand::GoTo);
                 } else if (message.substr(0, 4) == "sync") {
                     steering.store(SteeringCommand::SyncRuns);
@@ -1121,6 +1121,8 @@ int main(int argc, char *argv[])
     // don't process outputs at the end of year
     // when we went there using checkpointing
     bool after_loading_checkpoint = false;
+    // signalizes it was end of year
+    bool save_checkpoint = false;
 
     // syncing runs
     bool sync = false;
@@ -1136,7 +1138,7 @@ int main(int argc, char *argv[])
     }
 
     // simulation years are closed interval
-    // size 4 for 2016 to 2018 - 0: beginning 2016, 1: end 2016, 2: end 2017, 3: end 2018
+    // size 4 for 2016 to 2018 - 0: beginning 2016, 1: beginning 2017, 2: beginning 2018, 3: beginning 2019
     auto num_checkpoints = dd_end.year() - dd_start.year() + 2;
     std::vector<std::vector<Img>> sus_checkpoint(
                 num_checkpoints, std::vector<Img>(num_runs, Img(S_species_rast)));
@@ -1203,8 +1205,8 @@ int main(int argc, char *argv[])
             G_verbose_message("Base name: %s", steering_obj.basename.c_str());
         }
         else if (cmd == SteeringCommand::GoTo) { // go to specific checkpoint
-            G_verbose_message("Go to checkpoint: %d", steering_obj.goto_year);
-            unsigned goto_checkpoint = steering_obj.goto_year;
+            G_verbose_message("Go to checkpoint: %d", steering_obj.goto_checkpoint);
+            unsigned goto_checkpoint = steering_obj.goto_checkpoint;
             if (goto_checkpoint < 0 || goto_checkpoint >= num_checkpoints) {/* do nothing */}
             else if (goto_checkpoint <= last_checkpoint) {
                 // go back
@@ -1217,11 +1219,11 @@ int main(int argc, char *argv[])
                     inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
                     current_step = step_checkpoint[goto_checkpoint];
                 }
-                after_loading_checkpoint = true;
+                //after_loading_checkpoint = true;
             }
             else {
                 // go forward
-                dd_current_end = Date(steering_obj.goto_year + dd_start.year() - 1, 12, 31);
+                dd_current_end = Date(steering_obj.goto_checkpoint + dd_start.year(), 01, 01);
             }
         }
         else if (cmd == SteeringCommand::SyncRuns) {
@@ -1243,7 +1245,7 @@ int main(int argc, char *argv[])
         }
 
         string last_name = "";
-        if (dd_current_end > dd_start && dd_current <= dd_current_end) {
+        if (dd_current_end > dd_start && dd_current < dd_current_end) {
             unresolved_steps.push_back(current_step);
             unresolved_dates.push_back(dd_current);
             dd_current_last_day = step_type == "month" ? dd_current.get_last_day_of_month() : dd_current.get_last_day_of_week();
@@ -1258,6 +1260,7 @@ int main(int argc, char *argv[])
             // At the end of the year, run simulation for all unresolved
             // steps in one chunk.
             if ((step_type == "month" ? dd_current.is_last_month_of_year() : dd_current.is_last_week_of_year()) && !after_loading_checkpoint) {
+                save_checkpoint = true;
                 if (!unresolved_steps.empty()) {
 
                     // to avoid problem with Jan 1 of the following year
@@ -1336,13 +1339,6 @@ int main(int argc, char *argv[])
                     }
                     unresolved_steps.clear();
                     unresolved_dates.clear();
-                }
-                for (unsigned run = 0; run < num_runs; run++) {
-                    last_checkpoint = dd_current.year() - dd_start.year() + 1;
-                    sus_checkpoint[last_checkpoint][run] = sus_species_rasts[run];
-                    inf_checkpoint[last_checkpoint][run] = inf_species_rasts[run];
-                    step_checkpoint[last_checkpoint] = current_step;
-                    date_checkpoint[last_checkpoint] = dd_current;
                 }
                 if (mortality) {
                     // TODO: use the library code to handle mortality
@@ -1476,6 +1472,18 @@ int main(int argc, char *argv[])
             else
                 dd_current.increased_by_week();
             current_step += 1;
+            // save checkpoint if it was end of year (dd_current is now 1/1)
+            if (save_checkpoint) {
+                last_checkpoint = dd_current.year() - dd_start.year();
+                for (unsigned run = 0; run < num_runs; run++) {
+                    // beginning of year
+                    sus_checkpoint[last_checkpoint][run] = sus_species_rasts[run];
+                    inf_checkpoint[last_checkpoint][run] = inf_species_rasts[run];
+                    step_checkpoint[last_checkpoint] = current_step;
+                    date_checkpoint[last_checkpoint] = dd_current;
+                }
+                save_checkpoint = false;
+            }
             if (dd_current > dd_end) {
                 if (steering)
                     c.send_data("info:last:" + last_name);
