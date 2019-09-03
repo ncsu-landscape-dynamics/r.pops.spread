@@ -23,6 +23,7 @@
 #include "pops/kernel.hpp"
 #include "pops/treatments.hpp"
 #include "pops/spread_rate.hpp"
+#include "pops/statistics.hpp"
 
 #include "tcp_client.h"
 
@@ -51,7 +52,7 @@ extern "C" {
 #include <sstream>
 #include <string>
 #include <cmath>
-
+#include <algorithm>
 #include <sys/stat.h>
 
 using std::string;
@@ -206,26 +207,26 @@ bool all_infected(Img& susceptible)
     return true;
 }
 
-unsigned sum_of_infected(Img& infected)
-{
-    unsigned sum = 0;
-    for (unsigned j = 0; j < infected.rows(); j++) {
-        for (unsigned k = 0; k < infected.cols(); k++) {
-            sum += infected(j, k);
-        }
-    }
-    return sum;
-}
-
-unsigned select_run(std::vector<unsigned> stats) {
-    // select index of median (or above median)
+unsigned median(std::vector<unsigned>& stats) {
+    // select index of median (or below median) run
+    // in: {5, 4, 3, 6} out: 1
+    // in: {5, 4, 3, 6, 10} out: 0
     auto stats2 = stats;
     auto median_it = stats2.begin() + stats2.size() / 2;
+    if (!(stats2.size() % 2))
+        median_it--;
     std::nth_element(stats2.begin(), median_it, stats2.end());
     auto itOfMedian = std::find(stats.begin(), stats.end(), *median_it);
     return itOfMedian - stats.begin();
 }
 
+unsigned select_median_run(std::vector<Img>& infected) {
+    std::vector<unsigned> sums;
+    for (unsigned run = 0; run < infected.size(); run++) {
+        sums.push_back(sum_of_infected(infected[run]));
+    }
+    return median(sums);
+}
 std::vector<std::string> split(const std::string& s, char delimiter)
 {
     std::vector<std::string> tokens;
@@ -1146,12 +1147,16 @@ int main(int argc, char *argv[])
                 num_checkpoints, std::vector<Img>(num_runs, Img(S_species_rast)));
     std::vector<int> step_checkpoint(num_checkpoints);
     std::vector<Date> date_checkpoint(num_checkpoints, dd_start);
+    std::vector<unsigned> selected_run_checkpoint(num_checkpoints);
+    unsigned selected_run = 0;
+    bool select_run = true;
     int last_checkpoint = 0;
     for (unsigned run = 0; run < num_runs; run++) {
         sus_checkpoint[last_checkpoint][run] = S_species_rast_start;
         inf_checkpoint[last_checkpoint][run] = I_species_rast_start;
         step_checkpoint[last_checkpoint] = 0;
         date_checkpoint[last_checkpoint] = dd_start;
+        selected_run_checkpoint[last_checkpoint] = selected_run;
     }
     // main simulation loop (weekly or monthly steps)
     int current_step = 0;
@@ -1179,6 +1184,7 @@ int main(int argc, char *argv[])
                 --last_checkpoint;
                 dd_current_end = date_checkpoint[last_checkpoint];
                 dd_current = date_checkpoint[last_checkpoint];
+                selected_run = selected_run_checkpoint[last_checkpoint];
                 for (unsigned run = 0; run < num_runs; run++) {
                     sus_species_rasts[run] = sus_checkpoint[last_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[last_checkpoint][run];
@@ -1212,6 +1218,7 @@ int main(int argc, char *argv[])
                 // go back
                 dd_current = date_checkpoint[goto_checkpoint];
                 dd_current_end = date_checkpoint[goto_checkpoint];
+                selected_run = selected_run_checkpoint[last_checkpoint];
                 unresolved_steps.clear();
                 G_verbose_message("Going to date: %d-%d-%d", dd_current.year(), dd_current.month(), dd_current.day());
                 for (unsigned run = 0; run < num_runs; run++) {
@@ -1234,14 +1241,8 @@ int main(int argc, char *argv[])
                We would have to decide based on first year (after syncing or starting)
                and the use that selection till next syncing
             */
-/*
-            std::vector<unsigned> sums;
-            for (unsigned run = 0; run < num_runs; run++) {
-                sums.push_back(sum_of_infected(inf_species_rasts[run]));
-            }
-            unsigned selected_run = select_run(sums);
-*/
             sync = true;
+            select_run = true;
         }
 
         string last_name = "";
@@ -1368,6 +1369,12 @@ int main(int argc, char *argv[])
                         }
                     }
                 }
+                // decide if to select run and select it
+                if (select_run) {
+                    selected_run = select_median_run(inf_species_rasts);
+                    select_run = false;
+                    G_verbose_message("Selected run %d", selected_run);
+                }
                 // compute spread rate
                 if (opt.spread_rate_output->answer) {
                     unsigned simulation_year = dd_current.year() - dd_start.year();
@@ -1377,7 +1384,6 @@ int main(int argc, char *argv[])
                     }
                 }
                 if (sync) {
-                    unsigned selected_run = 0;
                     // sync infectious and susceptible in all threads to selected one
                     for (unsigned run = 0; run < num_runs; run++) {
                         if (run != selected_run) {
@@ -1401,13 +1407,14 @@ int main(int argc, char *argv[])
                 }
                 if (opt.single_series->answer) {
                     string name = generate_name(opt.single_series->answer, dd_current_last_day);
-                    raster_to_grass(inf_species_rasts[0], name,
+                    raster_to_grass(inf_species_rasts[selected_run], name,
                             "Occurrence from a single stochastic run",
                             dd_current_last_day);
                     if (steering) {
                         c.send_data("output:" + name + '|');
                         last_name = name;
                     }
+                    G_verbose_message("Output raster %s written", name.c_str());
                 }
                 if ((opt.average_series->answer) || opt.stddev_series->answer) {
                     // aggregate in the series
@@ -1462,7 +1469,7 @@ int main(int argc, char *argv[])
                     G_verbose_message("Output raster %s written", name.c_str());
                 }
                 if (mortality && opt.dead_series->answer) {
-                    accumulated_dead += dead_in_current_year[0];
+                    accumulated_dead += dead_in_current_year[selected_run];
                     if (opt.dead_series->answer) {
                         string name = generate_name(opt.dead_series->answer, dd_current_last_day);
                         raster_to_grass(accumulated_dead, name,
@@ -1488,6 +1495,7 @@ int main(int argc, char *argv[])
                     inf_checkpoint[last_checkpoint][run] = inf_species_rasts[run];
                     step_checkpoint[last_checkpoint] = current_step;
                     date_checkpoint[last_checkpoint] = dd_current;
+                    selected_run_checkpoint[last_checkpoint] = selected_run;
                 }
                 save_checkpoint = false;
             }
