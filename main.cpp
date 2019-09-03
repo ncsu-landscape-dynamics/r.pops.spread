@@ -379,7 +379,8 @@ struct PoPSOptions
     struct Option *infected_to_dead_rate, *first_year_to_die;
     struct Option *dead_series;
     struct Option *seed, *runs, *threads;
-    struct Option *output, *output_series;
+    struct Option *single_series;
+    struct Option *average, *average_series;
     struct Option *stddev, *stddev_series;
     struct Option *probability, *probability_series;
     struct Option *spread_rate_output;
@@ -390,7 +391,6 @@ struct PoPSFlags
 {
     struct Flag *mortality;
     struct Flag *generate_seed;
-    struct Flag *series_as_single_run;
 };
 
 
@@ -429,15 +429,23 @@ int main(int argc, char *argv[])
     opt.infected->description = _("Number of infected hosts per cell");
     opt.infected->guisection = _("Input");
 
-    opt.output = G_define_standard_option(G_OPT_R_OUTPUT);
-    opt.output->guisection = _("Output");
-    opt.output->required = NO;
+    opt.average = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.average->key = "average";
+    opt.average->description = _("Average infected across multiple runs");
+    opt.average->guisection = _("Output");
+    opt.average->required = NO;
 
-    opt.output_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
-    opt.output_series->key = "output_series";
-    opt.output_series->description = _("Basename for output series");
-    opt.output_series->required = NO;
-    opt.output_series->guisection = _("Output");
+    opt.average_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
+    opt.average_series->key = "average_series";
+    opt.average_series->description = _("Basename for output series of average infected across multiple runs");
+    opt.average_series->required = NO;
+    opt.average_series->guisection = _("Output");
+
+    opt.single_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
+    opt.single_series->key = "single_series";
+    opt.single_series->description = _("Basename for output series of infected as single stochastic run");
+    opt.single_series->required = NO;
+    opt.single_series->guisection = _("Output");
 
     opt.stddev = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.stddev->key = "stddev";
@@ -451,14 +459,6 @@ int main(int argc, char *argv[])
             = _("Basename for output series of standard deviations");
     opt.stddev_series->required = NO;
     opt.stddev_series->guisection = _("Output");
-
-    flg.series_as_single_run = G_define_flag();
-    flg.series_as_single_run->key = 'l';
-    flg.series_as_single_run->label =
-            _("The output series as a single run only, not average");
-    flg.series_as_single_run->description =
-            _("The first run will be used for output instead of average");
-    flg.series_as_single_run->guisection = _("Output");
 
     opt.probability = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.probability->key = "probability";
@@ -811,7 +811,7 @@ int main(int argc, char *argv[])
     opt.port->description = _("Port of steering server");
     opt.port->guisection = _("Steering");
 
-    G_option_required(opt.output, opt.output_series, opt.probability, opt.probability_series,
+    G_option_required(opt.average, opt.average_series, opt.single_series, opt.probability, opt.probability_series,
                       opt.outside_spores, NULL);
 
     G_option_exclusive(opt.seed, flg.generate_seed, NULL);
@@ -830,7 +830,7 @@ int main(int argc, char *argv[])
     G_option_requires(flg.mortality, opt.infected_to_dead_rate, NULL);
     G_option_requires(opt.first_year_to_die, flg.mortality, NULL);
     G_option_requires_all(opt.dead_series, flg.mortality,
-                          flg.series_as_single_run, NULL);
+                          opt.single_series, NULL);
     // TODO: requires_all does not understand the default?
     // treatment_app needs to be removed from here and check separately
     G_option_requires_all(opt.treatments,
@@ -1399,29 +1399,34 @@ int main(int argc, char *argv[])
                                           num_years_spread, start_time);
                     }
                 }
-                if ((opt.output_series->answer && !flg.series_as_single_run->answer)
-                        || opt.stddev_series->answer) {
+                if (opt.single_series->answer) {
+                    string name = generate_name(opt.single_series->answer, dd_current_last_day);
+                    raster_to_grass(inf_species_rasts[0], name,
+                            "Occurrence from a single stochastic run",
+                            dd_current_last_day);
+                    if (steering) {
+                        c.send_data("output:" + name + '|');
+                        last_name = name;
+                    }
+                }
+                if ((opt.average_series->answer) || opt.stddev_series->answer) {
                     // aggregate in the series
                     I_species_rast.zero();
                     for (unsigned i = 0; i < num_runs; i++)
                         I_species_rast += inf_species_rasts[i];
                     I_species_rast /= num_runs;
                 }
-                if (opt.output_series->answer) {
+                if (opt.average_series->answer) {
                     // write result
                     // date is always end of the year, even for seasonal spread
-                    string name = generate_name(opt.output_series->answer, dd_current_last_day);
-                    if (flg.series_as_single_run->answer)
-                        raster_to_grass(inf_species_rasts[0], name,
-                            "Occurrence from a single stochastic run",
-                            dd_current_last_day);
-                    else
-                        raster_to_grass(I_species_rast, name,
-                                        "Average occurrence from a all stochastic runs",
-                                        dd_current_last_day);
-                    if (steering)
+                    string name = generate_name(opt.average_series->answer, dd_current_last_day);
+                    raster_to_grass(I_species_rast, name,
+                                    "Average occurrence from all stochastic runs",
+                                    dd_current_last_day);
+                    if (steering) {
                         c.send_data("output:" + name + '|');
-                    last_name = name;
+                        last_name = name;
+                    }
                     G_verbose_message("Output raster %s written", name.c_str());
                 }
                 if (opt.stddev_series->answer) {
@@ -1450,8 +1455,10 @@ int main(int argc, char *argv[])
                     string name = generate_name(opt.probability_series->answer, dd_current_last_day);
                     string title = "Probability of occurrence";
                     raster_to_grass(probability, name, title, dd_current_last_day);
-                    if (steering)
+                    if (steering) {
                         c.send_data("output:" + name + '|');
+                        last_name = name;
+                    }
                     G_verbose_message("Output raster %s written", name.c_str());
                 }
                 if (mortality && opt.dead_series->answer) {
@@ -1497,19 +1504,19 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (opt.output->answer || opt.stddev->answer) {
+    if (opt.average->answer || opt.stddev->answer) {
         // aggregate
         I_species_rast.zero();
         for (unsigned i = 0; i < num_runs; i++)
             I_species_rast += inf_species_rasts[i];
         I_species_rast /= num_runs;
     }
-    if (opt.output->answer) {
+    if (opt.average->answer) {
         // write final result
-        raster_to_grass(I_species_rast, opt.output->answer,
-                        "Average occurrence from a all stochastic runs",
+        raster_to_grass(I_species_rast, opt.average->answer,
+                        "Average occurrence from all stochastic runs",
                         dd_current_last_day);
-        G_verbose_message("Final output raster %s written", opt.output->answer);
+        G_verbose_message("Final output raster %s written", opt.average->answer);
     }
     if (opt.stddev->answer) {
         Img stddev(I_species_rast, 0);
