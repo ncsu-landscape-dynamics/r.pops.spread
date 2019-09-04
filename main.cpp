@@ -23,6 +23,7 @@
 #include "pops/kernel.hpp"
 #include "pops/treatments.hpp"
 #include "pops/spread_rate.hpp"
+#include "pops/statistics.hpp"
 
 extern "C" {
 #include <grass/gis.h>
@@ -78,6 +79,21 @@ string generate_name(const string& basename, const Date& date)
     auto sep = G_get_basename_separator();
     string name = basename + sep + year + "_" + month + "_" + day;
     return name;
+}
+
+void write_average_area(const std::vector<Img>& infected, const char* raster_name,
+                        double ew_res, double ns_res)
+{
+    struct History hist;
+    double avg = 0;
+    for (unsigned i = 0; i < infected.size(); i++) {
+        avg += area_of_infected(infected[i], ew_res, ns_res);
+    }
+    avg /= infected.size();
+    string avg_string = "Average infected area: " + std::to_string(avg);
+    Rast_read_history(raster_name, "", &hist);
+    Rast_set_history(&hist, HIST_KEYWRD, avg_string.c_str());
+    Rast_write_history(raster_name, &hist);
 }
 
 inline TreatmentApplication treatment_app_enum_from_string(const string& text)
@@ -1043,6 +1059,7 @@ int main(int argc, char *argv[])
                 raster_to_grass(I_species_rast, name,
                                 "Average occurrence from a all stochastic runs",
                                 dd_current_last_day);
+                write_average_area(inf_species_rasts, name.c_str(), window.ew_res, window.ns_res);
             }
             if (opt.stddev_series->answer) {
                 Img stddev(I_species_rast, 0);
@@ -1094,6 +1111,8 @@ int main(int argc, char *argv[])
         raster_to_grass(I_species_rast, opt.average->answer,
                         "Average occurrence from all stochastic runs",
                         dd_current_last_day);
+        write_average_area(inf_species_rasts, opt.average->answer,
+                           window.ew_res, window.ns_res);
     }
     if (opt.stddev->answer) {
         Img stddev(I_species_rast, 0);
