@@ -1257,7 +1257,6 @@ int main(int argc, char *argv[])
                and the use that selection till next syncing
             */
             sync = true;
-            select_run = true;
         }
 
         string last_name = "";
@@ -1412,6 +1411,8 @@ int main(int argc, char *argv[])
                         write_spread_rate(opt.spread_rate_output, spread_rates[selected_run],
                                           num_years_spread, start_time);
                     }
+                    // step after sync we need to select a run
+                    select_run = true;
                 }
                 else {
                     if (opt.spread_rate_output->answer) {
