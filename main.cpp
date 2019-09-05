@@ -95,6 +95,21 @@ string generate_name(const string& basename, const Date& date)
     return name;
 }
 
+void write_average_area(const std::vector<Img>& infected, const char* raster_name,
+                        double ew_res, double ns_res)
+{
+    struct History hist;
+    double avg = 0;
+    for (unsigned i = 0; i < infected.size(); i++) {
+        avg += area_of_infected(infected[i], ew_res, ns_res);
+    }
+    avg /= infected.size();
+    string avg_string = "Average infected area: " + std::to_string(avg);
+    Rast_read_history(raster_name, "", &hist);
+    Rast_set_history(&hist, HIST_KEYWRD, avg_string.c_str());
+    Rast_write_history(raster_name, &hist);
+}
+
 inline TreatmentApplication treatment_app_enum_from_string(const string& text)
 {
     std::map<string, TreatmentApplication> mapping{
@@ -1430,6 +1445,7 @@ int main(int argc, char *argv[])
                     raster_to_grass(I_species_rast, name,
                                     "Average occurrence from all stochastic runs",
                                     dd_current_last_day);
+                    write_average_area(inf_species_rasts, name.c_str(), window.ew_res, window.ns_res);
                     if (steering) {
                         c.send_data("output:" + name + '|');
                         last_name = name;
@@ -1524,6 +1540,7 @@ int main(int argc, char *argv[])
         raster_to_grass(I_species_rast, opt.average->answer,
                         "Average occurrence from all stochastic runs",
                         dd_current_last_day);
+        write_average_area(inf_species_rasts, opt.average->answer, window.ew_res, window.ns_res);
         G_verbose_message("Final output raster %s written", opt.average->answer);
     }
     if (opt.stddev->answer) {
