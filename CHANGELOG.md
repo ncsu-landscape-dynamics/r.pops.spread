@@ -4,7 +4,7 @@ All notable changes to this project should be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
-## 2018-09-18 - Update to the next generation of PoPS library
+## 2018-09-18 - July 2019 improvements
 
 ### Changed
 
