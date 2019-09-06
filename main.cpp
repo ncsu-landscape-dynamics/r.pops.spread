@@ -1424,8 +1424,8 @@ int main(int argc, char *argv[])
                 if (opt.single_series->answer) {
                     string name = generate_name(opt.single_series->answer, dd_current_last_day);
                     raster_to_grass(inf_species_rasts[selected_run], name,
-                            "Occurrence from a single stochastic run",
-                            dd_current_last_day);
+                                    "Occurrence from a single stochastic run",
+                                    dd_current_last_day);
                     if (steering) {
                         c.send_data("output:" + name + '|');
                         last_name = name;
@@ -1434,47 +1434,49 @@ int main(int argc, char *argv[])
                 }
                 if ((opt.average_series->answer) || opt.stddev_series->answer) {
                     // aggregate in the series
-                    I_species_rast.zero();
+                    DImg average_raster(I_species_rast.rows(), I_species_rast.cols(), 0);
+                    average_raster.zero();
                     for (unsigned i = 0; i < num_runs; i++)
-                        I_species_rast += inf_species_rasts[i];
-                    I_species_rast /= num_runs;
-                }
-                if (opt.average_series->answer) {
-                    // write result
-                    // date is always end of the year, even for seasonal spread
-                    string name = generate_name(opt.average_series->answer, dd_current_last_day);
-                    raster_to_grass(I_species_rast, name,
-                                    "Average occurrence from all stochastic runs",
-                                    dd_current_last_day);
-                    write_average_area(inf_species_rasts, name.c_str(), window.ew_res, window.ns_res);
-                    if (steering) {
-                        c.send_data("output:" + name + '|');
-                        last_name = name;
+                        average_raster += inf_species_rasts[i];
+                    average_raster /= num_runs;
+                    if (opt.average_series->answer) {
+                        // write result
+                        // date is always end of the year, even for seasonal spread
+                        string name = generate_name(opt.average_series->answer, dd_current_last_day);
+                        raster_to_grass(average_raster, name,
+                                        "Average occurrence from a all stochastic runs",
+                                        dd_current_last_day);
+                        write_average_area(inf_species_rasts, name.c_str(),
+                                           window.ew_res, window.ns_res);
+                        if (steering) {
+                            c.send_data("output:" + name + '|');
+                            last_name = name;
+                        }
+                        G_verbose_message("Output raster %s written", name.c_str());
                     }
-                    G_verbose_message("Output raster %s written", name.c_str());
-                }
-                if (opt.stddev_series->answer) {
-                    Img stddev(I_species_rast, 0);
-                    for (unsigned i = 0; i < num_runs; i++) {
-                        Img tmp = inf_species_rasts[i] - I_species_rast;
-                        stddev += tmp * tmp;
+                    if (opt.stddev_series->answer) {
+                        DImg stddev(I_species_rast.rows(), I_species_rast.cols(), 0);
+                        for (unsigned i = 0; i < num_runs; i++) {
+                            auto tmp = inf_species_rasts[i] - average_raster;
+                            stddev += tmp * tmp;
+                        }
+                        stddev /= num_runs;
+                        stddev.for_each([](Float& a){a = std::sqrt(a);});
+                        string name = generate_name(opt.stddev_series->answer, dd_current_last_day);
+                        string title = "Standard deviation of average"
+                                       " occurrence from a all stochastic runs";
+                        raster_to_grass(stddev, name, title, dd_current_last_day);
+                        G_verbose_message("Output raster %s written", name.c_str());
                     }
-                    stddev /= num_runs;
-                    stddev.for_each([](int& a){a = std::sqrt(a);});
-                    string name = generate_name(opt.stddev_series->answer, dd_current_last_day);
-                    string title = "Standard deviation of average"
-                                   " occurrence from a all stochastic runs";
-                    raster_to_grass(stddev, name, title, dd_current_last_day);
-                    G_verbose_message("Output raster %s written", name.c_str());
                 }
                 if (opt.probability_series->answer) {
-                    Img probability(I_species_rast, 0);
+                    DImg probability(I_species_rast.rows(), I_species_rast.cols(), 0);
                     for (unsigned i = 0; i < num_runs; i++) {
                         Img tmp = inf_species_rasts[i];
-                        tmp.for_each([](int& a){a = bool(a);});
+                        tmp.for_each([](Integer& a){a = bool(a);});
                         probability += tmp;
                     }
-                    probability *= 100;  // prob from 0 to 100 (using ints)
+                    probability *= 100;  // prob from 0 to 100
                     probability /= num_runs;
                     string name = generate_name(opt.probability_series->answer, dd_current_last_day);
                     string title = "Probability of occurrence";
@@ -1531,39 +1533,40 @@ int main(int argc, char *argv[])
 
     if (opt.average->answer || opt.stddev->answer) {
         // aggregate
-        I_species_rast.zero();
+        DImg average_raster(I_species_rast.rows(), I_species_rast.cols(), 0);
         for (unsigned i = 0; i < num_runs; i++)
-            I_species_rast += inf_species_rasts[i];
-        I_species_rast /= num_runs;
-    }
-    if (opt.average->answer) {
-        // write final result
-        raster_to_grass(I_species_rast, opt.average->answer,
-                        "Average occurrence from all stochastic runs",
-                        dd_current_last_day);
-        write_average_area(inf_species_rasts, opt.average->answer, window.ew_res, window.ns_res);
-        G_verbose_message("Final output raster %s written", opt.average->answer);
-    }
-    if (opt.stddev->answer) {
-        Img stddev(I_species_rast, 0);
-        for (unsigned i = 0; i < num_runs; i++) {
-            Img tmp = inf_species_rasts[i] - I_species_rast;
-            stddev += tmp * tmp;
+            average_raster += inf_species_rasts[i];
+        average_raster /= num_runs;
+        if (opt.average->answer) {
+            // write final result
+            raster_to_grass(average_raster, opt.average->answer,
+                            "Average occurrence from all stochastic runs",
+                            dd_current_last_day);
+            write_average_area(inf_species_rasts, opt.average->answer,
+                               window.ew_res, window.ns_res);
+            G_verbose_message("Final output raster %s written", opt.average->answer);
         }
-        stddev /= num_runs;
-        stddev.for_each([](int& a){a = std::sqrt(a);});
-        raster_to_grass(stddev, opt.stddev->answer,
-                        opt.stddev->description, dd_current_last_day);
-        G_verbose_message("Final output raster %s written", opt.stddev->answer);
+        if (opt.stddev->answer) {
+            DImg stddev(average_raster.rows(), average_raster.cols(), 0);
+            for (unsigned i = 0; i < num_runs; i++) {
+                auto tmp = inf_species_rasts[i] - average_raster;
+                stddev += tmp * tmp;
+            }
+            stddev /= num_runs;
+            stddev.for_each([](Float& a){a = std::sqrt(a);});
+            raster_to_grass(stddev, opt.stddev->answer,
+                            opt.stddev->description, dd_current_last_day);
+            G_verbose_message("Final output raster %s written", opt.stddev->answer);
+        }
     }
     if (opt.probability->answer) {
-        Img probability(I_species_rast, 0);
+        DImg probability(I_species_rast.rows(), I_species_rast.cols(), 0);
         for (unsigned i = 0; i < num_runs; i++) {
             Img tmp = inf_species_rasts[i];
-            tmp.for_each([](int& a){a = bool(a);});
+            tmp.for_each([](Integer& a){a = bool(a);});
             probability += tmp;
         }
-        probability *= 100;  // prob from 0 to 100 (using ints)
+        probability *= 100;  // prob from 0 to 100
         probability /= num_runs;
         raster_to_grass(probability, opt.probability->answer,
                         "Probability of occurrence", dd_current_last_day);
