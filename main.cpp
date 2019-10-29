@@ -767,23 +767,23 @@ int main(int argc, char *argv[])
     string step_type = opt.step->answer;
 
     // mortality
-    bool mortality = false;
-    unsigned first_year_to_die = 1;  // starts at 1 (same as the opt)
-    double infected_to_dead_rate = 0.0;
+    bool use_mortality = false;
+    unsigned first_mortality_year = 1;  // starts at 1 (same as the opt)
+    double mortality_rate = 0.0;
     if (flg.mortality->answer) {
-        mortality = true;
+        use_mortality = true;
         if (opt.first_year_to_die->answer) {
-            first_year_to_die = std::stoi(opt.first_year_to_die->answer);
-            if (first_year_to_die > num_years) {
+            first_mortality_year = std::stoi(opt.first_year_to_die->answer);
+            if (first_mortality_year > num_years) {
                 G_fatal_error(
                     _("%s is too large (%d). It must be smaller or "
                       " equal than number of simulation years (%d)."),
                     opt.first_year_to_die->key,
-                    first_year_to_die, num_years);
+                    first_mortality_year, num_years);
             }
         }
         if (opt.infected_to_dead_rate->answer)
-            infected_to_dead_rate = std::stod(opt.infected_to_dead_rate->answer);
+            mortality_rate = std::stod(opt.infected_to_dead_rate->answer);
     }
 
     unsigned seed_value;
@@ -884,7 +884,7 @@ int main(int argc, char *argv[])
 
     // infected cohort for each year (index is cohort age)
     // age starts with 0 (in year 1), 0 is oldest
-    std::vector<std::vector<Img> > inf_species_cohort_rasts(
+    std::vector<std::vector<Img> > mortality_tracker_vector(
         num_runs, std::vector<Img>(num_years, Img(S_species_rast, 0)));
 
     // we are using only the first dead img for visualization, but for
@@ -969,16 +969,16 @@ int main(int argc, char *argv[])
                         if (use_treatments && !treatments_done_this_year
                                 && date.month() == treatment_month) {
                             treatments.apply_treatment_host(date.year(), inf_species_rasts[run], sus_species_rasts[run]);
-                            if (mortality) {
+                            if (use_mortality) {
                                 // same conditions as the mortality code below
                                 // TODO: make the mortality timing available as a separate function in the library
                                 // or simply go over all valid cohorts
                                 unsigned simulation_year = dd_current.year() - dd_start.year();
-                                if (simulation_year >= first_year_to_die - 1) {
-                                    auto max_index = simulation_year - (first_year_to_die - 1);
+                                if (simulation_year >= first_mortality_year - 1) {
+                                    auto max_index = simulation_year - (first_mortality_year - 1);
                                     for (unsigned age = 0; age <= max_index; age++) {
                                         if (use_treatments)
-                                            treatments.apply_treatment_infected(dd_current.year(), inf_species_cohort_rasts[run][age]);
+                                            treatments.apply_treatment_infected(dd_current.year(), mortality_tracker_vector[run][age]);
                                     }
                                 }
                             }
@@ -994,7 +994,7 @@ int main(int argc, char *argv[])
                         auto current_age = dd_current.year() - dd_start.year();
                         sporulations[run].disperse(sus_species_rasts[run],
                                                    inf_species_rasts[run],
-                                                   inf_species_cohort_rasts[run][current_age],
+                                                   mortality_tracker_vector[run][current_age],
                                                    lvtree_rast,
                                                    outside_spores[run],
                                                    weather || moisture_temperature,
@@ -1005,9 +1005,7 @@ int main(int argc, char *argv[])
                 unresolved_steps.clear();
                 unresolved_dates.clear();
             }
-            if (mortality) {
-                // TODO: use the library code to handle mortality
-                unsigned simulation_year = dd_current.year() - dd_start.year();
+            if (use_mortality) {
                 // only run to the current year of simulation
                 // (first year is 0):
                 //   max index == sim year
@@ -1019,18 +1017,13 @@ int main(int argc, char *argv[])
                 // (so we can skip these years)
                 // sim year - (dying year - 1) < 0
                 // sim year < dying year - 1
-                if (simulation_year >= first_year_to_die - 1) {
-                    auto max_index = simulation_year - (first_year_to_die - 1);
-                    #pragma omp parallel for num_threads(threads)
-                    for (unsigned run = 0; run < num_runs; run++) {
-                        dead_in_current_year[run].zero();
-                        for (unsigned age = 0; age <= max_index; age++) {
-                            Img dead_in_cohort = infected_to_dead_rate * inf_species_cohort_rasts[run][age];
-                            inf_species_cohort_rasts[run][age] -= dead_in_cohort;
-                            dead_in_current_year[run] += dead_in_cohort;
-                        }
-                        inf_species_rasts[run] -= dead_in_current_year[run];
-                    }
+                unsigned current_year = dd_current.year() - dd_start.year();
+                #pragma omp parallel for num_threads(threads)
+                for (unsigned run = 0; run < num_runs; run++) {
+                    dead_in_current_year[run].zero();
+                    sporulations[run].mortality(inf_species_rasts[run], mortality_rate, current_year,
+                                                first_mortality_year - 1, dead_in_current_year[run],
+                                                mortality_tracker_vector[run]);
                 }
             }
             // compute spread rate
@@ -1089,7 +1082,7 @@ int main(int argc, char *argv[])
                 string title = "Probability of occurrence";
                 raster_to_grass(probability, name, title, dd_current_last_day);
             }
-            if (mortality && opt.dead_series->answer) {
+            if (use_mortality && opt.dead_series->answer) {
                 accumulated_dead += dead_in_current_year[0];
                 if (opt.dead_series->answer) {
                     string name = generate_name(opt.dead_series->answer, dd_current_last_day);
