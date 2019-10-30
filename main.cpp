@@ -927,12 +927,12 @@ int main(int argc, char *argv[])
         // At the end of the year, run simulation for all unresolved
         // steps in one chunk.
         if ((step_type == "month" ? dd_current.is_last_month_of_year() : dd_current.is_last_week_of_year())) {
+            unsigned simulation_year = dd_current.year() - dd_start.year();
             if (!unresolved_steps.empty()) {
 
                 // to avoid problem with Jan 1 of the following year
                 // we explicitely check if we are in a valid year range
                 // TODO: will this ever happen here?
-                unsigned simulation_year = dd_current.year() - dd_start.year();
                 if (use_lethal_temperature
                         && simulation_year >= actual_temperatures.size())
                     G_fatal_error(_("Not enough temperatures"));
@@ -973,12 +973,10 @@ int main(int argc, char *argv[])
                                 // same conditions as the mortality code below
                                 // TODO: make the mortality timing available as a separate function in the library
                                 // or simply go over all valid cohorts
-                                unsigned simulation_year = dd_current.year() - dd_start.year();
                                 if (simulation_year >= first_mortality_year - 1) {
                                     auto max_index = simulation_year - (first_mortality_year - 1);
                                     for (unsigned age = 0; age <= max_index; age++) {
-                                        if (use_treatments)
-                                            treatments.apply_treatment_infected(dd_current.year(), mortality_tracker_vector[run][age]);
+                                        treatments.apply_treatment_infected(dd_current.year(), mortality_tracker_vector[run][age]);
                                     }
                                 }
                             }
@@ -991,10 +989,9 @@ int main(int argc, char *argv[])
                                                    weather_coefficients[step],
                                                    spore_rate);
 
-                        auto current_age = dd_current.year() - dd_start.year();
                         sporulations[run].disperse(sus_species_rasts[run],
                                                    inf_species_rasts[run],
-                                                   mortality_tracker_vector[run][current_age],
+                                                   mortality_tracker_vector[run][simulation_year],
                                                    lvtree_rast,
                                                    outside_spores[run],
                                                    weather || moisture_temperature,
@@ -1017,17 +1014,15 @@ int main(int argc, char *argv[])
                 // (so we can skip these years)
                 // sim year - (dying year - 1) < 0
                 // sim year < dying year - 1
-                unsigned current_year = dd_current.year() - dd_start.year();
                 #pragma omp parallel for num_threads(threads)
                 for (unsigned run = 0; run < num_runs; run++) {
                     dead_in_current_year[run].zero();
-                    sporulations[run].mortality(inf_species_rasts[run], mortality_rate, current_year,
+                    sporulations[run].mortality(inf_species_rasts[run], mortality_rate, simulation_year,
                                                 first_mortality_year - 1, dead_in_current_year[run],
                                                 mortality_tracker_vector[run]);
                 }
             }
             // compute spread rate
-            unsigned simulation_year = dd_current.year() - dd_start.year();
             #pragma omp parallel for num_threads(threads)
             for (unsigned i = 0; i < num_runs; i++) {
                 spread_rates[i].compute_yearly_spread_rate(inf_species_rasts[i], simulation_year);
