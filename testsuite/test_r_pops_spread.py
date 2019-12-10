@@ -102,7 +102,7 @@ class TestSpread(TestCase):
                           anthropogenic_direction_strength=0, percent_natural_dispersal=0.95,
                           random_seed=1, runs=5, nprocs=5,
                           flags='m', mortality_rate=0.5, mortality_time_lag=1, mortality_series='dead',
-                          treatments='treatment', treatment_year=start + 1, treatment_month=12,
+                          treatments='treatment', treatment_date='2020-12-01', treatment_length=0,
                           treatment_application='ratio_to_all')
 
         values = 'null_cells=0\nmin=0\nmax=6\nmean=0.546419'

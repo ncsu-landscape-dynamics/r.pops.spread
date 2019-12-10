@@ -111,6 +111,15 @@ inline TreatmentApplication treatment_app_enum_from_string(const string& text)
     }
 }
 
+inline Date treatment_date_from_string(const string& text)
+{
+    Date d = Date(text);
+    if (!(d.month() >= 1 && d.month() <= 12 && d.day() >=1 && d.day() <= 31))
+        G_fatal_error(_("Date <%s> is invalid"), text.c_str());
+    return d;
+    
+}
+
 inline Season seasonality_from_option(const Option* opt)
 {
     return {std::atoi(opt->answers[0]), std::atoi(opt->answers[1])};
@@ -190,7 +199,7 @@ struct PoPSOptions
     struct Option *start_time, *end_time, *seasonality;
     struct Option *step;
     struct Option *treatments;
-    struct Option *treatment_year, *treatment_month;
+    struct Option *treatment_date, *treatment_length;
     struct Option *treatment_app;
     struct Option *reproductive_rate;
     struct Option *natural_kernel, *natural_scale;
@@ -313,24 +322,25 @@ int main(int argc, char *argv[])
     opt.treatments->required = NO;
     opt.treatments->guisection = _("Treatments");
 
-    opt.treatment_year = G_define_option();
-    opt.treatment_year->key = "treatment_year";
-    opt.treatment_year->type = TYPE_INTEGER;
-    opt.treatment_year->multiple = YES;
-    opt.treatment_year->description = _("Years when treatment rasters are applied");
-    opt.treatment_year->required = NO;
-    opt.treatment_year->guisection = _("Treatments");
+    opt.treatment_date = G_define_option();
+    opt.treatment_date->key = "treatment_date";
+    opt.treatment_date->type = TYPE_STRING;
+    opt.treatment_date->multiple = YES;
+    opt.treatment_date->description = _("Dates when treatments are applied (e.g. 2020-01-15)");
+    opt.treatment_date->required = NO;
+    opt.treatment_date->guisection = _("Treatments");
 
-    opt.treatment_month = G_define_option();
-    opt.treatment_month->type = TYPE_INTEGER;
-    opt.treatment_month->key = "treatment_month";
-    opt.treatment_month->label =
-        _("Month when the treatment is applied");
-    opt.treatment_month->description =
-        _("Treatment is applied at the beginning of the month");
-    // TODO: implement this as multiple or a season
-    opt.treatment_month->required = NO;
-    opt.treatment_month->guisection = _("Treatments");
+    opt.treatment_length = G_define_option();
+    opt.treatment_length->type = TYPE_INTEGER;
+    opt.treatment_length->key = "treatment_length";
+    opt.treatment_length->multiple = YES;
+    opt.treatment_length->label =
+        _("Treatment length in days");
+    opt.treatment_length->description =
+        _("Treatment length 0 results in simple removal of host, length > 0 makes"
+          " host resistant for certain number of days");
+    opt.treatment_length->required = NO;
+    opt.treatment_length->guisection = _("Treatments");
 
     opt.treatment_app = G_define_option();
     opt.treatment_app->key = "treatment_application";
@@ -640,8 +650,8 @@ int main(int argc, char *argv[])
     // TODO: requires_all does not understand the default?
     // treatment_app needs to be removed from here and check separately
     G_option_requires_all(opt.treatments,
-                          opt.treatment_year,
-                          opt.treatment_month,
+                          opt.treatment_length,
+                          opt.treatment_date,
                           opt.treatment_app,
                           NULL);
 
@@ -858,29 +868,31 @@ int main(int argc, char *argv[])
         weather_coefficients.resize(max_weeks_in_year);
 
     // treatments
-    int treatment_month = 0;  // invalid value for month
-    if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_year)){
-        G_fatal_error(_("%s= and %s= must have the same number of values"), opt.treatments->key, opt.treatment_year->key);}
+    if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_date) &&
+            get_num_answers(opt.treatment_date) != get_num_answers(opt.treatment_length)){
+        G_fatal_error(_("%s=, %s= and %s= must have the same number of values"),
+                      opt.treatments->key, opt.treatment_date->key, opt.treatment_length->key);}
     // the default here should be never used
     TreatmentApplication treatment_app = TreatmentApplication::Ratio;
     if (opt.treatment_app->answer)
         treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
-    Treatments<Img, DImg> treatments(treatment_app);
+    Treatments<Img, DImg> treatments;
     bool use_treatments = false;
     if (opt.treatments->answers) {
-        for (int i_t = 0; opt.treatment_year->answers[i_t]; i_t++) {
+        auto increase_by_step = step_type == "month" ? &Date::increased_by_month : &Date::increased_by_week;
+        for (int i_t = 0; opt.treatment_date->answers[i_t]; i_t++) {
             DImg tr = raster_from_grass_float(opt.treatments->answers[i_t]);
-            treatments.add_treatment(std::stoul(opt.treatment_year->answers[i_t]), tr);
+            treatments.add_treatment(tr, treatment_date_from_string(opt.treatment_date->answers[i_t]),
+                                     std::stoul(opt.treatment_length->answers[i_t]), treatment_app, increase_by_step);
             use_treatments = true;
         }
     }
-    if (opt.treatment_month->answer)
-        treatment_month = std::stod(opt.treatment_month->answer);
 
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
+    std::vector<Img> resistant_rasts(num_runs, Img(S_species_rast, 0));
 
     // infected cohort for each year (index is cohort age)
     // age starts with 0 (in year 1), 0 is oldest
@@ -953,7 +965,6 @@ int main(int argc, char *argv[])
                 #pragma omp parallel for num_threads(threads)
                 for (unsigned run = 0; run < num_runs; run++) {
                     bool lethality_done_this_year = false;
-                    bool treatments_done_this_year = false;
                     // actual runs of the simulation for each step
                     for (unsigned step = 0; step < unresolved_steps.size(); ++step) {
                         Date date = unresolved_dates[step];
@@ -966,21 +977,21 @@ int main(int argc, char *argv[])
                                                      lethal_temperature_value);
                             lethality_done_this_year = true;
                         }
-                        if (use_treatments && !treatments_done_this_year
-                                && date.month() == treatment_month) {
-                            treatments.apply_treatment_host(date.year(), inf_species_rasts[run], sus_species_rasts[run]);
-                            if (use_mortality) {
+                        if (use_treatments) {
+                            bool managed = treatments.manage(date, inf_species_rasts[run],
+                                                             sus_species_rasts[run], resistant_rasts[run]);
+                            if (managed && use_mortality) {
                                 // same conditions as the mortality code below
                                 // TODO: make the mortality timing available as a separate function in the library
                                 // or simply go over all valid cohorts
                                 if (simulation_year >= first_mortality_year - 1) {
                                     auto max_index = simulation_year - (first_mortality_year - 1);
                                     for (unsigned age = 0; age <= max_index; age++) {
-                                        treatments.apply_treatment_infected(dd_current.year(), mortality_tracker_vector[run][age]);
+                                        treatments.manage_mortality(date, 
+                                                                    mortality_tracker_vector[run][age]);
                                     }
                                 }
                             }
-                            treatments_done_this_year = true;
                         }
                         if (!season.month_in_season(date.month()))
                             continue;
