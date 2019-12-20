@@ -36,13 +36,14 @@ class TestSpread(TestCase):
                      
                       
     def test_outputs(self):
-        start = 2019
-        end = 2022
+        start = '2019-01-01'
+        end = '2022-12-31'
         self.assertModule('r.pops.spread', host='host', total_plants='max_host', infected='infection',
                           average='average', average_series='average', single_series='single',
                           stddev='stddev', stddev_series='stddev',
                           probability='probability', probability_series='probability',
-                          start_time=start, end_time=end, seasonality=[1, 12], step='week',
+                          start_date=start, end_date=end, seasonality=[1, 12], step_unit='week',
+                          step_num_units=1,
                           reproductive_rate=1, natural_dispersal_kernel='exponential', natural_distance=50,
                           natural_direction='W', natural_direction_strength=3,
                           anthropogenic_dispersal_kernel='cauchy', anthropogenic_distance=1000,
@@ -51,6 +52,7 @@ class TestSpread(TestCase):
         self.assertRasterExists('average')
         self.assertRasterExists('stddev')
         self.assertRasterExists('probability')
+        end = end[:4]
         self.assertRasterExists('average' + '_{}_12_31'.format(end))
         self.assertRasterExists('probability' + '_{}_12_31'.format(end))
         self.assertRasterExists('single' + '_{}_12_31'.format(end))
@@ -65,19 +67,21 @@ class TestSpread(TestCase):
 
 
     def test_outputs_mortality(self):
-        start = 2019
-        end = 2022
+        start = '2019-01-01'
+        end = '2022-12-31'
         self.assertModule('r.pops.spread', host='host', total_plants='max_host', infected='infection',
                           average='average', average_series='average', single_series='single',
                           stddev='stddev', stddev_series='stddev',
                           probability='probability', probability_series='probability',
-                          start_time=start, end_time=end, seasonality=[1, 12], step='week',
+                          start_date=start, end_date=end, seasonality=[1, 12], step_unit='week',
+                          step_num_units=1,
                           reproductive_rate=1, natural_dispersal_kernel='exponential', natural_distance=50,
                           natural_direction='W', natural_direction_strength=3,
                           anthropogenic_dispersal_kernel='cauchy', anthropogenic_distance=1000,
                           anthropogenic_direction_strength=0, percent_natural_dispersal=0.95,
                           random_seed=1, runs=5, nprocs=5,
                           flags='m', mortality_rate=0.5, mortality_time_lag=1, mortality_series='dead')
+        end = end[:4]
         self.assertRasterExists('dead' + '_{}_12_31'.format(end))
 
         values = dict(null_cells=0, min=0, max=6, mean=0.652)
@@ -89,13 +93,14 @@ class TestSpread(TestCase):
 
 
     def test_outputs_mortality_treatment(self):
-        start = 2019
-        end = 2022
+        start = '2019-01-01'
+        end = '2022-12-31'
         self.assertModule('r.pops.spread', host='host', total_plants='max_host', infected='infection',
                           average='average', average_series='average', single_series='single',
                           stddev='stddev', stddev_series='stddev',
                           probability='probability', probability_series='probability',
-                          start_time=start, end_time=end, seasonality=[1, 12], step='week',
+                          start_date=start, end_date=end, seasonality=[1, 12], step_unit='week',
+                          step_num_units=1,
                           reproductive_rate=1, natural_dispersal_kernel='exponential', natural_distance=50,
                           natural_direction='W', natural_direction_strength=3,
                           anthropogenic_dispersal_kernel='cauchy', anthropogenic_distance=1000,
