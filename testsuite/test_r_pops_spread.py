@@ -11,9 +11,9 @@ class TestSpread(TestCase):
     def setUpClass(cls):
         cls.use_temp_region()
         cls.runModule('g.region', raster='lsat7_2002_30',  res=85.5, flags='a')
-        cls.runModule('i.vi', red='lsat7_2002_30', output='ndvi', viname='ndvi', 
-                      nir='lsat7_2002_40', green='lsat7_2002_20', blue='lsat7_2002_10')
-        cls.runModule('r.mapcalc', expression="host = if (ndvi > 0, graph(ndvi, 0, 0, 1, 20), 0)")
+        cls.runModule('r.mapcalc',
+            expression="ndvi = double(lsat7_2002_40 - lsat7_2002_30) / double(lsat7_2002_40 + lsat7_2002_30)")
+        cls.runModule('r.mapcalc', expression="host = round(if(ndvi > 0, graph(ndvi, 0, 0, 1, 20), 0))")
         cls.runModule('v.to.rast', input='railroads', output='infection_', use='val', value=1)
         cls.runModule('r.null', map='infection_', null=0)
         cls.runModule('r.mapcalc', expression='infection = if(ndvi > 0, infection_, 0)')
@@ -56,11 +56,11 @@ class TestSpread(TestCase):
         self.assertRasterExists('single' + '_{}_12_31'.format(end))
         self.assertRasterExists('stddev' + '_{}_12_31'.format(end))
 
-        values = 'null_cells=0\nmin=0\nmax=18\nmean=1.79448'
+        values = dict(null_cells=0, min=0, max=18, mean=1.777)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = 'null_cells=0\nmin=0\nmax=100\nmean=34.0552'
+        values = dict(null_cells=0, min=0, max=100, mean=33.767)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
-        values = 'null_cells=0\nmin=0\nmax=8.0895\nmean=0.949804'
+        values = dict(null_cells=0, min=0, max=7.440, mean=0.947)
         self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
 
 
@@ -80,11 +80,11 @@ class TestSpread(TestCase):
                           flags='m', mortality_rate=0.5, mortality_time_lag=1, mortality_series='dead')
         self.assertRasterExists('dead' + '_{}_12_31'.format(end))
 
-        values = 'null_cells=0\nmin=0\nmax=6\nmean=0.672013'
+        values = dict(null_cells=0, min=0, max=6, mean=0.652)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = 'null_cells=0\nmin=0\nmax=100\nmean=26.7338'
+        values = dict(null_cells=0, min=0, max=100, mean=25.893)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
-        values = 'null_cells=0\nmin=0\nmax=15\nmean=0.701079'
+        values = dict(null_cells=0, min=0, max=15, mean=0.752)
         self.assertRasterFitsUnivar(raster='dead' + '_{}_12_31'.format(end), reference=values, precision=0.001)
 
 
@@ -105,9 +105,9 @@ class TestSpread(TestCase):
                           treatments='treatment', treatment_date='2020-12-01', treatment_length=0,
                           treatment_application='ratio_to_all')
 
-        values = 'null_cells=0\nmin=0\nmax=6\nmean=0.546419'
+        values = dict(null_cells=0, min=0, max=5.6, mean=0.519)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = 'null_cells=0\nmin=0\nmax=100\nmean=22.5336'
+        values = dict(null_cells=0, min=0, max=100, mean=21.492)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
 
 
