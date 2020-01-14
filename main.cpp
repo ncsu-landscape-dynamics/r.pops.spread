@@ -1073,7 +1073,7 @@ int main(int argc, char *argv[])
                         // e.g. for sim year 3, year dying 4, max index is 0
                         //   max index = sim year - (dying year - 1)
                         // index is negative before we reach the year
-                        // (so we can skip these years)unsigned simulation_year = simulation_step_to_action_step(mortality_schedule, step);
+                        // (so we can skip these years)
                         // sim year - (dying year - 1) < 0
                         // sim year < dying year - 1
                         dead_in_current_year[run].zero();
