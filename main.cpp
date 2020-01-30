@@ -155,7 +155,6 @@ inline Date treatment_date_from_string(const string& text)
     if (!(d.month() >= 1 && d.month() <= 12 && d.day() >=1 && d.day() <= 31))
         G_fatal_error(_("Date <%s> is invalid"), text.c_str());
     return d;
-    
 }
 
 inline Season seasonality_from_option(const Option* opt)
@@ -960,6 +959,7 @@ int main(int argc, char *argv[])
 
     // build the Sporulation object
     std::vector<Sporulation> sporulations;
+    std::vector<Img> dispersers;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
     std::vector<Img> resistant_rasts(num_runs, Img(S_species_rast, 0));
@@ -977,8 +977,11 @@ int main(int argc, char *argv[])
     Img accumulated_dead(Img(S_species_rast, 0));
 
     sporulations.reserve(num_runs);
-    for (unsigned i = 0; i < num_runs; ++i)
-        sporulations.emplace_back(seed_value++, I_species_rast);
+    dispersers.reserve(num_runs);
+    for (unsigned i = 0; i < num_runs; ++i) {
+        sporulations.emplace_back(seed_value++, I_species_rast.rows(), I_species_rast.cols());
+        dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
+    }
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     // spread rate initialization
@@ -1034,11 +1037,13 @@ int main(int argc, char *argv[])
                     }
                     // actual spread
                     if (spread_schedule[step]) {
-                        sporulations[run].generate(inf_species_rasts[run],
+                        sporulations[run].generate(dispersers[run],
+                                                   inf_species_rasts[run],
                                                    weather || moisture_temperature,
                                                    weather_coefficients[weather_step],
                                                    spore_rate);
-                        sporulations[run].disperse(sus_species_rasts[run],
+                        sporulations[run].disperse(dispersers[run],
+                                                   sus_species_rasts[run],
                                                    inf_species_rasts[run],
                                                    mortality_tracker_vector[run][mortality_simulation_year],
                                                    lvtree_rast,
