@@ -26,6 +26,8 @@ extern "C" {
 }
 
 #include <string>
+#include <type_traits>
+
 
 /** Convert pops::Date to GRASS GIS TimeStamp */
 void date_to_grass(pops::Date date, struct TimeStamp* timestamp)
@@ -193,6 +195,34 @@ inline pops::Raster<Number> raster_from_grass(
     return raster_from_grass<Number>(name.c_str(), null_policy);
 }
 
+/** Converts type to GRASS GIS raster map type identifier.
+ *
+ * Use `::value` to obtain the map type identifier.
+ * When conversion is not possible, compile error about `value` not
+ * being a member of this struct is issued.
+ */
+template <typename Number>
+struct GrassRasterMapType
+{};
+
+/** Specialization for GRASS GIS raster map type convertor */
+template <>
+struct GrassRasterMapType<CELL>
+    : std::integral_constant<RASTER_MAP_TYPE, CELL_TYPE>
+{};
+
+/** Specialization for GRASS GIS raster map type convertor */
+template <>
+struct GrassRasterMapType<FCELL>
+    : std::integral_constant<RASTER_MAP_TYPE, FCELL_TYPE>
+{};
+
+/** Specialization for GRASS GIS raster map type convertor */
+template <>
+struct GrassRasterMapType<DCELL>
+    : std::integral_constant<RASTER_MAP_TYPE, DCELL_TYPE>
+{};
+
 /** Write a Raster to a GRASS GIS raster map.
  *
  * When used, the template is resolved based on the parameter.
@@ -210,7 +240,7 @@ void inline raster_to_grass(
     unsigned rows = raster.rows();
     unsigned cols = raster.cols();
 
-    int fd = Rast_open_new(name, DCELL_TYPE);
+    int fd = Rast_open_new(name, GrassRasterMapType<Number>::value);
     for (unsigned i = 0; i < rows; i++) {
         auto row_pointer = data + (i * cols);
         if (null_policy == NullOutputPolicy::ZerosAsNulls) {

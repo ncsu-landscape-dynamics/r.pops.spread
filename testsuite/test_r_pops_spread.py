@@ -68,6 +68,28 @@ class TestSpread(TestCase):
         self.assertRasterExists('single' + '_{}_12_31'.format(end))
         self.assertRasterExists('stddev' + '_{}_12_31'.format(end))
 
+        ref_float = dict(datatype="DCELL")
+        ref_int = dict(datatype="CELL")
+        self.assertRasterFitsInfo(raster="average", reference=ref_float)
+        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
+        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
+        self.assertRasterFitsInfo(
+            raster="single" + "_{}_12_31".format(end),
+            reference=ref_int
+        )
+        self.assertRasterFitsInfo(
+            raster="average" + "_{}_12_31".format(end),
+            reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster="probability" + "_{}_12_31".format(end),
+            reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster="stddev" + "_{}_12_31".format(end),
+            reference=ref_float
+        )
+
         values = dict(null_cells=0, min=0, max=18, mean=1.777)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
         values = dict(null_cells=0, min=0, max=100, mean=33.767)
