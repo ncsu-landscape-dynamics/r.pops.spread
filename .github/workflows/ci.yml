@@ -24,6 +24,9 @@ jobs:
     - name: Create a temporary location (needed for 7.4 and below)
       run: |
         grass -c EPSG:4326 ~/grasstmploc -e
+    - name: Chanage shebang to just Python (7.4 needs python2)
+      run: |
+        sed -i s/python3/python/g testsuite/test_r_pops_spread.py
     - name: Install the module
       run: |
         grass ~/grasstmploc/PERMANENT --exec g.extension extension=${{ github.event.repository.name }} url=. --verbose
