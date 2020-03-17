@@ -59,6 +59,17 @@ typedef Simulation<Img, DImg> Sporulation;
 
 #define DIM 1
 
+void fatal_option_required_for_value(
+        struct Option* required,
+        struct Option* given
+        )
+{
+    G_fatal_error(_("The option %s is required for %s=%s"),
+                  required->key,
+                  given->key,
+                  given->answer);
+}
+
 // check if a file exists
 inline bool file_exists(const char* name) {
   struct stat buffer;
@@ -532,6 +543,7 @@ int main(int argc, char *argv[])
     opt.natural_kernel->label = _("Natural dispersal kernel type");
     opt.natural_kernel->answer = const_cast<char*>("cauchy");
     opt.natural_kernel->options = "cauchy,exponential";
+    opt.natural_kernel->required = YES;
     opt.natural_kernel->guisection = _("Dispersal");
 
     opt.natural_scale = G_define_option();
@@ -539,6 +551,7 @@ int main(int argc, char *argv[])
     opt.natural_scale->key = "natural_distance";
     opt.natural_scale->label =
             _("Distance parameter for natural dispersal kernel");
+    opt.natural_scale->required = YES;
     opt.natural_scale->guisection = _("Dispersal");
 
     opt.natural_direction = G_define_option();
@@ -588,7 +601,7 @@ int main(int argc, char *argv[])
     opt.anthro_direction->description =
             _("Value none means that there is no directionality");
     opt.anthro_direction->options = "N,NE,E,SE,S,SW,W,NW,NONE,none";
-    opt.anthro_direction->required = YES;
+    opt.anthro_direction->required = NO;
     opt.anthro_direction->answer = const_cast<char*>("none");
     opt.anthro_direction->guisection = _("Dispersal");
 
@@ -759,7 +772,11 @@ int main(int argc, char *argv[])
             kernel_type_from_string(opt.natural_kernel->answer);
     double natural_scale = std::stod(opt.natural_scale->answer);
     Direction natural_direction = direction_from_string(opt.natural_direction->answer);
-    double natural_kappa = std::stod(opt.natural_kappa->answer);
+    double natural_kappa = 0;
+    if (natural_direction != Direction::None && !opt.natural_kappa->answer)
+        fatal_option_required_for_value(opt.natural_kappa, opt.natural_direction);
+    else if (opt.natural_kappa->answer)
+        natural_kappa = std::stod(opt.natural_kappa->answer);
 
     DispersalKernelType anthro_kernel_type =
             kernel_type_from_string(opt.anthro_kernel->answer);
@@ -769,9 +786,7 @@ int main(int argc, char *argv[])
 
     double anthro_scale = 0;
     if (use_long_kernel && !opt.anthro_scale->answer)
-        G_fatal_error(_("The option %s is required for %s=%s"),
-                      opt.anthro_scale->key, opt.anthro_kernel->key,
-                      opt.anthro_kernel->answer);
+        fatal_option_required_for_value(opt.anthro_scale, opt.anthro_kernel);
     else if (opt.anthro_scale->answer)
         anthro_scale = std::stod(opt.anthro_scale->answer);
 
@@ -780,18 +795,14 @@ int main(int argc, char *argv[])
 
     double anthro_kappa = 0;
     if (use_long_kernel && !opt.anthro_kappa->answer)
-        G_fatal_error(_("The option %s is required for %s=%s"),
-                      opt.anthro_kappa->key, opt.anthro_kernel->key,
-                      opt.anthro_kernel->answer);
+        fatal_option_required_for_value(opt.anthro_kappa, opt.anthro_kernel);
     else if (opt.anthro_kappa->answer)
-        anthro_kappa= std::stod(opt.anthro_kappa->answer);
+        anthro_kappa = std::stod(opt.anthro_kappa->answer);
 
     double gamma = 0.0;
     if (use_long_kernel &&
             !opt.percent_natural_dispersal->answer)
-        G_fatal_error(_("The option %s is required for %s=%s"),
-                      opt.percent_natural_dispersal->key, opt.natural_kernel->key,
-                      opt.natural_kernel->answer);
+        fatal_option_required_for_value(opt.percent_natural_dispersal, opt.anthro_kernel);
     else if (opt.percent_natural_dispersal->answer)
         gamma = std::stod(opt.percent_natural_dispersal->answer);
 
