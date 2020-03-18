@@ -1128,7 +1128,7 @@ int main(int argc, char *argv[])
                         // date is always end of the year, even for seasonal spread
                         string name = generate_name(opt.average_series->answer, interval.end_date());
                         raster_to_grass(average_raster, name,
-                                        "Average occurrence from a all stochastic runs",
+                                        "Average occurrence from all stochastic runs",
                                         interval.end_date());
                         write_average_area(inf_species_rasts, name.c_str(),
                                            window.ew_res, window.ns_res);
@@ -1143,7 +1143,7 @@ int main(int argc, char *argv[])
                         stddev.for_each([](Float& a){a = std::sqrt(a);});
                         string name = generate_name(opt.stddev_series->answer, interval.end_date());
                         string title = "Standard deviation of average"
-                                       " occurrence from a all stochastic runs";
+                                       " occurrence from all stochastic runs";
                         raster_to_grass(stddev, name, title, interval.end_date());
                     }
                 }
@@ -1169,7 +1169,7 @@ int main(int argc, char *argv[])
                                         interval.end_date());
                     }
                 }
-        }
+            }
         }
     }
     Step interval = scheduler.get_step(--current_index);
