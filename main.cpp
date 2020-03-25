@@ -108,64 +108,14 @@ void write_average_area(const std::vector<Img>& infected, const char* raster_nam
     Rast_write_history(raster_name, &hist);
 }
 
-inline TreatmentApplication treatment_app_enum_from_string(const string& text)
-{
-    std::map<string, TreatmentApplication> mapping{
-        {"ratio_to_all", TreatmentApplication::Ratio},
-        {"all_infected_in_cell", TreatmentApplication::AllInfectedInCell}
-    };
-    try {
-        return mapping.at(text);
-    }
-    catch (const std::out_of_range&) {
-        throw std::invalid_argument("treatment_application_enum_from_string:"
-                                    " Invalid value '" + text +"' provided");
-    }
-}
-
-inline StepUnit step_unit_enum_from_string(const string& text)
-{
-    std::map<string, StepUnit> mapping{
-        {"day", StepUnit::Day},
-        {"week", StepUnit::Week},
-        {"month", StepUnit::Month}
-    };
-    try {
-        return mapping.at(text);
-    }
-    catch (const std::out_of_range&) {
-        throw std::invalid_argument("step_unit_enum_from_string:"
-                                    " Invalid value '" + text +"' provided");
-    }
-}
-
-inline std::vector<bool> output_frequency_from_string(const Scheduler &scheduler,
-                                                      const Option* frequency, const Option* frequency_n)
-{
-    if (frequency->answer) {
-        if (G_strcasecmp(frequency->answer, "yearly") == 0)
-            return scheduler.schedule_action_end_of_year();
-        if (G_strcasecmp(frequency->answer, "monthly") == 0)
-            return scheduler.schedule_action_monthly();
-        if (G_strcasecmp(frequency->answer, "every_n_steps") == 0) {
-           int n = std::stoi(frequency_n->answer);
-           return scheduler.schedule_action_nsteps(n);
-        }
-        throw std::invalid_argument("output_frequency_from_string:"
-                                        " Invalid value '" + std::string(frequency->answer) +"' provided");
-    }
-    else {
-        std::vector<bool> v(scheduler.get_num_steps(), false);
-        return v;
-    }
-}
-
 inline Date treatment_date_from_string(const string& text)
 {
-    Date d = Date(text);
-    if (!(d.month() >= 1 && d.month() <= 12 && d.day() >=1 && d.day() <= 31))
+    try {
+        return Date(text);
+    }
+    catch (std::invalid_argument) {
         G_fatal_error(_("Date <%s> is invalid"), text.c_str());
-    return d;
+    }
 }
 
 inline Season seasonality_from_option(const Option* opt)
@@ -515,7 +465,7 @@ int main(int argc, char *argv[])
     opt.output_frequency->type = TYPE_STRING;
     opt.output_frequency->key = "output_frequency";
     opt.output_frequency->label = "Frequency of simulation output";
-    opt.output_frequency->options = "yearly,monthly,every_n_steps";
+    opt.output_frequency->options = "yearly,monthly,weekly,daily,every_n_steps";
     opt.output_frequency->required = NO;
     opt.output_frequency->answer = const_cast<char*>("yearly");
     opt.output_frequency->guisection = _("Time");
@@ -851,9 +801,10 @@ int main(int argc, char *argv[])
     // Scheduler
     Scheduler scheduler(dd_start, dd_end, step_unit, step_num_units);
     std::vector<bool> spread_schedule = scheduler.schedule_spread(season);
-    std::vector<bool> output_schedule = output_frequency_from_string(scheduler,
-                                                                     opt.output_frequency,
-                                                                     opt.output_frequency_n);
+    // output frequency
+    std::string out_freq = opt.output_frequency->answer ? opt.output_frequency->answer : "";
+    unsigned out_n = opt.output_frequency_n->answer ? std::stoi(opt.output_frequency_n->answer) : 0;
+    std::vector<bool> output_schedule = output_schedule_from_string(scheduler, out_freq, out_n);
 
     // mortality
     bool use_mortality = false;
