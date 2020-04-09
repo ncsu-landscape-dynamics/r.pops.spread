@@ -956,10 +956,13 @@ int main(int argc, char *argv[])
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
     std::vector<Img> resistant_rasts(num_runs, Img(S_species_rast, 0));
 
-    std::vector<std::vector<Img>> exposed_vectors(num_runs);
-    for (auto& vector : exposed_vectors) {
-        vector.reserve(latency_period_steps + 1);
-    }
+    std::vector<std::vector<Img>> exposed_vectors(
+                num_runs,
+                std::vector<Img>(
+                    latency_period_steps + 1,
+                    Img(S_species_rast.rows(), S_species_rast.cols(), 0)
+                    )
+                );
 
     // infected cohort for each year (index is cohort age)
     // age starts with 0 (in year 1), 0 is oldest
@@ -1044,9 +1047,8 @@ int main(int argc, char *argv[])
                                                    weather || moisture_temperature,
                                                    weather_coefficients[weather_step],
                                                    spore_rate);
-                        if (exposed_vectors[run].size() < latency_period_steps + 1)
-                            exposed_vectors[run].push_back(Img(S_species_rast.rows(), S_species_rast.cols(), 0));
                         sporulations[run].disperse_and_infect(
+                                    step,
                                     dispersers[run],
                                     sus_species_rasts[run],
                                     exposed_vectors[run],
