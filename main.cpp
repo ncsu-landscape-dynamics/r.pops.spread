@@ -980,11 +980,11 @@ int main(int argc, char *argv[])
     dispersers.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i) {
         sporulations.emplace_back(
-                    model_type,
-                    latency_period_steps,
                     seed_value++,
                     I_species_rast.rows(),
-                    I_species_rast.cols());
+                    I_species_rast.cols(),
+                    model_type,
+                    latency_period_steps);
         dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
     }
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
