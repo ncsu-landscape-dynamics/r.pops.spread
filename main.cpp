@@ -191,7 +191,7 @@ struct PoPSOptions
 {
     struct Option *host, *total_plants, *infected, *outside_spores;
     struct Option *model_type;
-    struct Option *exposed_period;
+    struct Option *latency_period;
     struct Option *moisture_coefficient_file, *temperature_coefficient_file;
     struct Option *weather_coefficient_file;
     struct Option *lethal_temperature, *lethal_temperature_months;
@@ -325,12 +325,15 @@ int main(int argc, char *argv[])
     opt.model_type->required = YES;
     opt.model_type->guisection = _("Model");
 
-    opt.exposed_period = G_define_option();
-    opt.exposed_period->type = TYPE_INTEGER;
-    opt.exposed_period->key = "exposed_period";
-    opt.exposed_period->label = "Exposed period in steps";
-    opt.exposed_period->required = NO;
-    opt.exposed_period->guisection = _("Model");
+    opt.latency_period = G_define_option();
+    opt.latency_period->type = TYPE_INTEGER;
+    opt.latency_period->key = "latency_period";
+    opt.latency_period->label = _("Latency period in simulation steps");
+    opt.latency_period->description =
+            _("How long it takes for a hosts to become infected after being exposed"
+              " (unit is a simulation step)");
+    opt.latency_period->required = NO;
+    opt.latency_period->guisection = _("Model");
 
     opt.treatments = G_define_standard_option(G_OPT_R_INPUT);
     opt.treatments->key = "treatments";
@@ -722,9 +725,9 @@ int main(int argc, char *argv[])
     // model type
     ModelType model_type = model_type_from_string(opt.model_type->answer);
     if (model_type == ModelType::SusceptibleExposedInfected &&
-            !opt.exposed_period->answer) {
+            !opt.latency_period->answer) {
                 G_fatal_error(_("The option %s is required for %s=%s"),
-                              opt.exposed_period->key, opt.model_type->key,
+                              opt.latency_period->key, opt.model_type->key,
                               opt.model_type->answer);
     }
 
@@ -834,8 +837,8 @@ int main(int argc, char *argv[])
     std::vector<bool> output_schedule = output_schedule_from_string(scheduler, out_freq, out_n);
 
     unsigned latency_period_steps = 0;
-    if (opt.exposed_period->answer)
-        latency_period_steps = std::stoi(opt.exposed_period->answer);
+    if (opt.latency_period->answer)
+        latency_period_steps = std::stoi(opt.latency_period->answer);
 
     // mortality
     bool use_mortality = false;
