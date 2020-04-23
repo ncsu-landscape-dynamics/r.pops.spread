@@ -13,8 +13,6 @@ from grass.gunittest.gmodules import call_module
 
 class TestSpread(TestCase):
 
-    viewshed = 'test_viewshed_from_elevation'
-
     @classmethod
     def setUpClass(cls):
         cls.use_temp_region()
@@ -178,6 +176,33 @@ class TestSpread(TestCase):
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
         values = dict(null_cells=0, min=0, max=100, mean=21.492)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
+
+    def test_outputs_sei_inf(self):
+        """Test no change in infected in the first latency period.
+
+        Test that there is no change in infected before reaching end of
+        the first latency period.
+        """
+        start = '2019-01-01'
+        end = '2019-01-04'
+        self.assertModule('r.pops.spread', host='host', total_plants='max_host', infected='infection',
+                  average='average', average_series='average', single_series='single',
+                  stddev='stddev', stddev_series='stddev',
+                  probability='probability', probability_series='probability',
+                  output_frequency="daily",
+                  start_date=start, end_date=end, seasonality=[1, 12], step_unit='day',
+                  step_num_units=1,
+                  reproductive_rate=1, natural_dispersal_kernel='exponential', natural_distance=50,
+                  natural_direction='W', natural_direction_strength=3,
+                  anthropogenic_dispersal_kernel='cauchy', anthropogenic_distance=1000,
+                  anthropogenic_direction_strength=0, percent_natural_dispersal=0.95,
+                  model_type="SEI",
+                  latency_period=10,
+                  random_seed=1, runs=5, nprocs=5)
+        single = 'single_' + end.replace("-", "_")
+        self.assertRastersNoDifference(
+            reference="infection", actual=single, precision=0
+        )
 
 
 if __name__ == '__main__':
