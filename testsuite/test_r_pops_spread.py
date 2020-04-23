@@ -204,6 +204,65 @@ class TestSpread(TestCase):
             reference="infection", actual=single, precision=0
         )
 
+    def test_outputs_sei0(self):
+        """Check that outputs of SEI0 have expected values of SI run.
+
+        This is a copy of the basic test_outputs() function except the
+        SEI0 addition to parameters.
+        """
+        start = '2019-01-01'
+        end = '2022-12-31'
+        self.assertModule('r.pops.spread', host='host', total_plants='max_host', infected='infection',
+                          average='average', average_series='average', single_series='single',
+                          stddev='stddev', stddev_series='stddev',
+                          probability='probability', probability_series='probability',
+                          start_date=start, end_date=end, seasonality=[1, 12], step_unit='week',
+                          step_num_units=1,
+                          reproductive_rate=1, natural_dispersal_kernel='exponential', natural_distance=50,
+                          natural_direction='W', natural_direction_strength=3,
+                          anthropogenic_dispersal_kernel='cauchy', anthropogenic_distance=1000,
+                          model_type="SEI",
+                          latency_period=0,
+                          anthropogenic_direction_strength=0, percent_natural_dispersal=0.95,
+                          random_seed=1, runs=5, nprocs=5)
+        self.assertRasterExists('average')
+        self.assertRasterExists('stddev')
+        self.assertRasterExists('probability')
+        end = end[:4]
+        self.assertRasterExists('average' + '_{}_12_31'.format(end))
+        self.assertRasterExists('probability' + '_{}_12_31'.format(end))
+        self.assertRasterExists('single' + '_{}_12_31'.format(end))
+        self.assertRasterExists('stddev' + '_{}_12_31'.format(end))
+
+        ref_float = dict(datatype="DCELL")
+        ref_int = dict(datatype="CELL")
+        self.assertRasterFitsInfo(raster="average", reference=ref_float)
+        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
+        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
+        self.assertRasterFitsInfo(
+            raster="single" + "_{}_12_31".format(end),
+            reference=ref_int
+        )
+        self.assertRasterFitsInfo(
+            raster="average" + "_{}_12_31".format(end),
+            reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster="probability" + "_{}_12_31".format(end),
+            reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster="stddev" + "_{}_12_31".format(end),
+            reference=ref_float
+        )
+
+        values = dict(null_cells=0, min=0, max=18, mean=1.777)
+        self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=33.767)
+        self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=7.440, mean=0.947)
+        self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
+
 
 if __name__ == '__main__':
     test()
