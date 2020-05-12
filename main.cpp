@@ -322,6 +322,10 @@ int main(int argc, char *argv[])
     opt.model_type->label = _("Epidemiological model type");
     opt.model_type->answer = const_cast<char*>("SI");
     opt.model_type->options = "SI,SEI";
+    opt.model_type->descriptions =
+        _("SI;Susceptible-infected epidemiological model;"
+          "SEI;Susceptible-exposed-infected epidemiological model"
+          " (uses latency_period)");
     opt.model_type->required = YES;
     opt.model_type->guisection = _("Model");
 
