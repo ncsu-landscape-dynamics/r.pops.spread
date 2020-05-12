@@ -190,6 +190,8 @@ bool all_infected(Img& susceptible)
 struct PoPSOptions
 {
     struct Option *host, *total_plants, *infected, *outside_spores;
+    struct Option *model_type;
+    struct Option *latency_period;
     struct Option *moisture_coefficient_file, *temperature_coefficient_file;
     struct Option *weather_coefficient_file;
     struct Option *lethal_temperature, *lethal_temperature_months;
@@ -313,6 +315,29 @@ int main(int argc, char *argv[])
         _("Output CSV file containg yearly spread rate in N, S, E, W directions");
     opt.spread_rate_output->required = NO;
     opt.spread_rate_output->guisection = _("Output");
+
+    opt.model_type = G_define_option();
+    opt.model_type->type = TYPE_STRING;
+    opt.model_type->key = "model_type";
+    opt.model_type->label = _("Epidemiological model type");
+    opt.model_type->answer = const_cast<char*>("SI");
+    opt.model_type->options = "SI,SEI";
+    opt.model_type->descriptions =
+        _("SI;Susceptible-infected epidemiological model;"
+          "SEI;Susceptible-exposed-infected epidemiological model"
+          " (uses latency_period)");
+    opt.model_type->required = YES;
+    opt.model_type->guisection = _("Model");
+
+    opt.latency_period = G_define_option();
+    opt.latency_period->type = TYPE_INTEGER;
+    opt.latency_period->key = "latency_period";
+    opt.latency_period->label = _("Latency period in simulation steps");
+    opt.latency_period->description =
+            _("How long it takes for a hosts to become infected after being exposed"
+              " (unit is a simulation step)");
+    opt.latency_period->required = NO;
+    opt.latency_period->guisection = _("Model");
 
     opt.treatments = G_define_standard_option(G_OPT_R_INPUT);
     opt.treatments->key = "treatments";
@@ -701,6 +726,15 @@ int main(int argc, char *argv[])
     file_exists_or_fatal_error(opt.temperature_coefficient_file);
     file_exists_or_fatal_error(opt.weather_coefficient_file);
 
+    // model type
+    ModelType model_type = model_type_from_string(opt.model_type->answer);
+    if (model_type == ModelType::SusceptibleExposedInfected &&
+            !opt.latency_period->answer) {
+                G_fatal_error(_("The option %s is required for %s=%s"),
+                              opt.latency_period->key, opt.model_type->key,
+                              opt.model_type->answer);
+    }
+
     // get current computational region (for rows, cols and resolution)
     struct Cell_head window;
     G_get_window(&window);
@@ -806,11 +840,14 @@ int main(int argc, char *argv[])
     unsigned out_n = opt.output_frequency_n->answer ? std::stoi(opt.output_frequency_n->answer) : 0;
     std::vector<bool> output_schedule = output_schedule_from_string(scheduler, out_freq, out_n);
 
+    unsigned latency_period_steps = 0;
+    if (opt.latency_period->answer)
+        latency_period_steps = std::stoi(opt.latency_period->answer);
+
     // mortality
     bool use_mortality = false;
     unsigned first_mortality_year = 1;  // starts at 1 (same as the opt)
     double mortality_rate = 0.0;
-    unsigned mortality_simulation_year;
     std::vector<bool> mortality_schedule = scheduler.schedule_action_end_of_year();
     unsigned num_mortality_years = get_number_of_scheduled_actions(mortality_schedule);
     if (flg.mortality->answer) {
@@ -926,6 +963,14 @@ int main(int argc, char *argv[])
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
     std::vector<Img> resistant_rasts(num_runs, Img(S_species_rast, 0));
 
+    std::vector<std::vector<Img>> exposed_vectors(
+                num_runs,
+                std::vector<Img>(
+                    latency_period_steps + 1,
+                    Img(S_species_rast.rows(), S_species_rast.cols(), 0)
+                    )
+                );
+
     // infected cohort for each year (index is cohort age)
     // age starts with 0 (in year 1), 0 is oldest
     std::vector<std::vector<Img> > mortality_tracker_vector(
@@ -941,7 +986,12 @@ int main(int argc, char *argv[])
     sporulations.reserve(num_runs);
     dispersers.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i) {
-        sporulations.emplace_back(seed_value++, I_species_rast.rows(), I_species_rast.cols());
+        sporulations.emplace_back(
+                    seed_value++,
+                    I_species_rast.rows(),
+                    I_species_rast.cols(),
+                    model_type,
+                    latency_period_steps);
         dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
     }
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
@@ -988,7 +1038,7 @@ int main(int argc, char *argv[])
                 // actual runs of the simulation for each step
                 int weather_step = 0;
                 for (auto step : unresolved_steps) {
-                    mortality_simulation_year = simulation_step_to_action_step(mortality_schedule, step);
+                    unsigned mortality_simulation_year = simulation_step_to_action_step(mortality_schedule, step);
                     // removal of dispersers due to lethal tempearture
                     if (use_lethal_temperature && lethal_schedule[step]) {
                         int lethal_step = simulation_step_to_action_step(lethal_schedule, step);
@@ -1004,15 +1054,18 @@ int main(int argc, char *argv[])
                                                    weather || moisture_temperature,
                                                    weather_coefficients[weather_step],
                                                    spore_rate);
-                        sporulations[run].disperse(dispersers[run],
-                                                   sus_species_rasts[run],
-                                                   inf_species_rasts[run],
-                                                   mortality_tracker_vector[run][mortality_simulation_year],
-                                                   lvtree_rast,
-                                                   outside_spores[run],
-                                                   weather || moisture_temperature,
-                                                   weather_coefficients[weather_step],
-                                                   kernels[run]);
+                        sporulations[run].disperse_and_infect(
+                                    step,
+                                    dispersers[run],
+                                    sus_species_rasts[run],
+                                    exposed_vectors[run],
+                                    inf_species_rasts[run],
+                                    mortality_tracker_vector[run][mortality_simulation_year],
+                                    lvtree_rast,
+                                    outside_spores[run],
+                                    weather || moisture_temperature,
+                                    weather_coefficients[weather_step],
+                                    kernels[run]);
                     }
                     // treatments
                     if (use_treatments) {
