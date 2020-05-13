@@ -33,7 +33,8 @@ jobs:
       run: |
         echo "::set-env name=LD_LIBRARY_PATH::$HOME/install/lib"
     - name: Get and build GRASS GIS
-      run: .github/workflows/build.sh $HOME/install
+      run: |
+        .github/workflows/build.sh /tmp $HOME/install master
     - name: Add the bin directory to PATH
       run: |
         echo "::add-path::$HOME/install/bin"

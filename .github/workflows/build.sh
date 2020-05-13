@@ -8,17 +8,24 @@
 # fail on non-zero return code from a subprocess
 set -e
 
-if [ -z "$1" ]
+if [ -z "$3" ]
 then
-    echo "Usage: $0 PREFIX"
+    >&2 echo "Usage: $0 <workdir> <prefix> <branch>"
+    >&2 echo "<workdir>  Working directory (must exists)"
+    >&2 echo "<prefix>   Install prefix"
+    >&2 echo "<branch>   Branch name (passed to git clone --branch)"
     exit 1
 fi
 
-export INSTALL_PREFIX=$1
+WORKDIR="$1"
+export INSTALL_PREFIX="$2"
+BRANCH="$3"
+
+cd $WORKDIR
 
 # GRASS GIS
 
-git clone https://github.com/OSGeo/grass.git --branch master --depth=1
+git clone https://github.com/OSGeo/grass.git --branch "$BRANCH" --depth=1
 
 cd grass
 
@@ -44,3 +51,11 @@ cd grass
 
 make
 make install
+
+# Delete the source code.
+# The source code should not be needed anymore and
+# it may cause problems when it is in the same directory used further
+# for the compilation of the module itself
+# (e.g., g.extension will recurse to it).
+cd ..
+rm grass
