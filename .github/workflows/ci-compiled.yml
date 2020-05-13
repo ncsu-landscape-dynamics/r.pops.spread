@@ -10,6 +10,15 @@ on:
 jobs:
   test-with-compiled:
 
+    name: compiled ${{ matrix.branch }}
+
+    strategy:
+      matrix:
+        branch:
+        - master
+        - releasebranch_7_8
+      fail-fast: false
+
     runs-on: ubuntu-18.04
 
     steps:
@@ -34,7 +43,7 @@ jobs:
         echo "::set-env name=LD_LIBRARY_PATH::$HOME/install/lib"
     - name: Get and build GRASS GIS
       run: |
-        .github/workflows/build.sh /tmp $HOME/install master
+        .github/workflows/build.sh /tmp $HOME/install ${{ matrix.branch }}
     - name: Add the bin directory to PATH
       run: |
         echo "::add-path::$HOME/install/bin"
