@@ -58,4 +58,4 @@ make install
 # for the compilation of the module itself
 # (e.g., g.extension will recurse to it).
 cd ..
-rm grass
+rm -rf grass
