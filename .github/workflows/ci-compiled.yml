@@ -52,7 +52,7 @@ jobs:
         ln -s $HOME/install/bin/grass* $HOME/install/bin/grass
     - name: Install the module
       run: |
-        grass --tmp-location XY --exec g.extension extension=${{ github.event.repository.name }} url=. --verbose
+        grass --tmp-location XY --exec g.extension extension=r.pops.spread url=. --verbose
     - name: Cache data for testing
       id: cache-nc_spm_08_grass7
       uses: actions/cache@v1
