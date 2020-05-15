@@ -1,8 +1,11 @@
 name: CI
 
 on:
-- push
-- pull_request
+  push:
+  pull_request:
+  schedule:
+  # 01:00 Pacific Time (in UTC), every month on 10th
+  - cron:  '0 8 10 * *'
 
 jobs:
   build:
@@ -31,7 +34,7 @@ jobs:
         sed -i s/python3/python/g testsuite/test_r_pops_spread.py
     - name: Install the module
       run: |
-        grass ~/grasstmploc/PERMANENT --exec g.extension extension=${{ github.event.repository.name }} url=. --verbose
+        grass ~/grasstmploc/PERMANENT --exec g.extension extension=r.pops.spread url=. --verbose
     - name: Cache data for testing
       id: cache-nc_spm_08_grass7
       uses: actions/cache@v1
