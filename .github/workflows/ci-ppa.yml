@@ -23,12 +23,9 @@ jobs:
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq grass grass-dev grass-doc
-    - name: Change shebang to just Python (7.6 needs python2)
-      run: |
-        sed -i s/python3/python/g testsuite/test_r_pops_spread.py
     - name: Install the module
       run: |
-        grass --tmp-location XY --exec g.extension extension=${{ github.event.repository.name }} url=. --verbose
+        grass --tmp-location XY --exec g.extension extension=r.pops.spread url=. --verbose
     - name: Cache data for testing
       id: cache-nc_spm_08_grass7
       uses: actions/cache@v1
