@@ -709,6 +709,8 @@ int main(int argc, char *argv[])
                           opt.treatment_date,
                           opt.treatment_app,
                           NULL);
+    // lethal temperature options
+    G_option_collective(opt.lethal_temperature, opt.lethal_temperature_months, opt.temperature_file, NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -908,20 +910,20 @@ int main(int argc, char *argv[])
         weather = true;
     }
 
-    double use_lethal_temperature = false;
+    bool use_lethal_temperature = false;
     double lethal_temperature_value;
+    int lethal_temperature_month;
     unsigned count_lethal = 0;
     std::vector<string> actual_temperature_names;
     std::vector<DImg> actual_temperatures;
     std::vector<bool> lethal_schedule;
-    if (opt.lethal_temperature->answer)
+    if (opt.lethal_temperature->answer) {
         lethal_temperature_value = std::stod(opt.lethal_temperature->answer);
-    if (opt.lethal_temperature_months->answer) {
-        int lethal_temperature_month = std::stod(opt.lethal_temperature_months->answer);
+
+        lethal_temperature_month = std::stoi(opt.lethal_temperature_months->answer);
         lethal_schedule = scheduler.schedule_action_yearly(lethal_temperature_month, 1);
         count_lethal = get_number_of_scheduled_actions(lethal_schedule);
-    }
-    if (opt.temperature_file->answer) {
+
         file_exists_or_fatal_error(opt.temperature_file);
         read_names(actual_temperature_names, opt.temperature_file->answer);
         for (string name : actual_temperature_names) {
