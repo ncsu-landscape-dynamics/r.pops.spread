@@ -118,9 +118,9 @@ inline Date treatment_date_from_string(const string& text)
     }
 }
 
-inline Season seasonality_from_option(const Option* opt)
+inline void seasonality_from_option(Config& config, const Option* opt)
 {
-    return {std::atoi(opt->answers[0]), std::atoi(opt->answers[1])};
+    config.set_season_start_end_month(opt->answers[0], opt->answers[1]);
 }
 
 
@@ -751,7 +751,7 @@ int main(int argc, char *argv[])
     if (!opt.seasonality->answer || opt.seasonality->answer[0] == '\0')
         G_fatal_error(_("The option %s cannot be empty"),
                       opt.seasonality->key);
-    Season season = seasonality_from_option(opt.seasonality);
+    seasonality_from_option(config, opt.seasonality);
 
     // set the spore rate
     config.reproductive_rate = std::stod(opt.reproductive_rate->answer);
@@ -805,22 +805,17 @@ int main(int argc, char *argv[])
     warn_about_depreciated_option_value(
                 opt.anthro_direction, "NONE", "none");
 
-    Date dd_start(opt.start_date->answer);
-    Date dd_end(opt.end_date->answer);
-    if (dd_start > dd_end) {
+    config.set_date_start(opt.start_date->answer);
+    config.set_date_end(opt.end_date->answer);
+    if (config.date_start() > config.date_end()) {
         G_fatal_error(_("Start date must precede the end date"));
     }
 
-    StepUnit step_unit = step_unit_enum_from_string(opt.step_unit->answer);
-    int step_num_units = std::stoi(opt.step_num_units->answer);
+    config.set_step_unit(opt.step_unit->answer);
+    config.set_step_num_units(std::stoi(opt.step_num_units->answer));
 
-    // Scheduler
-    Scheduler scheduler(dd_start, dd_end, step_unit, step_num_units);
-    std::vector<bool> spread_schedule = scheduler.schedule_spread(season);
-    // output frequency
-    std::string out_freq = opt.output_frequency->answer ? opt.output_frequency->answer : "";
-    unsigned out_n = opt.output_frequency_n->answer ? std::stoi(opt.output_frequency_n->answer) : 0;
-    std::vector<bool> output_schedule = output_schedule_from_string(scheduler, out_freq, out_n);
+    config.output_frequency = opt.output_frequency->answer ? opt.output_frequency->answer : "";
+    config.output_frequency_n = opt.output_frequency_n->answer ? std::stoi(opt.output_frequency_n->answer) : 0;
 
     config.latency_period_steps = 0;
     if (opt.latency_period->answer)
@@ -830,8 +825,15 @@ int main(int argc, char *argv[])
     config.use_mortality = false;
     config.first_mortality_year = 1;  // starts at 1 (same as the opt)
     config.mortality_rate = 0.0;
-    std::vector<bool> mortality_schedule = scheduler.schedule_action_end_of_year();
-    unsigned num_mortality_years = get_number_of_scheduled_actions(mortality_schedule);
+
+    if (opt.lethal_temperature->answer)
+        config.lethal_temperature = std::stod(opt.lethal_temperature->answer);
+    if (opt.lethal_temperature_months->answer)
+        config.lethal_temperature_month = std::stod(opt.lethal_temperature_months->answer);
+
+    config.create_schedules();
+
+    unsigned num_mortality_years = config.num_mortality_years();
     if (flg.mortality->answer) {
         config.use_mortality = true;
         if (opt.first_year_to_die->answer) {
@@ -879,7 +881,6 @@ int main(int argc, char *argv[])
     std::vector<string> weather_names;
     bool weather = false;
     bool moisture_temperature = false;
-
     if (opt.moisture_coefficient_file->answer && opt.temperature_coefficient_file->answer) {
         read_names(moisture_names, opt.moisture_coefficient_file->answer);
         read_names(temperature_names, opt.temperature_coefficient_file->answer);
@@ -894,17 +895,9 @@ int main(int argc, char *argv[])
     config.weather = weather || moisture_temperature;
 
     config.use_lethal_temperature = false;
-    unsigned count_lethal = 0;
     std::vector<string> actual_temperature_names;
     std::vector<DImg> actual_temperatures;
-    std::vector<bool> lethal_schedule;
-    if (opt.lethal_temperature->answer)
-        config.lethal_temperature = std::stod(opt.lethal_temperature->answer);
-    if (opt.lethal_temperature_months->answer) {
-        int lethal_temperature_month = std::stod(opt.lethal_temperature_months->answer);
-        lethal_schedule = scheduler.schedule_action_yearly(lethal_temperature_month, 1);
-        count_lethal = get_number_of_scheduled_actions(lethal_schedule);
-    }
+    unsigned count_lethal = config.num_lethal();
     if (opt.temperature_file->answer) {
         file_exists_or_fatal_error(opt.temperature_file);
         read_names(actual_temperature_names, opt.temperature_file->answer);
@@ -918,7 +911,7 @@ int main(int argc, char *argv[])
 
     std::vector<DImg> weather_coefficients;
     if (weather || moisture_temperature)
-        weather_coefficients.resize(scheduler.get_num_steps());
+        weather_coefficients.resize(config.scheduler().get_num_steps());
 
     // treatments
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_date) &&
@@ -929,7 +922,7 @@ int main(int argc, char *argv[])
     TreatmentApplication treatment_app = TreatmentApplication::Ratio;
     if (opt.treatment_app->answer)
         treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
-    Treatments<Img, DImg> treatments(scheduler);
+    Treatments<Img, DImg> treatments(config.scheduler());
     config.use_treatments = false;
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_date->answers[i_t]; i_t++) {
@@ -960,7 +953,7 @@ int main(int argc, char *argv[])
     // infected cohort for each year (index is cohort age)
     // age starts with 0 (in year 1), 0 is oldest
     std::vector<std::vector<Img> > mortality_tracker_vector(
-        num_runs, std::vector<Img>(num_mortality_years, Img(S_species_rast, 0)));
+        num_runs, std::vector<Img>(config.num_mortality_years(), Img(S_species_rast, 0)));
 
     // we are using only the first dead img for visualization, but for
     // parallelization we need all allocated anyway
@@ -980,17 +973,15 @@ int main(int argc, char *argv[])
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     // spread rate initialization
-    std::vector<bool> spread_rate_schedule = scheduler.schedule_action_end_of_year();
-    unsigned rate_num_years = get_number_of_scheduled_actions(spread_rate_schedule);
     std::vector<SpreadRate<Img>> spread_rates(num_runs,
-                                              SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, rate_num_years));
+                                              SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, config.rate_num_years()));
 
     std::vector<unsigned> unresolved_steps;
-    unresolved_steps.reserve(scheduler.get_num_steps());
+    unresolved_steps.reserve(config.scheduler().get_num_steps());
 
     // main simulation loop
     unsigned current_index = 0;
-    for (; current_index < scheduler.get_num_steps(); ++current_index) {
+    for (; current_index < config.scheduler().get_num_steps(); ++current_index) {
         unresolved_steps.push_back(current_index);
 
         // if all the hosts are infected, then exit
@@ -1002,7 +993,7 @@ int main(int argc, char *argv[])
         // check whether the spore occurs in the month
         // At the end of the year, run simulation for all unresolved
         // steps in one chunk.
-        if (output_schedule[current_index] || current_index == scheduler.get_num_steps() - 1) {
+        if (config.output_schedule()[current_index] || current_index == config.scheduler().get_num_steps() - 1) {
             unsigned step_in_chunk = 0;
             // get weather for all the steps in chunk
             for (auto step : unresolved_steps) {
@@ -1024,10 +1015,6 @@ int main(int argc, char *argv[])
                     dead_in_current_year[run].zero();
                     models[run].run_step(
                                 step,
-                                spread_schedule,
-                                mortality_schedule,
-                                lethal_schedule,
-                                spread_rate_schedule,
                                 weather_step,
                                 inf_species_rasts[run],
                                 sus_species_rasts[run],
@@ -1048,9 +1035,9 @@ int main(int argc, char *argv[])
             }
 
             unresolved_steps.clear();
-            if (output_schedule[current_index]) {
+            if (config.output_schedule()[current_index]) {
                 // output
-                Step interval = scheduler.get_step(current_index);
+                Step interval = config.scheduler().get_step(current_index);
                 if (opt.single_series->answer) {
                     string name = generate_name(opt.single_series->answer, interval.end_date());
                     raster_to_grass(inf_species_rasts[0], name,
@@ -1113,7 +1100,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    Step interval = scheduler.get_step(--current_index);
+    Step interval = config.scheduler().get_step(--current_index);
     if (opt.average->answer || opt.stddev->answer) {
         // aggregate
         DImg average_raster(I_species_rast.rows(), I_species_rast.cols(), 0);
@@ -1194,12 +1181,12 @@ int main(int argc, char *argv[])
     if (opt.spread_rate_output->answer) {
         FILE *fp = G_open_option_file(opt.spread_rate_output);
         fprintf(fp, "year,N,S,E,W\n");
-        for (unsigned step = 0; step < scheduler.get_num_steps(); step++) {
+        for (unsigned step = 0; step < config.scheduler().get_num_steps(); step++) {
             double n, s, e, w;
-            if (spread_rate_schedule[step]) {
-                unsigned i = simulation_step_to_action_step(spread_rate_schedule, step);
+            if (config.spread_rate_schedule()[step]) {
+                unsigned i = simulation_step_to_action_step(config.spread_rate_schedule(), step);
                 std::tie(n, s, e, w) = average_spread_rate(spread_rates, i);
-                int year = scheduler.get_step(step).end_date().year();
+                int year = config.scheduler().get_step(step).end_date().year();
                 fprintf(fp, "%d,%.0f,%.0f,%.0f,%.0f\n", year,
                         isnan(n) ? n : round(n), isnan(s) ? s : round(s),
                         isnan(e) ? e : round(e), isnan(w) ? w : round(w));
