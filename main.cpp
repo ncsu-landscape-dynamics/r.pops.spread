@@ -830,6 +830,8 @@ int main(int argc, char *argv[])
         config.lethal_temperature = std::stod(opt.lethal_temperature->answer);
     if (opt.lethal_temperature_months->answer)
         config.lethal_temperature_month = std::stod(opt.lethal_temperature_months->answer);
+    if (opt.temperature_file->answer)
+        config.use_lethal_temperature = true;
 
     config.create_schedules();
 
@@ -894,11 +896,11 @@ int main(int argc, char *argv[])
     // distinguish between these two.
     config.weather = weather || moisture_temperature;
 
-    config.use_lethal_temperature = false;
     std::vector<string> actual_temperature_names;
     std::vector<DImg> actual_temperatures;
-    unsigned count_lethal = config.num_lethal();
+
     if (opt.temperature_file->answer) {
+        unsigned count_lethal = config.num_lethal();
         file_exists_or_fatal_error(opt.temperature_file);
         read_names(actual_temperature_names, opt.temperature_file->answer);
         for (string name : actual_temperature_names) {
@@ -906,7 +908,6 @@ int main(int argc, char *argv[])
         }
         if (actual_temperatures.size() < count_lethal)
             G_fatal_error(_("Not enough temperatures"));
-        config.use_lethal_temperature = true;
     }
 
     std::vector<DImg> weather_coefficients;
