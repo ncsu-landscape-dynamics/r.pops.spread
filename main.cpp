@@ -709,6 +709,8 @@ int main(int argc, char *argv[])
                           opt.treatment_date,
                           opt.treatment_app,
                           NULL);
+    // lethal temperature options
+    G_option_collective(opt.lethal_temperature, opt.lethal_temperature_months, opt.temperature_file, NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -829,7 +831,7 @@ int main(int argc, char *argv[])
     if (opt.lethal_temperature->answer)
         config.lethal_temperature = std::stod(opt.lethal_temperature->answer);
     if (opt.lethal_temperature_months->answer)
-        config.lethal_temperature_month = std::stod(opt.lethal_temperature_months->answer);
+        config.lethal_temperature_month = std::stoi(opt.lethal_temperature_months->answer);
     if (opt.temperature_file->answer)
         config.use_lethal_temperature = true;
 
