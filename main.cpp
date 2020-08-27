@@ -115,7 +115,7 @@ inline Date treatment_date_from_string(const string& text)
     try {
         return Date(text);
     }
-    catch (std::invalid_argument) {
+    catch (std::invalid_argument&) {
         G_fatal_error(_("Date <%s> is invalid"), text.c_str());
     }
 }
