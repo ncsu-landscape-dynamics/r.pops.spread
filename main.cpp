@@ -17,14 +17,15 @@
 
 #include "graster.hpp"
 
+#include "pops/model.hpp"
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
-#include "pops/model.hpp"
 #include "pops/kernel.hpp"
 #include "pops/treatments.hpp"
 #include "pops/spread_rate.hpp"
 #include "pops/statistics.hpp"
 #include "pops/scheduling.hpp"
+#include "pops/quarantine.hpp"
 
 extern "C" {
 #include <grass/gis.h>
@@ -35,6 +36,7 @@ extern "C" {
 
 #include <map>
 #include <tuple>
+#include <vector>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -979,6 +981,12 @@ int main(int argc, char *argv[])
     std::vector<SpreadRate<Img>> spread_rates(num_runs,
                                               SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, config.rate_num_years()));
 
+    // Unused quarantine escape tracking
+    Img empty(0, 0, 0);
+    QuarantineEscape<Img> quarantine(empty, config.ew_res, config.ns_res, 0);
+    // Unused movements
+    std::vector<std::vector<int>> movements;
+
     std::vector<unsigned> unresolved_steps;
     unresolved_steps.reserve(config.scheduler().get_num_steps());
 
@@ -1018,7 +1026,6 @@ int main(int argc, char *argv[])
                     dead_in_current_year[run].zero();
                     models[run].run_step(
                                 step,
-                                weather_step,
                                 inf_species_rasts[run],
                                 sus_species_rasts[run],
                                 lvtree_rast,
@@ -1027,11 +1034,14 @@ int main(int argc, char *argv[])
                                 mortality_tracker_vector[run],
                                 dead_in_current_year[run],
                                 actual_temperatures,
-                                weather_coefficients,
+                                weather_coefficients[weather_step],
                                 treatments,
                                 resistant_rasts[run],
                                 outside_spores[run],
-                                spread_rates[run]
+                                spread_rates[run],
+                                quarantine,
+                                empty,
+                                movements
                                 );
                     ++weather_step;
                 }
