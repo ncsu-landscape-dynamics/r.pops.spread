@@ -839,7 +839,7 @@ int main(int argc, char *argv[])
 
     config.create_schedules();
 
-    unsigned num_mortality_years = config.num_mortality_years();
+    int num_mortality_years = config.num_mortality_years();
     if (flg.mortality->answer) {
         config.use_mortality = true;
         if (opt.first_year_to_die->answer) {
