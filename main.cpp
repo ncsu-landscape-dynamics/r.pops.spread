@@ -182,8 +182,8 @@ std::vector<double> weather_file_to_list(const string& filename)
 /** Checks if there are any susceptible hosts left */
 bool all_infected(Img& susceptible)
 {
-    for (unsigned j = 0; j < susceptible.rows(); j++)
-        for (unsigned k = 0; k < susceptible.cols(); k++)
+    for (Img::IndexType j = 0; j < susceptible.rows(); j++)
+        for (Img::IndexType k = 0; k < susceptible.cols(); k++)
             if (susceptible(j, k) > 0)
                 return false;
     return true;
