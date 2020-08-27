@@ -982,7 +982,7 @@ int main(int argc, char *argv[])
                                               SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, config.rate_num_years()));
 
     // Unused quarantine escape tracking
-    Img empty(0, 0, 0);
+    Img empty;
     QuarantineEscape<Img> quarantine(empty, config.ew_res, config.ns_res, 0);
     // Unused movements
     std::vector<std::vector<int>> movements;
