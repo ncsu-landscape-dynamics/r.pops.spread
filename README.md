@@ -1,19 +1,35 @@
 # r.pops.spread
 
 This is a GRASS GIS module *r.pops.spread* for simulating spread of
-pests and pathogens.
+pests and pathogens. The module is a GRASS GIS interface to the PoPS
+(Pest or Pathogen Spread) model implemented in C++ library maintained
+in the [PoPS Core repository](https://github.com/ncsu-landscape-dynamics/pops-core).
 
-This is a GRASS GIS interface to PoPS (Pest or Pathogen Spread) model
-which is a C++ library maintained in this repository:
+The purpose of the *r.pops.spread* module is to provide easy way of
+running the model in GRASS GIS environment once you have calibrated
+the model for your purposes. You can obtain the calibration from a
+colleague or published work or you can calibrate the model manually (in
+GRASS GIS) or use the R interface to PoPS called
+[rpops](https://github.com/ncsu-landscape-dynamics/rpops) to do that.
 
-https://github.com/ncsu-landscape-dynamics/PoPS
+The *r.pops.spread* module is available in GRASS GIS Addons repository
+and can be installed directly in GRASS GIS through graphical user
+interface or using the following command:
 
-Note: Former names of the r.pops.spread are r.spread.pest and r.spread.sod.
+```
+g.extension r.pops.spread
+```
+
+Alternatively, you can obtain latest source code here and install it
+from this repository (see below).
+
+Note: Earlier versions of this module were called *r.spread.pest* and
+*r.spread.sod*.
 
 ## References
 
-Please, in addition to citing or acknowledging this software, cite the
-following papers:
+Please, in addition to citing or acknowledging this software
+(see [CITATION file](CITATION.cff)), cite the following papers:
 
 Ross K. Meentemeyer, Nik J. Cunniffe, Alex R. Cook, Joao A. N. Filipe,
 Richard D. Hunter, David M. Rizzo, and Christopher A. Gilligan 2011.
@@ -76,8 +92,6 @@ cd ..
 git commit pops -m "update to latest pops commit"
 git push
 ```
-
-
 
 ## The files
 
