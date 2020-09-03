@@ -837,6 +837,14 @@ int main(int argc, char *argv[])
     if (opt.temperature_file->answer)
         config.use_lethal_temperature = true;
 
+    config.use_spreadrates = false;
+    if (opt.spread_rate_output) {
+        config.use_spreadrates = true;
+        config.spreadrate_frequency = "yearly";
+        config.spreadrate_frequency_n = 1;
+    }
+
+
     config.create_schedules();
 
     int num_mortality_years = config.num_mortality_years();
@@ -979,7 +987,7 @@ int main(int argc, char *argv[])
 
     // spread rate initialization
     std::vector<SpreadRate<Img>> spread_rates(num_runs,
-                                              SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, config.rate_num_years()));
+                                              SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, config.rate_num_steps()));
 
     // Unused quarantine escape tracking
     Img empty;
