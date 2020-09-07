@@ -239,10 +239,11 @@ int main(int argc, char *argv[])
     G_add_keyword(_("raster"));
     G_add_keyword(_("spread"));
     G_add_keyword(_("model"));
+    G_add_keyword(_("simulation"));
     G_add_keyword(_("disease"));
     G_add_keyword(_("pest"));
     module->description = _("A dynamic species distribution model for pest or "
-                            "pathogen spread in forest or agricultural ecosystems");
+                            "pathogen spread in forest or agricultural ecosystems (PoPS)");
 
     opt.host = G_define_standard_option(G_OPT_R_INPUT);
     opt.host->key = "host";
