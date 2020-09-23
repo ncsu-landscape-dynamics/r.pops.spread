@@ -18,14 +18,15 @@
 #include "graster.hpp"
 #include "tcp_client.h"
 
+#include "pops/model.hpp"
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
-#include "pops/simulation.hpp"
 #include "pops/kernel.hpp"
 #include "pops/treatments.hpp"
 #include "pops/spread_rate.hpp"
 #include "pops/statistics.hpp"
 #include "pops/scheduling.hpp"
+#include "pops/quarantine.hpp"
 
 extern "C" {
 #include <grass/gis.h>
@@ -45,6 +46,7 @@ extern "C" {
 
 #include <map>
 #include <tuple>
+#include <vector>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -126,14 +128,14 @@ inline Date treatment_date_from_string(const string& text)
     try {
         return Date(text);
     }
-    catch (std::invalid_argument) {
+    catch (std::invalid_argument&) {
         G_fatal_error(_("Date <%s> is invalid"), text.c_str());
     }
 }
 
-inline Season seasonality_from_option(const Option* opt)
+inline void seasonality_from_option(Config& config, const Option* opt)
 {
-    return {std::atoi(opt->answers[0]), std::atoi(opt->answers[1])};
+    config.set_season_start_end_month(opt->answers[0], opt->answers[1]);
 }
 
 
@@ -210,7 +212,7 @@ void write_spread_rate(struct Option *opt, const SpreadRate<Img>& spread_rate,
     fprintf(fp, "year,N,S,E,W\n");
     for (unsigned i = 0; i < num_years; i++) {
         double n, s, e, w;
-        std::tie(n, s, e, w) = spread_rate.yearly_rate(i);
+        std::tie(n, s, e, w) = spread_rate.step_rate(i);
         fprintf(fp, "%d,%.0f,%.0f,%.0f,%.0f\n", start_time + i,
                 isnan(n) ? n : round(n), isnan(s) ? s : round(s),
                 isnan(e) ? e : round(e), isnan(w) ? w : round(w));
@@ -221,8 +223,8 @@ void write_spread_rate(struct Option *opt, const SpreadRate<Img>& spread_rate,
 /** Checks if there are any susceptible hosts left */
 bool all_infected(Img& susceptible)
 {
-    for (unsigned j = 0; j < susceptible.rows(); j++)
-        for (unsigned k = 0; k < susceptible.cols(); k++)
+    for (Img::IndexType j = 0; j < susceptible.rows(); j++)
+        for (Img::IndexType k = 0; k < susceptible.cols(); k++)
             if (susceptible(j, k) > 0)
                 return false;
     return true;
@@ -434,10 +436,11 @@ int main(int argc, char *argv[])
     G_add_keyword(_("raster"));
     G_add_keyword(_("spread"));
     G_add_keyword(_("model"));
+    G_add_keyword(_("simulation"));
     G_add_keyword(_("disease"));
     G_add_keyword(_("pest"));
     module->description = _("A dynamic species distribution model for pest or "
-                            "pathogen spread in forest or agricultural ecosystems");
+                            "pathogen spread in forest or agricultural ecosystems (PoPS)");
 
     opt.host = G_define_standard_option(G_OPT_R_INPUT);
     opt.host->key = "host";
@@ -748,7 +751,7 @@ int main(int argc, char *argv[])
             _("The kappa parameter of von Mises distribution"
               " (concentration);"
               " typically the strength of the wind direction");
-    opt.natural_kappa->required = YES;
+    opt.natural_kappa->required = NO;
     opt.natural_kappa->guisection = _("Dispersal");
 
     opt.anthro_kernel = G_define_option();
@@ -940,8 +943,12 @@ int main(int argc, char *argv[])
     file_exists_or_fatal_error(opt.temperature_coefficient_file);
     file_exists_or_fatal_error(opt.weather_coefficient_file);
 
+    // Start creating the configuration.
+    Config config;
+
     // model type
-    ModelType model_type = model_type_from_string(opt.model_type->answer);
+    config.model_type = opt.model_type->answer;
+    ModelType model_type = model_type_from_string(config.model_type);
     if (model_type == ModelType::SusceptibleExposedInfected &&
             !opt.latency_period->answer) {
                 G_fatal_error(_("The option %s is required for %s=%s"),
@@ -952,57 +959,60 @@ int main(int argc, char *argv[])
     // get current computational region (for rows, cols and resolution)
     struct Cell_head window;
     G_get_window(&window);
+    config.rows = window.rows;
+    config.cols = window.cols;
+    config.ew_res = window.ew_res;
+    config.ns_res = window.ns_res;
 
     // Seasonality: Do you want the spread to be limited to certain months?
     if (!opt.seasonality->answer || opt.seasonality->answer[0] == '\0')
         G_fatal_error(_("The option %s cannot be empty"),
                       opt.seasonality->key);
-    Season season = seasonality_from_option(opt.seasonality);
+    seasonality_from_option(config, opt.seasonality);
 
     // set the spore rate
-    double spore_rate = std::stod(opt.reproductive_rate->answer);
+    config.reproductive_rate = std::stod(opt.reproductive_rate->answer);
 
     // TODO: how to support DispersalKernelType::None for natural_kernel?
     // perhaps the long-short should take the type instead of bool,
     // then T is anything else than None
     // TODO: should all kernels support None?
-    DispersalKernelType natural_kernel_type =
-            kernel_type_from_string(opt.natural_kernel->answer);
-    double natural_scale = std::stod(opt.natural_scale->answer);
-    Direction natural_direction = direction_from_string(opt.natural_direction->answer);
-    double natural_kappa = 0;
-    if (natural_direction != Direction::None && !opt.natural_kappa->answer)
+    config.natural_kernel_type = opt.natural_kernel->answer;
+    config.natural_scale = std::stod(opt.natural_scale->answer);
+    config.natural_direction = opt.natural_direction->answer;
+    config.natural_kappa = 0;
+    if (direction_from_string(config.natural_direction) != Direction::None && !opt.natural_kappa->answer)
         fatal_option_required_for_value(opt.natural_kappa, opt.natural_direction);
     else if (opt.natural_kappa->answer)
-        natural_kappa = std::stod(opt.natural_kappa->answer);
+        config.natural_kappa = std::stod(opt.natural_kappa->answer);
 
-    DispersalKernelType anthro_kernel_type =
-            kernel_type_from_string(opt.anthro_kernel->answer);
-    bool use_long_kernel = false;
-    if (anthro_kernel_type != DispersalKernelType::None)
-        use_long_kernel = true;
+    config.use_anthropogenic_kernel = false;
+    if (opt.anthro_kernel->answer)
+        config.anthro_kernel_type = opt.anthro_kernel->answer;
+    if (kernel_type_from_string(config.anthro_kernel_type) != DispersalKernelType::None)
+        config.use_anthropogenic_kernel = true;
 
-    double anthro_scale = 0;
-    if (use_long_kernel && !opt.anthro_scale->answer)
+    config.anthro_scale = 0;
+    if (config.use_anthropogenic_kernel && !opt.anthro_scale->answer)
         fatal_option_required_for_value(opt.anthro_scale, opt.anthro_kernel);
     else if (opt.anthro_scale->answer)
-        anthro_scale = std::stod(opt.anthro_scale->answer);
+        config.anthro_scale = std::stod(opt.anthro_scale->answer);
 
     // we allow none and an empty string
-    Direction anthro_direction = direction_from_string(opt.anthro_direction->answer);
+    config.anthro_direction = opt.anthro_direction->answer;
 
-    double anthro_kappa = 0;
-    if (use_long_kernel && !opt.anthro_kappa->answer)
+    config.anthro_kappa = 0;
+    if (config.use_anthropogenic_kernel && !opt.anthro_kappa->answer)
         fatal_option_required_for_value(opt.anthro_kappa, opt.anthro_kernel);
     else if (opt.anthro_kappa->answer)
-        anthro_kappa = std::stod(opt.anthro_kappa->answer);
+        config.anthro_kappa = std::stod(opt.anthro_kappa->answer);
 
-    double gamma = 0.0;
-    if (use_long_kernel &&
+    config.percent_natural_dispersal = 0.0;
+    if (config.use_anthropogenic_kernel &&
             !opt.percent_natural_dispersal->answer)
         fatal_option_required_for_value(opt.percent_natural_dispersal, opt.anthro_kernel);
     else if (opt.percent_natural_dispersal->answer)
-        gamma = std::stod(opt.percent_natural_dispersal->answer);
+        config.percent_natural_dispersal = std::stod(opt.percent_natural_dispersal->answer);
 
     // warn about limits to backwards compatibility
     // "none" is consistent with other GRASS GIS modules
@@ -1013,71 +1023,59 @@ int main(int argc, char *argv[])
     warn_about_depreciated_option_value(
                 opt.anthro_direction, "NONE", "none");
 
-    RadialDispersalKernel short_radial_kernel(
-                window.ew_res, window.ns_res, natural_kernel_type,
-                natural_scale, natural_direction, natural_kappa);
-    RadialDispersalKernel long_radial_kernel(
-                window.ew_res, window.ns_res, anthro_kernel_type,
-                anthro_scale, anthro_direction, anthro_kappa);
-    UniformDispersalKernel uniform_kernel(window.rows, window.cols);
-    SwitchDispersalKernel short_selectable_kernel(
-                natural_kernel_type,
-                short_radial_kernel, uniform_kernel);
-    SwitchDispersalKernel long_selectable_kernel(
-                natural_kernel_type,
-                long_radial_kernel, uniform_kernel);
-    // each run has its own copy, so a kernel can have a state
-    std::vector<DispersalKernel> kernels;
-    kernels.reserve(num_runs);
-    for (unsigned i = 0; i < num_runs; ++i) {
-        // each (sub)kernel is copied to the main kernel
-        kernels.emplace_back(short_selectable_kernel,
-                             long_selectable_kernel,
-                             use_long_kernel,
-                             gamma);
-    }
-
-    Date dd_start(opt.start_date->answer);
-    Date dd_end(opt.end_date->answer);
-    if (dd_start > dd_end) {
+    config.set_date_start(opt.start_date->answer);
+    config.set_date_end(opt.end_date->answer);
+    if (config.date_start() > config.date_end()) {
         G_fatal_error(_("Start date must precede the end date"));
     }
 
-    StepUnit step_unit = step_unit_enum_from_string(opt.step_unit->answer);
-    int step_num_units = std::stoi(opt.step_num_units->answer);
+    config.set_step_unit(opt.step_unit->answer);
+    config.set_step_num_units(std::stoi(opt.step_num_units->answer));
 
-    // Scheduler
-    Scheduler scheduler(dd_start, dd_end, step_unit, step_num_units);
-    std::vector<bool> spread_schedule = scheduler.schedule_spread(season);
-    // output frequency
-    std::string out_freq = opt.output_frequency->answer ? opt.output_frequency->answer : "";
-    unsigned out_n = opt.output_frequency_n->answer ? std::stoi(opt.output_frequency_n->answer) : 0;
-    std::vector<bool> output_schedule = output_schedule_from_string(scheduler, out_freq, out_n);
+    config.output_frequency = opt.output_frequency->answer ? opt.output_frequency->answer : "";
+    config.output_frequency_n = opt.output_frequency_n->answer ? std::stoi(opt.output_frequency_n->answer) : 0;
 
-    unsigned latency_period_steps = 0;
+    config.latency_period_steps = 0;
     if (opt.latency_period->answer)
-        latency_period_steps = std::stoi(opt.latency_period->answer);
+        config.latency_period_steps = std::stoi(opt.latency_period->answer);
 
     // mortality
-    bool use_mortality = false;
-    unsigned first_mortality_year = 1;  // starts at 1 (same as the opt)
-    double mortality_rate = 0.0;
-    std::vector<bool> mortality_schedule = scheduler.schedule_action_end_of_year();
-    unsigned num_mortality_years = get_number_of_scheduled_actions(mortality_schedule);
+    config.use_mortality = false;
+    config.first_mortality_year = 1;  // starts at 1 (same as the opt)
+    config.mortality_rate = 0.0;
+
+    if (opt.lethal_temperature->answer)
+        config.lethal_temperature = std::stod(opt.lethal_temperature->answer);
+    if (opt.lethal_temperature_months->answer)
+        config.lethal_temperature_month = std::stoi(opt.lethal_temperature_months->answer);
+    if (opt.temperature_file->answer)
+        config.use_lethal_temperature = true;
+
+    config.use_spreadrates = false;
+    if (opt.spread_rate_output) {
+        config.use_spreadrates = true;
+        config.spreadrate_frequency = "yearly";
+        config.spreadrate_frequency_n = 1;
+    }
+
+
+    config.create_schedules();
+
+    int num_mortality_years = config.num_mortality_years();
     if (flg.mortality->answer) {
-        use_mortality = true;
+        config.use_mortality = true;
         if (opt.first_year_to_die->answer) {
-            first_mortality_year = std::stoi(opt.first_year_to_die->answer);
-            if (first_mortality_year > num_mortality_years) {
+            config.first_mortality_year = std::stoi(opt.first_year_to_die->answer);
+            if (config.first_mortality_year > num_mortality_years) {
                 G_fatal_error(
                     _("%s is too large (%d). It must be smaller or "
                       " equal than number of simulation years (%d)."),
                     opt.first_year_to_die->key,
-                    first_mortality_year, num_mortality_years);
+                    config.first_mortality_year, num_mortality_years);
             }
         }
         if (opt.infected_to_dead_rate->answer)
-            mortality_rate = std::stod(opt.infected_to_dead_rate->answer);
+            config.mortality_rate = std::stod(opt.infected_to_dead_rate->answer);
     }
 
     // for steering: even with set seed, when we go back
@@ -1127,21 +1125,15 @@ int main(int argc, char *argv[])
         read_names(weather_names, opt.weather_coefficient_file->answer);
         weather = true;
     }
+    // Model gets pre-computed weather coefficient, so it does not
+    // distinguish between these two.
+    config.weather = weather || moisture_temperature;
 
-    bool use_lethal_temperature = false;
-    double lethal_temperature_value;
-    int lethal_temperature_month;
-    unsigned count_lethal = 0;
     std::vector<string> actual_temperature_names;
     std::vector<DImg> actual_temperatures;
-    std::vector<bool> lethal_schedule;
-    if (opt.lethal_temperature->answer) {
-        lethal_temperature_value = std::stod(opt.lethal_temperature->answer);
 
-        lethal_temperature_month = std::stoi(opt.lethal_temperature_months->answer);
-        lethal_schedule = scheduler.schedule_action_yearly(lethal_temperature_month, 1);
-        count_lethal = get_number_of_scheduled_actions(lethal_schedule);
-
+    if (opt.temperature_file->answer) {
+        unsigned count_lethal = config.num_lethal();
         file_exists_or_fatal_error(opt.temperature_file);
         read_names(actual_temperature_names, opt.temperature_file->answer);
         for (string name : actual_temperature_names) {
@@ -1149,12 +1141,11 @@ int main(int argc, char *argv[])
         }
         if (actual_temperatures.size() < count_lethal)
             G_fatal_error(_("Not enough temperatures"));
-        use_lethal_temperature = true;
     }
 
     std::vector<DImg> weather_coefficients;
     if (weather || moisture_temperature)
-        weather_coefficients.resize(scheduler.get_num_steps());
+        weather_coefficients.resize(config.scheduler().get_num_steps());
 
     // treatments
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_date) &&
@@ -1165,28 +1156,30 @@ int main(int argc, char *argv[])
     TreatmentApplication treatment_app = TreatmentApplication::Ratio;
     if (opt.treatment_app->answer)
         treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
-    Treatments<Img, DImg> treatments(scheduler);
-    bool use_treatments = false;
+    Treatments<Img, DImg> treatments(config.scheduler());
+    config.use_treatments = false;
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_date->answers[i_t]; i_t++) {
             DImg tr = raster_from_grass_float(opt.treatments->answers[i_t]);
             treatments.add_treatment(tr, treatment_date_from_string(opt.treatment_date->answers[i_t]),
                                      std::stoul(opt.treatment_length->answers[i_t]), treatment_app);
-            use_treatments = true;
+            config.use_treatments = true;
         }
     }
 
     // build the Sporulation object
-    std::vector<Sporulation> sporulations;
+    std::vector<Model<Img, DImg, int>> models;
     std::vector<Img> dispersers;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
     std::vector<Img> resistant_rasts(num_runs, Img(S_species_rast, 0));
 
+    // We always create at least one exposed for simplicity, but we
+    // could also just leave it empty.
     std::vector<std::vector<Img>> exposed_vectors(
                 num_runs,
                 std::vector<Img>(
-                    latency_period_steps + 1,
+                    config.latency_period_steps + 1,
                     Img(S_species_rast.rows(), S_species_rast.cols(), 0)
                     )
                 );
@@ -1194,7 +1187,7 @@ int main(int argc, char *argv[])
     // infected cohort for each year (index is cohort age)
     // age starts with 0 (in year 1), 0 is oldest
     std::vector<std::vector<Img> > mortality_tracker_vector(
-        num_runs, std::vector<Img>(num_mortality_years, Img(S_species_rast, 0)));
+        num_runs, std::vector<Img>(config.num_mortality_years(), Img(S_species_rast, 0)));
 
     // we are using only the first dead img for visualization, but for
     // parallelization we need all allocated anyway
@@ -1203,27 +1196,28 @@ int main(int argc, char *argv[])
     // TODO: allow only when series as single run
     Img accumulated_dead(Img(S_species_rast, 0));
 
-    sporulations.reserve(num_runs);
+    models.reserve(num_runs);
     dispersers.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i) {
-        sporulations.emplace_back(
-                    seed_value++,
-                    I_species_rast.rows(),
-                    I_species_rast.cols(),
-                    model_type,
-                    latency_period_steps);
+        Config config_copy = config;
+        config_copy.random_seed = seed_value++;
+        models.emplace_back(config_copy);
         dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
     }
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     // spread rate initialization
-    std::vector<bool> spread_rate_schedule = scheduler.schedule_action_end_of_year();
-    unsigned rate_num_years = get_number_of_scheduled_actions(spread_rate_schedule);
     std::vector<SpreadRate<Img>> spread_rates(num_runs,
-                                              SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, rate_num_years));
+                                              SpreadRate<Img>(I_species_rast, window.ew_res, window.ns_res, config.rate_num_steps()));
+
+    // Unused quarantine escape tracking
+    Img empty;
+    QuarantineEscape<Img> quarantine(empty, config.ew_res, config.ns_res, 0);
+    // Unused movements
+    std::vector<std::vector<int>> movements;
 
     std::vector<unsigned> unresolved_steps;
-    unresolved_steps.reserve(scheduler.get_num_steps());
+    unresolved_steps.reserve(config.scheduler().get_num_steps());
 
     // check if steering is on
     bool steering = false;
@@ -1234,14 +1228,14 @@ int main(int argc, char *argv[])
     // we keep steering step same as output step for now
     std::vector<bool> steering_schedule;
     if (steering){
-        steering_schedule = output_schedule_from_string(scheduler, out_freq, out_n);
+        steering_schedule = config.output_schedule();
         // ensure last interval is in steering schedule
         steering_schedule[steering_schedule.size() - 1] = true;
     }
     else
-        steering_schedule = std::vector<bool>(scheduler.get_num_steps(), false);
+        steering_schedule = std::vector<bool>(config.scheduler().get_num_steps(), false);
 
-    unsigned current_end = scheduler.get_num_steps() - 1;
+    unsigned current_end = config.scheduler().get_num_steps() - 1;
     if (steering)
         current_end = 0;
 
@@ -1256,7 +1250,7 @@ int main(int argc, char *argv[])
     string ip = steering ? string(opt.ip_address->answer) : "";
     int port = steering ? atoi(opt.port->answer): 0;
     if (steering) {
-        use_treatments = true;
+        config.use_treatments = true;
         client_thread = thread(steering_client, ref(c), ip, port, ref(steering_obj));
     }
 
@@ -1293,7 +1287,7 @@ int main(int argc, char *argv[])
             G_verbose_message("Code: %s", print_command(cmd));
         }
         if (cmd == SteeringCommand::Play) { // play from
-            current_end = scheduler.get_num_steps() - 1;
+            current_end = config.scheduler().get_num_steps() - 1;
         }
         else if (cmd == SteeringCommand::Pause) { // pause
             current_end = current_index;
@@ -1302,8 +1296,8 @@ int main(int argc, char *argv[])
             unsigned tmp = current_index + 1;
             while (!steering_schedule[tmp]) tmp++;
             current_end = tmp;
-            if (current_end > scheduler.get_num_steps() - 1)
-                current_end = scheduler.get_num_steps() - 1;
+            if (current_end > config.scheduler().get_num_steps() - 1)
+                current_end = config.scheduler().get_num_steps() - 1;
         }
         else if (cmd == SteeringCommand::StepBack) { // 1 step back
             if (last_checkpoint - 1 >= 0) {
@@ -1316,7 +1310,7 @@ int main(int argc, char *argv[])
                     resistant_rasts[run] = resistant_checkpoint[last_checkpoint][run];
                 }
                 unresolved_steps.clear();
-                Date dt = scheduler.get_step(current_end).end_date();
+                Date dt = config.scheduler().get_step(current_end).end_date();
                 G_verbose_message("Going back to date: %d-%d-%d", dt.year(), dt.month(), dt.day());
                 // add 1 to index to start new step, current_index is already computed
                 // unless we are starting
@@ -1335,7 +1329,7 @@ int main(int argc, char *argv[])
         else if (cmd == SteeringCommand::LoadData) { // load treatments
             G_verbose_message("Loading treatments: %s", steering_obj.treatment_input.c_str());
             Date tr_date = treatment_date_from_string(steering_obj.treatment_date);
-            treatments.clear_after_step(scheduler.schedule_action_date(tr_date));
+            treatments.clear_after_step(config.scheduler().schedule_action_date(tr_date));
             DImg tr = raster_from_grass_float(steering_obj.treatment_input);
             treatments.add_treatment(tr, tr_date,
                                      steering_obj.treatment_length, steering_obj.treatment_app);
@@ -1357,7 +1351,7 @@ int main(int argc, char *argv[])
                     inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
                     resistant_rasts[run] = resistant_checkpoint[goto_checkpoint][run];
                 }
-                Date dt = scheduler.get_step(current_end).end_date();
+                Date dt = config.scheduler().get_step(current_end).end_date();
                 G_verbose_message("Going to date: %d-%d-%d", dt.year(), dt.month(), dt.day());
                 // add 1 to index to start new step, current_index is already computed
                 // unless we are starting
@@ -1394,7 +1388,7 @@ int main(int argc, char *argv[])
             // check whether the spore occurs in the month
             // At the end of the year, run simulation for all unresolved
             // steps in one chunk.
-            if ((steering_schedule[current_index] || output_schedule[current_index])) {
+            if ((steering_schedule[current_index] || config.output_schedule()[current_index])) {
                 unsigned step_in_chunk = 0;
                 // get weather for all the steps in chunk
                 for (auto step : unresolved_steps) {
@@ -1412,74 +1406,26 @@ int main(int argc, char *argv[])
                     // actual runs of the simulation for each step
                     int weather_step = 0;
                     for (auto step : unresolved_steps) {
-                        unsigned mortality_simulation_year = simulation_step_to_action_step(mortality_schedule, step);
-                        // removal of dispersers
-                        if (use_lethal_temperature && lethal_schedule[step]) {
-                            int lethal_step = simulation_step_to_action_step(lethal_schedule, step);
-                            sporulations[run].remove(inf_species_rasts[run],
-                                                     sus_species_rasts[run],
-                                                     actual_temperatures[lethal_step],
-                                                     lethal_temperature_value);
-                        }
-                        // actual spread
-                        if (spread_schedule[step]) {
-                            sporulations[run].generate(dispersers[run],
-                                                       inf_species_rasts[run],
-                                                       weather || moisture_temperature,
-                                                       weather_coefficients[weather_step],
-                                                       spore_rate);
-                            sporulations[run].disperse_and_infect(
-                                                       step,
-                                                       dispersers[run],
-                                                       sus_species_rasts[run],
-                                                       exposed_vectors[run],
-                                                       inf_species_rasts[run],
-                                                       mortality_tracker_vector[run][mortality_simulation_year],
-                                                       lvtree_rast,
-                                                       outside_spores[run],
-                                                       weather || moisture_temperature,
-                                                       weather_coefficients[weather_step],
-                                                       kernels[run]);
-                        }
-                        // treatments
-                        if (use_treatments) {
-                            bool managed = treatments.manage(step, inf_species_rasts[run],
-                                                             sus_species_rasts[run], resistant_rasts[run]);
-                            if (managed && use_mortality) {
-                                // same conditions as the mortality code below
-                                // TODO: make the mortality timing available as a separate function in the library
-                                // or simply go over all valid cohorts
-                                if (mortality_simulation_year >= first_mortality_year - 1) {
-                                    auto max_index = mortality_simulation_year - (first_mortality_year - 1);
-                                    for (unsigned age = 0; age <= max_index; age++) {
-                                        treatments.manage_mortality(step,
-                                                                    mortality_tracker_vector[run][age]);
-                                    }
-                                }
-                            }
-                        }
-                        if (use_mortality && mortality_schedule[step]) {
-                            // only run to the current year of simulation
-                            // (first year is 0):
-                            //   max index == sim year
-                            // reduced by first time when trees start dying
-                            // (counted from 1: first year == 1)
-                            // e.g. for sim year 3, year dying 4, max index is 0
-                            //   max index = sim year - (dying year - 1)
-                            // index is negative before we reach the year
-                            // (so we can skip these years)
-                            // sim year - (dying year - 1) < 0
-                            // sim year < dying year - 1
-                            dead_in_current_year[run].zero();
-                            sporulations[run].mortality(inf_species_rasts[run], mortality_rate, mortality_simulation_year,
-                                                        first_mortality_year - 1, dead_in_current_year[run],
-                                                        mortality_tracker_vector[run]);
-                        }
-                        // compute spread rate
-                        if (spread_rate_schedule[step]) {
-                            unsigned simulation_year = simulation_step_to_action_step(spread_rate_schedule, step);
-                            spread_rates[run].compute_yearly_spread_rate(inf_species_rasts[run], simulation_year);
-                        }
+                        dead_in_current_year[run].zero();
+                        models[run].run_step(
+                                    step,
+                                    inf_species_rasts[run],
+                                    sus_species_rasts[run],
+                                    lvtree_rast,
+                                    dispersers[run],
+                                    exposed_vectors[run],
+                                    mortality_tracker_vector[run],
+                                    dead_in_current_year[run],
+                                    actual_temperatures,
+                                    weather_coefficients[weather_step],
+                                    treatments,
+                                    resistant_rasts[run],
+                                    outside_spores[run],
+                                    spread_rates[run],
+                                    quarantine,
+                                    empty,
+                                    movements
+                                    );
                         ++weather_step;
                     }
                 }
@@ -1501,24 +1447,24 @@ int main(int argc, char *argv[])
                         }
                         sync = false;
                         if (opt.spread_rate_output->answer) {
-                            unsigned num_years_spread = scheduler.get_step(current_index).end_date().year() - dd_start.year() + 1;
+                            unsigned num_years_spread = config.scheduler().get_step(current_index).end_date().year() - config.date_start().year() + 1;
                             write_spread_rate(opt.spread_rate_output, spread_rates[selected_run],
-                                              num_years_spread, dd_start.year());
+                                              num_years_spread, config.date_start().year());
                         }
                         // step after sync we need to select a run
                         select_run = true;
                     }
                     else {
                         if (opt.spread_rate_output->answer) {
-                            unsigned num_years_spread = scheduler.get_step(current_index).end_date().year() - dd_start.year() + 1;
+                            unsigned num_years_spread = config.scheduler().get_step(current_index).end_date().year() - config.date_start().year() + 1;
                             write_spread_rate(opt.spread_rate_output, spread_rates,
-                                              num_years_spread, dd_start.year());
+                                              num_years_spread, config.date_start().year());
                         }
                     }
                 }
-                if (output_schedule[current_index]) {
+                if (config.output_schedule()[current_index]) {
                     // output
-                    Step interval = scheduler.get_step(current_index);
+                    Step interval = config.scheduler().get_step(current_index);
                     if (opt.single_series->answer) {
                         string name = generate_name(opt.single_series->answer, interval.end_date());
                         raster_to_grass(inf_species_rasts[selected_run], name,
@@ -1581,7 +1527,7 @@ int main(int argc, char *argv[])
                             last_name = name;
                         }
                     }
-                    if (use_mortality && opt.dead_series->answer) {
+                    if (config.use_mortality && opt.dead_series->answer) {
                         accumulated_dead += dead_in_current_year[selected_run];
                         if (opt.dead_series->answer) {
                             string name = generate_name(opt.dead_series->answer, interval.end_date());
@@ -1604,7 +1550,7 @@ int main(int argc, char *argv[])
                 }
             }
             current_index++;
-            if (current_index >= scheduler.get_num_steps()) {
+            if (current_index >= config.scheduler().get_num_steps()) {
                 if (steering)
                     c.send_data("info:last:" + last_name);
                 else
@@ -1616,12 +1562,13 @@ int main(int argc, char *argv[])
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     } // end while loop
-    Date assigned_date(dd_start);
+
+    Step interval = config.scheduler().get_step(0);
     if (current_index == 0)
         // when no step is computed
-        assigned_date = scheduler.get_step(current_index).start_date();
+        interval = config.scheduler().get_step(current_index);
     else
-        assigned_date = scheduler.get_step(--current_index).end_date();
+        interval = config.scheduler().get_step(--current_index);
     if (opt.average->answer || opt.stddev->answer) {
         // aggregate
         DImg average_raster(I_species_rast.rows(), I_species_rast.cols(), 0);
@@ -1632,7 +1579,7 @@ int main(int argc, char *argv[])
             // write final result
             raster_to_grass(average_raster, opt.average->answer,
                             "Average occurrence from all stochastic runs",
-                            assigned_date);
+                            interval.end_date());
             write_average_area(inf_species_rasts, opt.average->answer,
                                window.ew_res, window.ns_res);
         }
@@ -1645,7 +1592,7 @@ int main(int argc, char *argv[])
             stddev /= num_runs;
             stddev.for_each([](Float& a){a = std::sqrt(a);});
             raster_to_grass(stddev, opt.stddev->answer,
-                            opt.stddev->description, assigned_date);
+                            opt.stddev->description, interval.end_date());
         }
     }
     if (opt.probability->answer) {
@@ -1658,7 +1605,7 @@ int main(int argc, char *argv[])
         probability *= 100;  // prob from 0 to 100
         probability /= num_runs;
         raster_to_grass(probability, opt.probability->answer,
-                        "Probability of occurrence", assigned_date);
+                        "Probability of occurrence", interval.end_date());
     }
     if (opt.outside_spores->answer) {
         Cell_head region;
@@ -1693,7 +1640,7 @@ int main(int argc, char *argv[])
         Vect_build(&Map);
         Vect_close(&Map);
         struct TimeStamp timestamp;
-        date_to_grass(assigned_date, &timestamp);
+        date_to_grass(interval.end_date(), &timestamp);
         G_write_vector_timestamp(opt.outside_spores->answer,
                                  NULL, &timestamp);
         Vect_destroy_line_struct(Points);
@@ -1702,12 +1649,12 @@ int main(int argc, char *argv[])
     if (opt.spread_rate_output->answer) {
         FILE *fp = G_open_option_file(opt.spread_rate_output);
         fprintf(fp, "year,N,S,E,W\n");
-        for (unsigned step = 0; step < scheduler.get_num_steps(); step++) {
+        for (unsigned step = 0; step < config.scheduler().get_num_steps(); step++) {
             double n, s, e, w;
-            if (spread_rate_schedule[step]) {
-                unsigned i = simulation_step_to_action_step(spread_rate_schedule, step);
+            if (config.spread_rate_schedule()[step]) {
+                unsigned i = simulation_step_to_action_step(config.spread_rate_schedule(), step);
                 std::tie(n, s, e, w) = average_spread_rate(spread_rates, i);
-                int year = scheduler.get_step(step).end_date().year();
+                int year = config.scheduler().get_step(step).end_date().year();
                 fprintf(fp, "%d,%.0f,%.0f,%.0f,%.0f\n", year,
                         isnan(n) ? n : round(n), isnan(s) ? s : round(s),
                         isnan(e) ? e : round(e), isnan(w) ? w : round(w));

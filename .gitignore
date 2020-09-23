@@ -3,6 +3,8 @@ a.out
 *.config
 *.creator
 *.creator.user
+*.cflags
+*.cxxflags
 *.files
 *.includes
 OBJ.*/
