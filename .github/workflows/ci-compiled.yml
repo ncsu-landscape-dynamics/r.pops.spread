@@ -19,7 +19,7 @@ jobs:
         - releasebranch_7_8
       fail-fast: false
 
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
 
     steps:
     - uses: actions/checkout@v1
@@ -37,16 +37,16 @@ jobs:
         mkdir $HOME/install
     - name: Set number of cores for compilation
       run: |
-        echo "::set-env name=MAKEFLAGS::-j$(nproc)"
+        echo "MAKEFLAGS=-j$(nproc)" >> $GITHUB_ENV
     - name: Set LD_LIBRARY_PATH for GRASS GIS compilation
       run: |
-        echo "::set-env name=LD_LIBRARY_PATH::$HOME/install/lib"
+        echo "LD_LIBRARY_PATH=$HOME/install/lib" >> $GITHUB_ENV
     - name: Get and build GRASS GIS
       run: |
         .github/workflows/build.sh /tmp $HOME/install ${{ matrix.branch }}
     - name: Add the bin directory to PATH
       run: |
-        echo "::add-path::$HOME/install/bin"
+        echo "$HOME/install/bin" >> $GITHUB_PATH
     - name: Make simple grass command available
       run: |
         ln -s $HOME/install/bin/grass* $HOME/install/bin/grass
