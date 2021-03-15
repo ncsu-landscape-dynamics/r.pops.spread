@@ -2,16 +2,52 @@
 
 All notable changes to this project should be documented in this file.
 
-The format is based on [Keep a Changelog](http://keepachangelog.com/).
+The _Unreleased_ section should become the release once the release is ready
+and the text can be used as part of the release description.
+The pre-release historical sections are using dates and topics as section
+headings instead of release numbers.
 
-## 2020-04-16 - SEI model
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The module follows releases of the pops-core library. Each version has the same
+version number as the version of the pops-core library it uses.
+To keep versions synchornized, when this interface or rpops creates release,
+pops-core still increstes its version number even when there were no changes in
+pops-core.
 
-### Added
+## [Unreleased]
 
-- Add SEI modeling using model_type and latency_period parameters. (Vaclav Petras)
+## [1.0.2] - 2020-10-09
+
+- [Patch release of rpops](https://github.com/ncsu-landscape-dynamics/rpops/releases/tag/v1.0.2) (no changes for r.pops.spread)
+
+## [1.0.1] - 2020-09-11
 
 ### Changed
 
+* `natural_direction_strength` is no longer required unless `natural_direction` is used (previously ignored, but required). #37
+
+### Fixed
+
+* Code no longer fails when an anthropogenic kernel is not used. #37
+
+## [1.0.0] - 2020-09-11
+
+- Susceptible-infected (`SI`) and susceptible-exposed-infected (`SEI`) host phases (`model_type`, `latency_period`),
+- Host mortality tracking (`mortality_rate`, `mortality_series`),
+- Host removal and pesticide application treatments (`treatments`, `treatment_date`, `treatment_length`),
+- Host resistance based on pesticide application treatments (`treatment_length` > 0),
+- Treatments applied only to a ratio of hosts (`treatment_application`),
+- Yearly pest removal based on lethal temperature (`lethal_temperature`, `lethal_month`),
+- Two different dispersal kernels (`natural_dispersal_kernel`, `anthropogenic_dispersal_kernel`),
+- Cauchy and exponential radial dispersal kernels,
+- Seasonal spread (`seasonality` in months),
+- Multiple stochastic runs (`runs`),
+- Parallel execution of multiple runs (`nprocs`),
+- Output of average infected hosts across multiple runs and for single stochastic run (`average`, `average_series`, `single_series`),
+- Standard deviations for output averages (`stddev`, `stddev_series`),
+- Infection probability output in percent (`probability`, `probability_series`),
+- Spread rate measurement (`spread_rate_output`).
 - Reduced scope of mortality_simulation_year variable. (Vaclav Petras)
 
 ## 2018-09-18 - July 2019 improvements
@@ -216,3 +252,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
   (Vaclav Petras)
 - Copy of GDAL code was removed from the repository, using system GDAL
   includes now. (Vaclav Petras)
+
+[unreleased]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/tree/v1.0.0
