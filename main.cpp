@@ -1157,7 +1157,7 @@ int main(int argc, char *argv[])
     if (opt.treatment_app->answer)
         treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
     Treatments<Img, DImg> treatments(config.scheduler());
-    config.use_treatments = false;
+    config.use_treatments = true;
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_date->answers[i_t]; i_t++) {
             DImg tr = raster_from_grass_float(opt.treatments->answers[i_t]);
