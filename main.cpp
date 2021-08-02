@@ -243,12 +243,16 @@ unsigned median(std::vector<unsigned>& stats) {
     return itOfMedian - stats.begin();
 }
 
-unsigned select_median_run(std::vector<Img>& infected) {
+std::tuple<unsigned, unsigned, unsigned> select_min_median_max_run(std::vector<Img>& infected) {
     std::vector<unsigned> sums;
     for (unsigned run = 0; run < infected.size(); run++) {
         sums.push_back(sum_of_infected(infected[run]));
     }
-    return median(sums);
+    auto minresult = std::min_element(sums.begin(), sums.end());
+    auto maxresult = std::max_element(sums.begin(), sums.end());
+    unsigned minidx = std::distance(sums.begin(), minresult);
+    unsigned maxidx = std::distance(sums.begin(), maxresult);
+    return std::make_tuple(minidx, median(sums), maxidx);
 }
 std::vector<std::string> split(const std::string& s, char delimiter)
 {
@@ -408,7 +412,7 @@ struct PoPSOptions
     struct Option *infected_to_dead_rate, *first_year_to_die;
     struct Option *dead_series;
     struct Option *seed, *runs, *threads;
-    struct Option *single_series;
+    struct Option *single_series, *min_series, *max_series;
     struct Option *average, *average_series;
     struct Option *stddev, *stddev_series;
     struct Option *probability, *probability_series;
@@ -474,9 +478,21 @@ int main(int argc, char *argv[])
 
     opt.single_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
     opt.single_series->key = "single_series";
-    opt.single_series->description = _("Basename for output series of infected as single stochastic run");
+    opt.single_series->description = _("Basename for output series of median infected as single stochastic run");
     opt.single_series->required = NO;
     opt.single_series->guisection = _("Output");
+
+    opt.min_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
+    opt.min_series->key = "min_series";
+    opt.min_series->description = _("Basename for output series of minimum infected as single stochastic run");
+    opt.min_series->required = NO;
+    opt.min_series->guisection = _("Output");
+
+    opt.max_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
+    opt.max_series->key = "max_series";
+    opt.max_series->description = _("Basename for output series of maximum infected as single stochastic");
+    opt.max_series->required = NO;
+    opt.max_series->guisection = _("Output");
 
     opt.stddev = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.stddev->key = "stddev";
@@ -1266,7 +1282,11 @@ int main(int argc, char *argv[])
                 num_checkpoints, std::vector<Img>(num_runs, Img(S_species_rast)));
     std::vector<int> step_checkpoint(num_checkpoints);
     std::vector<unsigned> selected_run_checkpoint(num_checkpoints);
+    std::vector<unsigned> min_run_checkpoint(num_checkpoints);
+    std::vector<unsigned> max_run_checkpoint(num_checkpoints);
     unsigned selected_run = 0;
+    unsigned min_run = 0;
+    unsigned max_run = 0;
     bool select_run = true;
     int last_checkpoint = 0;
     for (unsigned run = 0; run < num_runs; run++) {
@@ -1275,6 +1295,8 @@ int main(int argc, char *argv[])
         resistant_checkpoint[last_checkpoint][run] = resistant_rasts[0];
         step_checkpoint[last_checkpoint] = 0;
         selected_run_checkpoint[last_checkpoint] = selected_run;
+        min_run_checkpoint[last_checkpoint] = min_run;
+        max_run_checkpoint[last_checkpoint] = max_run;
     }
     // main simulation loop (weekly or monthly steps)
     unsigned current_index = 0;
@@ -1304,6 +1326,8 @@ int main(int argc, char *argv[])
                 --last_checkpoint;
                 current_end = step_checkpoint[last_checkpoint];
                 selected_run = selected_run_checkpoint[last_checkpoint];
+                min_run = min_run_checkpoint[last_checkpoint];
+                max_run = max_run_checkpoint[last_checkpoint];
                 for (unsigned run = 0; run < num_runs; run++) {
                     sus_species_rasts[run] = sus_checkpoint[last_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[last_checkpoint][run];
@@ -1345,6 +1369,8 @@ int main(int argc, char *argv[])
                 // go back
                 current_end = step_checkpoint[goto_checkpoint];
                 selected_run = selected_run_checkpoint[goto_checkpoint];
+                min_run = min_run_checkpoint[goto_checkpoint];
+                max_run = max_run_checkpoint[goto_checkpoint];
                 unresolved_steps.clear();
                 for (unsigned run = 0; run < num_runs; run++) {
                     sus_species_rasts[run] = sus_checkpoint[goto_checkpoint][run];
@@ -1433,33 +1459,9 @@ int main(int argc, char *argv[])
                 // decide if to select run and select it
                 if (steering_schedule[current_index]) {
                     if (select_run) {
-                        selected_run = select_median_run(inf_species_rasts);
+                        std::tie(min_run, selected_run, max_run) = select_min_median_max_run(inf_species_rasts);
                         select_run = false;
                         G_verbose_message("Selected run %d", selected_run);
-                    }
-                    if (sync) {
-                        // sync infectious and susceptible in all threads to selected one
-                        for (unsigned run = 0; run < num_runs; run++) {
-                            if (run != selected_run) {
-                                sus_species_rasts[run] = sus_species_rasts[selected_run];
-                                inf_species_rasts[run] = inf_species_rasts[selected_run];
-                            }
-                        }
-                        sync = false;
-                        if (opt.spread_rate_output->answer) {
-                            unsigned num_years_spread = config.scheduler().get_step(current_index).end_date().year() - config.date_start().year() + 1;
-                            write_spread_rate(opt.spread_rate_output, spread_rates[selected_run],
-                                              num_years_spread, config.date_start().year());
-                        }
-                        // step after sync we need to select a run
-                        select_run = true;
-                    }
-                    else {
-                        if (opt.spread_rate_output->answer) {
-                            unsigned num_years_spread = config.scheduler().get_step(current_index).end_date().year() - config.date_start().year() + 1;
-                            write_spread_rate(opt.spread_rate_output, spread_rates,
-                                              num_years_spread, config.date_start().year());
-                        }
                     }
                 }
                 if (config.output_schedule()[current_index]) {
@@ -1469,6 +1471,26 @@ int main(int argc, char *argv[])
                         string name = generate_name(opt.single_series->answer, interval.end_date());
                         raster_to_grass(inf_species_rasts[selected_run], name,
                                         "Occurrence from a single stochastic run",
+                                        interval.end_date());
+                        if (steering && steering_schedule[current_index]) {
+                            c.send_data("output:" + name + '|');
+                            last_name = name;
+                        }
+                    }
+                    if (opt.min_series->answer) {
+                        string name = generate_name(opt.min_series->answer, interval.end_date());
+                        raster_to_grass(inf_species_rasts[min_run], name,
+                                        "Min occurrence from a single stochastic run",
+                                        interval.end_date());
+                        if (steering && steering_schedule[current_index]) {
+                            c.send_data("output:" + name + '|');
+                            last_name = name;
+                        }
+                    }
+                    if (opt.max_series->answer) {
+                        string name = generate_name(opt.max_series->answer, interval.end_date());
+                        raster_to_grass(inf_species_rasts[max_run], name,
+                                        "Max occurrence from a single stochastic run",
                                         interval.end_date());
                         if (steering && steering_schedule[current_index]) {
                             c.send_data("output:" + name + '|');
@@ -1508,6 +1530,10 @@ int main(int argc, char *argv[])
                             string title = "Standard deviation of average"
                                            " occurrence from all stochastic runs";
                             raster_to_grass(stddev, name, title, interval.end_date());
+                            if (steering && steering_schedule[current_index]) {
+                                c.send_data("output:" + name + '|');
+                                last_name = name;
+                            }
                         }
                     }
                     if (opt.probability_series->answer) {
@@ -1537,12 +1563,40 @@ int main(int argc, char *argv[])
                         }
                     }
                 }
+                if (steering_schedule[current_index]) {
+                    if (sync) {
+                        // sync infectious and susceptible in all threads to selected one
+                        for (unsigned run = 0; run < num_runs; run++) {
+                            if (run != selected_run) {
+                                sus_species_rasts[run] = sus_species_rasts[selected_run];
+                                inf_species_rasts[run] = inf_species_rasts[selected_run];
+                            }
+                        }
+                        sync = false;
+                        if (opt.spread_rate_output->answer) {
+                            unsigned num_years_spread = config.scheduler().get_step(current_index).end_date().year() - config.date_start().year() + 1;
+                            write_spread_rate(opt.spread_rate_output, spread_rates[selected_run],
+                                              num_years_spread, config.date_start().year());
+                        }
+                        // step after sync we need to select a run
+                        select_run = true;
+                    }
+                    else {
+                        if (opt.spread_rate_output->answer) {
+                            unsigned num_years_spread = config.scheduler().get_step(current_index).end_date().year() - config.date_start().year() + 1;
+                            write_spread_rate(opt.spread_rate_output, spread_rates,
+                                              num_years_spread, config.date_start().year());
+                        }
+                    }
+                }
             }
             // save checkpoint
             if (steering && steering_schedule[current_index]) {
                 last_checkpoint = simulation_step_to_action_step(steering_schedule, current_index) + 1;
                 step_checkpoint[last_checkpoint] = current_index;
                 selected_run_checkpoint[last_checkpoint] = selected_run;
+                min_run_checkpoint[last_checkpoint] = min_run;
+                max_run_checkpoint[last_checkpoint] = max_run;
                 for (unsigned run = 0; run < num_runs; run++) {
                     sus_checkpoint[last_checkpoint][run] = sus_species_rasts[run];
                     inf_checkpoint[last_checkpoint][run] = inf_species_rasts[run];
