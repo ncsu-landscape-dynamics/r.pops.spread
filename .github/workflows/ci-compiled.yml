@@ -2,21 +2,29 @@ name: CI with latest GRASS GIS
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+      paths-ignore:
+      - "*.md"
+      - CITATION.cff
+      - LICENSE
   schedule:
   # 01:00 Pacific Time (in UTC), every day (morning)
   - cron:  '0 8 * * *'
 
 jobs:
-  test-with-compiled:
+  build:
 
-    name: compiled ${{ matrix.branch }}
+    name: compiled ${{ matrix.version }}
 
     strategy:
       matrix:
-        branch:
-        - master
-        - releasebranch_7_8
+        include:
+        - version: master
+          command: grass
+        - version: releasebranch_7_8
+          command: grass78
       fail-fast: false
 
     runs-on: ubuntu-20.04
@@ -32,6 +40,10 @@ jobs:
         sudo apt-get install -y wget git gawk findutils
         xargs -a <(awk '! /^ *(#|$)/' ".github/workflows/apt.txt") -r -- \
             sudo apt-get install -y --no-install-recommends --no-install-suggests
+    - name: Get Python version
+      run: |
+        python3 --version
+        python --version
     - name: Create installation directory
       run: |
         mkdir $HOME/install
@@ -43,13 +55,18 @@ jobs:
         echo "LD_LIBRARY_PATH=$HOME/install/lib" >> $GITHUB_ENV
     - name: Get and build GRASS GIS
       run: |
-        .github/workflows/build.sh /tmp $HOME/install ${{ matrix.branch }}
+        .github/workflows/build.sh /tmp $HOME/install ${{ matrix.version }}
     - name: Add the bin directory to PATH
       run: |
         echo "$HOME/install/bin" >> $GITHUB_PATH
     - name: Make simple grass command available
       run: |
-        ln -s $HOME/install/bin/grass* $HOME/install/bin/grass
+        if [ ! -f "$HOME/install/bin/grass" ]; then
+          ln -s "$HOME/install/bin/${{ matrix.command }}" "$HOME/install/bin/grass"
+        fi
+    - name: Get GRASS GIS version
+      run: |
+        grass --version
     - name: Install the module
       run: |
         grass --tmp-location XY --exec g.extension extension=r.pops.spread url=. --verbose
@@ -63,7 +80,7 @@ jobs:
       if: steps.cache-nc_spm_08_grass7.outputs.cache-hit != 'true'
       run: |
         grass --tmp-location XY --exec g.extension g.download.location --verbose
-        grass --tmp-location XY --exec g.download.location url=https://grass.osgeo.org/sampledata/north_carolina/nc_spm_08_grass7.tar.gz dbase=~ --verbose
+        grass --tmp-location XY --exec g.download.location url=https://grass.osgeo.org/sampledata/north_carolina/nc_spm_08_grass7.tar.gz path=~ --verbose
     - name: Run test (manually specified files)
       run: |
         cd testsuite/
