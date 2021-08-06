@@ -19,7 +19,7 @@ Note: Earlier versions of this module were called *r.spread.pest* and
 
 ## How to cite
 
-If you use this software or code, please cite the following papers:
+If you use this software or code, please cite the following paper:
 
 * Jones, C., Jones, S., Petrasova, A., Petras, V., Gaydos, D.,
   Skrip, M., Takeuchi, Y., Bigsby, K., and Meentemeyer, R., 2021.
