@@ -16,7 +16,7 @@ on:
 jobs:
   build:
 
-    name: compiled ${{ matrix.branch }}
+    name: compiled ${{ matrix.version }}
 
     strategy:
       matrix:
@@ -55,7 +55,7 @@ jobs:
         echo "LD_LIBRARY_PATH=$HOME/install/lib" >> $GITHUB_ENV
     - name: Get and build GRASS GIS
       run: |
-        .github/workflows/build.sh /tmp $HOME/install ${{ matrix.branch }}
+        .github/workflows/build.sh /tmp $HOME/install ${{ matrix.version }}
     - name: Add the bin directory to PATH
       run: |
         echo "$HOME/install/bin" >> $GITHUB_PATH
