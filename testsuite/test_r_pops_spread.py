@@ -23,7 +23,7 @@ class TestSpread(TestCase):
         cls.runModule('r.mapcalc', expression="host_nulls = if(host == 0, null(), host)")
         cls.runModule('v.to.rast', input='railroads', output='infection_', use='val', value=1)
         cls.runModule('r.null', map='infection_', null=0)
-        cls.runModule('r.mapcalc', expression='infection = if(ndvi > 0, infection_, 0)')
+        cls.runModule('r.mapcalc', expression='infection = if(host > 0, infection_, 0)')
         cls.runModule('r.mapcalc', expression='infection_nulls = if(infection == 0, null(), infection)')
         cls.runModule('r.mapcalc', expression='max_host = 100')
         cls.runModule('r.circle', flags='b', output='circle', coordinates=[639445, 218237], max=2000)
@@ -90,9 +90,9 @@ class TestSpread(TestCase):
 
         values = dict(null_cells=0, min=0, max=18, mean=1.777)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=33.767)
+        values = dict(null_cells=0, min=0, max=100, mean=33.664)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=7.440, mean=0.947)
+        values = dict(null_cells=0, min=0, max=7.547, mean=0.945)
         self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
 
 
@@ -122,9 +122,9 @@ class TestSpread(TestCase):
 
         values = dict(null_cells=0, min=0, max=18, mean=1.777)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=33.767)
+        values = dict(null_cells=0, min=0, max=100, mean=33.664)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=7.440, mean=0.947)
+        values = dict(null_cells=0, min=0, max=7.548, mean=0.945)
         self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
 
 
@@ -146,11 +146,11 @@ class TestSpread(TestCase):
         end = end[:4]
         self.assertRasterExists('dead' + '_{}_12_31'.format(end))
 
-        values = dict(null_cells=0, min=0, max=6, mean=0.652)
+        values = dict(null_cells=0, min=0, max=6, mean=0.629)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=25.893)
+        values = dict(null_cells=0, min=0, max=100, mean=25.059)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=15, mean=0.752)
+        values = dict(null_cells=0, min=0, max=14, mean=0.681)
         self.assertRasterFitsUnivar(raster='dead' + '_{}_12_31'.format(end), reference=values, precision=0.001)
 
 
@@ -172,9 +172,9 @@ class TestSpread(TestCase):
                           treatments='treatment', treatment_date='2020-12-01', treatment_length=0,
                           treatment_application='ratio_to_all')
 
-        values = dict(null_cells=0, min=0, max=5.6, mean=0.519)
+        values = dict(null_cells=0, min=0, max=6, mean=0.509)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=21.492)
+        values = dict(null_cells=0, min=0, max=100, mean=21.119)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
 
     def test_outputs_sei_inf(self):
@@ -258,9 +258,9 @@ class TestSpread(TestCase):
 
         values = dict(null_cells=0, min=0, max=18, mean=1.777)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=33.767)
+        values = dict(null_cells=0, min=0, max=100, mean=33.664)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=7.440, mean=0.947)
+        values = dict(null_cells=0, min=0, max=7.547, mean=0.945)
         self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
 
     def test_natural_kernel_only(self):
@@ -309,11 +309,11 @@ class TestSpread(TestCase):
             reference=ref_float
         )
 
-        values = dict(null_cells=0, min=0, max=18, mean=0.447)
+        values = dict(null_cells=0, min=0, max=18, mean=0.431)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=7.830)
+        values = dict(null_cells=0, min=0, max=100, mean=7.520)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=6, mean=0.123)
+        values = dict(null_cells=0, min=0, max=6.112, mean=0.120)
         self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
 
     def test_minimal_parameters(self):
@@ -339,9 +339,9 @@ class TestSpread(TestCase):
         self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
         self.assertRasterFitsInfo(raster="probability", reference=ref_float)
 
-        values = dict(null_cells=0, min=0, max=18, mean=2.260)
+        values = dict(null_cells=0, min=0, max=18, mean=2.222)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=44.790)
+        values = dict(null_cells=0, min=0, max=100, mean=44.247)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
         values = dict(null_cells=0, min=0, max=0, mean=0)
         self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
