@@ -26,6 +26,13 @@ jobs:
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq grass grass-dev grass-doc
+    - name: Get Python version
+      run: |
+        python3 --version
+        python --version
+    - name: Get GRASS GIS version
+      run: |
+        grass --version
     - name: Install the module
       run: |
         grass --tmp-location XY --exec g.extension extension=r.pops.spread url=. --verbose
