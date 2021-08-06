@@ -23,7 +23,7 @@ class TestSpread(TestCase):
         cls.runModule('r.mapcalc', expression="host_nulls = if(host == 0, null(), host)")
         cls.runModule('v.to.rast', input='railroads', output='infection_', use='val', value=1)
         cls.runModule('r.null', map='infection_', null=0)
-        cls.runModule('r.mapcalc', expression='infection = if(ndvi > 0, infection_, 0)')
+        cls.runModule('r.mapcalc', expression='infection = if(host > 0, infection_, 0)')
         cls.runModule('r.mapcalc', expression='infection_nulls = if(infection == 0, null(), infection)')
         cls.runModule('r.mapcalc', expression='max_host = 100')
         cls.runModule('r.circle', flags='b', output='circle', coordinates=[639445, 218237], max=2000)
