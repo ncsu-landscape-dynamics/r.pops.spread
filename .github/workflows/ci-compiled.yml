@@ -20,9 +20,11 @@ jobs:
 
     strategy:
       matrix:
-        branch:
-        - master
-        - releasebranch_7_8
+        include:
+        - version: master
+          command: grass
+        - version: releasebranch_7_8
+          command: grass78
       fail-fast: false
 
     runs-on: ubuntu-20.04
@@ -38,6 +40,10 @@ jobs:
         sudo apt-get install -y wget git gawk findutils
         xargs -a <(awk '! /^ *(#|$)/' ".github/workflows/apt.txt") -r -- \
             sudo apt-get install -y --no-install-recommends --no-install-suggests
+    - name: Get Python version
+      run: |
+        python3 --version
+        python --version
     - name: Create installation directory
       run: |
         mkdir $HOME/install
@@ -56,8 +62,11 @@ jobs:
     - name: Make simple grass command available
       run: |
         if [ ! -f "$HOME/install/bin/grass" ]; then
-          ln -s "$HOME/install/bin/grass*" "$HOME/install/bin/grass"
+          ln -s "$HOME/install/bin/${{ matrix.command }}" "$HOME/install/bin/grass"
         fi
+    - name: Get GRASS GIS version
+      run: |
+        grass --version
     - name: Install the module
       run: |
         grass --tmp-location XY --exec g.extension extension=r.pops.spread url=. --verbose
