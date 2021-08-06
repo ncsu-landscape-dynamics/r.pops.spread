@@ -8,7 +8,7 @@ on:
   - cron:  '0 8 * * *'
 
 jobs:
-  test-with-compiled:
+  build:
 
     name: compiled ${{ matrix.branch }}
 
@@ -49,7 +49,9 @@ jobs:
         echo "$HOME/install/bin" >> $GITHUB_PATH
     - name: Make simple grass command available
       run: |
-        ln -s $HOME/install/bin/grass* $HOME/install/bin/grass
+        if [ ! -f "$HOME/install/bin/grass" ]; then
+          ln -s "$HOME/install/bin/grass*" "$HOME/install/bin/grass"
+        fi
     - name: Install the module
       run: |
         grass --tmp-location XY --exec g.extension extension=r.pops.spread url=. --verbose
@@ -63,7 +65,7 @@ jobs:
       if: steps.cache-nc_spm_08_grass7.outputs.cache-hit != 'true'
       run: |
         grass --tmp-location XY --exec g.extension g.download.location --verbose
-        grass --tmp-location XY --exec g.download.location url=https://grass.osgeo.org/sampledata/north_carolina/nc_spm_08_grass7.tar.gz dbase=~ --verbose
+        grass --tmp-location XY --exec g.download.location url=https://grass.osgeo.org/sampledata/north_carolina/nc_spm_08_grass7.tar.gz path=~ --verbose
     - name: Run test (manually specified files)
       run: |
         cd testsuite/
