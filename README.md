@@ -1,5 +1,7 @@
 # r.pops.spread
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5160178.svg)](https://doi.org/10.5281/zenodo.5160178)
+
 This is a GRASS GIS module *r.pops.spread* for simulating spread of
 pests and pathogens. The module is a GRASS GIS interface to the PoPS
 (Pest or Pathogen Spread) model implemented in C++ library maintained
@@ -17,22 +19,14 @@ Note: Earlier versions of this module were called *r.spread.pest* and
 
 ## How to cite
 
-If you use this software or code, please cite the following papers:
+If you use this software or code, please cite the following paper:
 
-* Ross K. Meentemeyer, Nik J. Cunniffe, Alex R. Cook, Joao A. N. Filipe,
-  Richard D. Hunter, David M. Rizzo, and Christopher A. Gilligan, 2011.
-  Epidemiological modeling of invasion in heterogeneous landscapes:
-  spread of sudden oak death in California (1990–2030).
-  *Ecosphere* 2:art17.
-  [DOI: 10.1890/ES10-00192.1](https://doi.org/10.1890/ES10-00192.1)
-
-* Tonini, Francesco, Douglas Shoemaker, Anna Petrasova, Brendan Harmon,
-  Vaclav Petras, Richard C. Cobb, Helena Mitasova,
-  and Ross K. Meentemeyer, 2017.
-  Tangible geospatial modeling for collaborative solutions
-  to invasive species management.
-  *Environmental Modelling & Software* 92: 176-188.
-  [DOI: 10.1016/j.envsoft.2017.02.020](https://doi.org/10.1016/j.envsoft.2017.02.020)
+* Jones, C., Jones, S., Petrasova, A., Petras, V., Gaydos, D.,
+  Skrip, M., Takeuchi, Y., Bigsby, K., and Meentemeyer, R., 2021.
+  Iteratively forecasting biological invasions with PoPS and a little help from
+  our friends.
+  *Frontiers in Ecology and the Environment*
+  [DOI: 10.1002/fee.2357](https://doi.org/10.1002/fee.2357)
 
 In case you are using the automatic management feature in rpops or the
 steering version of r.pops.spread (from the branch steering), please
@@ -46,10 +40,14 @@ cite also:
 
 In addition to citing the above paper, we also encourage you to
 reference, link, and/or acknowledge specific version of the software
-you are using for example:
+you are using, for example:
 
-* *We have used rpops R package version 1.0.0 from
-  <https://github.com/ncsu-landscape-dynamics/rpops>*.
+* *We have used r.pops.spread GRASS module version 1.0.2 from
+  <https://github.com/ncsu-landscape-dynamics/r.pops.spread>
+  [DOI: 10.5281/zenodo.5160179](https://doi.org/10.5281/zenodo.5160179)*.
+
+You can find the DOI for the specific version you are using at
+[Zenodo](https://doi.org/10.5281/zenodo.5160178).
 
 ## Download
 
