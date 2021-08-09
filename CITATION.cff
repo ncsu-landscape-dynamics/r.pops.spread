@@ -8,10 +8,10 @@ authors:
     given-names: Anna
     orcid: https://orcid.org/0000-0002-5120-5538
   - family-names: Jones
-    given-names: Chris
+    given-names: Chris M.
     orcid: https://orcid.org/0000-0002-0229-2970
   - family-names: Lawrimore
-    given-names: Margaret
+    given-names: Margaret A.
 date-released: 2021-08-04
 title: r.pops.spread - PoPS model implemented as a GRASS GIS module
 version: 1.0.2
