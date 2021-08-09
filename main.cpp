@@ -653,7 +653,7 @@ int main(int argc, char *argv[])
     opt.mortality_frequency_n->type = TYPE_INTEGER;
     opt.mortality_frequency_n->key = "mortality_frequency_n";
     opt.mortality_frequency_n->description =
-        _("Mortality frequency every N stepss");
+        _("Mortality frequency every N steps");
     opt.mortality_frequency_n->options = "1-100";
     opt.mortality_frequency_n->required = NO;
     opt.mortality_frequency_n->answer = const_cast<char*>("1");
@@ -721,14 +721,13 @@ int main(int argc, char *argv[])
     G_option_exclusive(opt.temperature_coefficient_file, opt.weather_coefficient_file, NULL);
 
     // mortality
-    // flag and rate required always
-    // for simplicity of the code outputs allowed only with output
-    // for single run (avgs from runs likely not needed)
-    G_option_requires_all(flg.mortality, opt.infected_to_dead_rate,
-                          opt.mortality_frequency, NULL);
-    G_option_requires(opt.first_year_to_die, flg.mortality, NULL);
-    G_option_requires_all(opt.dead_series, flg.mortality,
-                          opt.single_series, NULL);
+    // With flag, the lag, rate, and frequency are always required.
+    // For simplicity of the code, mortality outputs are allowed only with the
+    // corresponding main outputs for single run.
+    G_option_collective(flg.mortality, opt.first_year_to_die,
+                        opt.infected_to_dead_rate, opt.mortality_frequency, NULL);
+    G_option_requires_all(opt.dead_series, flg.mortality, opt.single_series, NULL);
+    G_option_requires_all(opt.mortality_frequency_n, opt.mortality_frequency, NULL);
     // TODO: requires_all does not understand the default?
     // treatment_app needs to be removed from here and check separately
     G_option_requires_all(opt.treatments,
@@ -856,7 +855,7 @@ int main(int argc, char *argv[])
         config.use_mortality = true;
         config.mortality_time_lag = std::stoi(opt.first_year_to_die->answer);  // starts at 1 (same as the opt)
         config.mortality_rate = std::stod(opt.infected_to_dead_rate->answer);
-        config.mortality_frequency = opt.mortality_frequency->answer ? opt.mortality_frequency->answer : "";
+        config.mortality_frequency = opt.mortality_frequency->answer;
         config.mortality_frequency_n = opt.mortality_frequency_n->answer ? std::stoi(opt.mortality_frequency_n->answer) : 0;
     }
 
