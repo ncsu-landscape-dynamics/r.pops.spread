@@ -1275,11 +1275,16 @@ int main(int argc, char *argv[])
     //auto num_checkpoints = dd_end.year() - dd_start.year() + 2;
     int num_checkpoints = get_number_of_scheduled_actions(steering_schedule) + 1;
     std::vector<std::vector<Img>> sus_checkpoint(
-                num_checkpoints, std::vector<Img>(num_runs, Img(S_species_rast)));
+                num_checkpoints, std::vector<Img>(num_runs, S_species_rast));
     std::vector<std::vector<Img>> inf_checkpoint(
-                num_checkpoints, std::vector<Img>(num_runs, Img(S_species_rast)));
+                num_checkpoints, std::vector<Img>(num_runs, S_species_rast));
     std::vector<std::vector<Img>> resistant_checkpoint(
-                num_checkpoints, std::vector<Img>(num_runs, Img(S_species_rast)));
+                num_checkpoints, std::vector<Img>(num_runs, S_species_rast));
+    std::vector<std::vector<std::vector<Img>>> exposed_checkpoint(
+                num_checkpoints,
+                std::vector<std::vector<Img>>(num_runs,
+                                              exposed_vectors[0]));
+
     std::vector<int> step_checkpoint(num_checkpoints);
     std::vector<unsigned> selected_run_checkpoint(num_checkpoints);
     std::vector<unsigned> min_run_checkpoint(num_checkpoints);
@@ -1293,6 +1298,7 @@ int main(int argc, char *argv[])
         sus_checkpoint[last_checkpoint][run] = S_species_rast_start;
         inf_checkpoint[last_checkpoint][run] = I_species_rast_start;
         resistant_checkpoint[last_checkpoint][run] = resistant_rasts[0];
+        exposed_checkpoint[last_checkpoint][run] = exposed_vectors[0];
         step_checkpoint[last_checkpoint] = 0;
         selected_run_checkpoint[last_checkpoint] = selected_run;
         min_run_checkpoint[last_checkpoint] = min_run;
@@ -1332,6 +1338,7 @@ int main(int argc, char *argv[])
                     sus_species_rasts[run] = sus_checkpoint[last_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[last_checkpoint][run];
                     resistant_rasts[run] = resistant_checkpoint[last_checkpoint][run];
+                    exposed_vectors[run] = exposed_checkpoint[last_checkpoint][run];
                 }
                 unresolved_steps.clear();
                 Date dt = config.scheduler().get_step(current_end).end_date();
@@ -1376,6 +1383,7 @@ int main(int argc, char *argv[])
                     sus_species_rasts[run] = sus_checkpoint[goto_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
                     resistant_rasts[run] = resistant_checkpoint[goto_checkpoint][run];
+                    exposed_vectors[run] = exposed_checkpoint[goto_checkpoint][run];
                 }
                 Date dt = config.scheduler().get_step(current_end).end_date();
                 G_verbose_message("Going to date: %d-%d-%d", dt.year(), dt.month(), dt.day());
@@ -1601,6 +1609,7 @@ int main(int argc, char *argv[])
                     sus_checkpoint[last_checkpoint][run] = sus_species_rasts[run];
                     inf_checkpoint[last_checkpoint][run] = inf_species_rasts[run];
                     resistant_checkpoint[last_checkpoint][run] = resistant_rasts[run];
+                    exposed_checkpoint[last_checkpoint][run] = exposed_vectors[run];
                 }
             }
             current_index++;
