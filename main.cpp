@@ -1024,8 +1024,8 @@ int main(int argc, char *argv[])
             window.ns_res,
             config.rate_num_steps(),
             suitable_cells));
-    // Unused quarantine escape tracking
-    Img empty(Img(S_species_rast, 0));
+    // Unused quarantine escape tracking still requires full raster.
+    Img empty(S_species_rast, 0);
     QuarantineEscape<Img> quarantine(empty,
                                      config.ew_res,
                                      config.ns_res,
