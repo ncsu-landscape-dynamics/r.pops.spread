@@ -646,7 +646,6 @@ int main(int argc, char *argv[])
         _("Mortality frequency");
     opt.mortality_frequency->options = "yearly,monthly,weekly,daily,every_n_steps";
     opt.mortality_frequency->required = NO;
-    opt.mortality_frequency->answer = const_cast<char*>("yearly");
     opt.mortality_frequency->guisection = _("Mortality");
 
     opt.mortality_frequency_n = G_define_option();
@@ -656,7 +655,6 @@ int main(int argc, char *argv[])
         _("Mortality frequency every N steps");
     opt.mortality_frequency_n->options = "1-100";
     opt.mortality_frequency_n->required = NO;
-    opt.mortality_frequency_n->answer = const_cast<char*>("1");
     opt.mortality_frequency_n->guisection = _("Mortality");
 
     flg.mortality = G_define_flag();
