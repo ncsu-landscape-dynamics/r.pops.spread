@@ -488,7 +488,7 @@ int main(int argc, char *argv[])
     opt.step_num_units->answer = const_cast<char*>("1");
     opt.step_num_units->label = _("Number of days/weeks/months in each step");
     opt.step_num_units->description = _("Step is given by number and unit, e.g. step_num_units=5 and step_unit=day means step is 5 days");
-    opt.step_num_units->options = "1-100";
+    opt.step_num_units->options = "1-";
     opt.step_num_units->required = YES;
     opt.step_num_units->guisection = _("Time");
 
@@ -505,7 +505,7 @@ int main(int argc, char *argv[])
     opt.output_frequency_n->type = TYPE_INTEGER;
     opt.output_frequency_n->key = "output_frequency_n";
     opt.output_frequency_n->description = "Output frequency every N steps";
-    opt.output_frequency_n->options = "1-100";
+    opt.output_frequency_n->options = "1-";
     opt.output_frequency_n->answer = const_cast<char*>("1");
     opt.output_frequency_n->required = NO;
     opt.output_frequency_n->guisection = _("Time");
@@ -653,7 +653,7 @@ int main(int argc, char *argv[])
     opt.mortality_frequency_n->key = "mortality_frequency_n";
     opt.mortality_frequency_n->description =
         _("Mortality frequency every N steps");
-    opt.mortality_frequency_n->options = "1-100";
+    opt.mortality_frequency_n->options = "1-";
     opt.mortality_frequency_n->required = NO;
     opt.mortality_frequency_n->guisection = _("Mortality");
 
