@@ -12,6 +12,7 @@ authors:
     orcid: https://orcid.org/0000-0002-0229-2970
   - family-names: Lawrimore
     given-names: Margaret A.
+    orcid: https://orcid.org/0000-0003-2266-3588
 date-released: 2021-08-04
 title: r.pops.spread - PoPS model implemented as a GRASS GIS module
 version: 1.0.2
