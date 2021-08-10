@@ -244,15 +244,15 @@ unsigned median(std::vector<unsigned>& stats) {
 }
 
 std::tuple<unsigned, unsigned, unsigned> select_min_median_max_run(std::vector<Img>& infected) {
-    std::vector<unsigned> sums;
+    std::vector<unsigned> areas;
     for (unsigned run = 0; run < infected.size(); run++) {
-        sums.push_back(sum_of_infected(infected[run]));
+        areas.push_back(area_of_infected(infected[run], 1, 1));
     }
-    auto minresult = std::min_element(sums.begin(), sums.end());
-    auto maxresult = std::max_element(sums.begin(), sums.end());
-    unsigned minidx = std::distance(sums.begin(), minresult);
-    unsigned maxidx = std::distance(sums.begin(), maxresult);
-    return std::make_tuple(minidx, median(sums), maxidx);
+    auto minresult = std::min_element(areas.begin(), areas.end());
+    auto maxresult = std::max_element(areas.begin(), areas.end());
+    unsigned minidx = std::distance(areas.begin(), minresult);
+    unsigned maxidx = std::distance(areas.begin(), maxresult);
+    return std::make_tuple(minidx, median(areas), maxidx);
 }
 std::vector<std::string> split(const std::string& s, char delimiter)
 {
