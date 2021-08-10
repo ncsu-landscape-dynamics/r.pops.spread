@@ -55,7 +55,7 @@ bool tcp_client::conn(string address, int port)
     // else nothing
 
     // setup address structure
-    if(inet_addr(address.c_str()) == -1)
+    if(inet_addr(address.c_str()) == INADDR_NONE)
     {
         struct hostent *he;
         struct in_addr **addr_list;
