@@ -155,6 +155,38 @@ class TestSpread(TestCase):
         self.assertRasterFitsUnivar(raster='dead' + '_{}_12_31'.format(end), reference=values, precision=0.001)
 
 
+    def test_outputs_mortality_many_runs(self):
+        start = '2019-01-01'
+        end = '2022-12-31'
+        self.assertModule('r.pops.spread', host='host', total_plants='max_host', infected='infection',
+                        average='average', average_series='average', single_series='single',
+                        stddev='stddev', stddev_series='stddev',
+                        probability='probability', probability_series='probability',
+                        start_date=start, end_date=end, seasonality=[1, 12], step_unit='week',
+                        step_num_units=1,
+                        reproductive_rate=1, natural_dispersal_kernel='exponential', natural_distance=50,
+                        natural_direction='W', natural_direction_strength=3,
+                        anthropogenic_dispersal_kernel='cauchy', anthropogenic_distance=1000,
+                        anthropogenic_direction_strength=0, percent_natural_dispersal=0.95,
+                        random_seed=101, runs=100, nprocs=8,
+                        flags='m', mortality_rate=0.5, mortality_time_lag=1, mortality_series='dead',
+                        mortality_frequency="yearly",
+                        overwrite=True
+                        )
+        end_for_name = end[:4]
+        self.assertRasterExists('dead' + '_{}_12_31'.format(end_for_name))
+
+        # The reference values were obtained from a run with 100 stochastic runs with seed 1
+        # and 3 non-zero digits were kept. The precision was chosen so that 100 additional runs
+        # with 1 stochastic run and different seeds than the original set would each still pass the test.
+        values = dict(null_cells=0, mean=0.653)
+        self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.14)
+        values = dict(null_cells=0, mean=25.9)
+        self.assertRasterFitsUnivar(raster='probability', reference=values, precision=4.0)
+        values = dict(null_cells=0, mean=0.681)
+        self.assertRasterFitsUnivar(raster='dead' + '_{}_12_31'.format(end_for_name), reference=values, precision=0.12)
+
+
     def test_outputs_mortality_treatment(self):
         start = '2019-01-01'
         end = '2022-12-31'
