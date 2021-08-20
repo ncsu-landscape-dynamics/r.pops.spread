@@ -169,7 +169,7 @@ class TestSpread(TestCase):
                         anthropogenic_dispersal_kernel='cauchy', anthropogenic_distance=1000,
                         anthropogenic_direction_strength=0, percent_natural_dispersal=0.95,
                         random_seed=101, runs=100, nprocs=8,
-                        flags='m', mortality_rate=0.5, mortality_time_lag=1, mortality_series='dead',
+                        flags='m', mortality_rate=0.5, mortality_time_lag=0, mortality_series='dead',
                         mortality_frequency="yearly",
                         overwrite=True
                         )
@@ -201,7 +201,7 @@ class TestSpread(TestCase):
                           anthropogenic_dispersal_kernel='cauchy', anthropogenic_distance=1000,
                           anthropogenic_direction_strength=0, percent_natural_dispersal=0.95,
                           random_seed=1, runs=5, nprocs=5, mortality_frequency="yearly",
-                          flags='m', mortality_rate=0.5, mortality_time_lag=1, mortality_series='dead',
+                          flags='m', mortality_rate=0.5, mortality_time_lag=0, mortality_series='dead',
                           treatments='treatment', treatment_date='2020-12-01', treatment_length=0,
                           treatment_application='ratio_to_all')
 
