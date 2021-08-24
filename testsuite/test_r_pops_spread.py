@@ -151,7 +151,7 @@ class TestSpread(TestCase):
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
         values = dict(null_cells=0, min=0, max=100, mean=24.961)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=14, mean=0.703)
+        values = dict(null_cells=0, min=0, max=15, mean=0.703)
         self.assertRasterFitsUnivar(raster='dead' + '_{}_12_31'.format(end), reference=values, precision=0.001)
 
 
