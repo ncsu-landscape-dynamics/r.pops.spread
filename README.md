@@ -108,16 +108,19 @@ to changes in the submodule repository.
 ### Updating the code of the submodule
 
 ```
-cd pops
-git checkout master
+cd pops-core
+git switch -c new-feature-branch
 git add file.hpp
 git commit -m "this and that change"
 git push
 ```
 
+Then create a PR. After the PR is merged, then update the submodule and commit:
+
 ```
 cd ..
-git commit pops -m "update to latest pops commit"
+git submodule update --remote
+git commit pops-core -m "update to latest pops commit"
 git push
 ```
 
