@@ -147,11 +147,11 @@ class TestSpread(TestCase):
         end = end[:4]
         self.assertRasterExists('dead' + '_{}_12_31'.format(end))
 
-        values = dict(null_cells=0, min=0, max=6, mean=0.629)
+        values = dict(null_cells=0, min=0, max=6, mean=0.606)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=25.059)
+        values = dict(null_cells=0, min=0, max=100, mean=24.961)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=14, mean=0.681)
+        values = dict(null_cells=0, min=0, max=14, mean=0.703)
         self.assertRasterFitsUnivar(raster='dead' + '_{}_12_31'.format(end), reference=values, precision=0.001)
 
 
@@ -168,7 +168,7 @@ class TestSpread(TestCase):
                         natural_direction='W', natural_direction_strength=3,
                         anthropogenic_dispersal_kernel='cauchy', anthropogenic_distance=1000,
                         anthropogenic_direction_strength=0, percent_natural_dispersal=0.95,
-                        random_seed=101, runs=100, nprocs=8,
+                        random_seed=1, runs=50, nprocs=5,
                         flags='m', mortality_rate=0.5, mortality_time_lag=0, mortality_series='dead',
                         mortality_frequency="yearly",
                         overwrite=True
@@ -205,9 +205,9 @@ class TestSpread(TestCase):
                           treatments='treatment', treatment_date='2020-12-01', treatment_length=0,
                           treatment_application='ratio_to_all')
 
-        values = dict(null_cells=0, min=0, max=6, mean=0.509)
+        values = dict(null_cells=0, min=0, max=6, mean=0.493)
         self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=21.119)
+        values = dict(null_cells=0, min=0, max=100, mean=21.002)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
 
     def test_outputs_sei_inf(self):

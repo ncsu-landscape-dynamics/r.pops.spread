@@ -1089,6 +1089,7 @@ int main(int argc, char *argv[])
                                 quarantine,
                                 empty,
                                 movements,
+                                //Network<Img::IndexType>::null_network(),
                                 suitable_cells);
                     ++weather_step;
                 }
