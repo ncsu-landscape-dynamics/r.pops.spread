@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         include:
-        - version: master
+        - version: main
           command: grass
         - version: releasebranch_7_8
           command: grass78
