@@ -625,8 +625,8 @@ int main(int argc, char *argv[])
     opt.first_year_to_die->label =
         _("Time lag from infection until mortality can occur in years");
     opt.first_year_to_die->description =
-        _("How many years it takes for an infected host to die"
-          " (value 1 for hosts dying at the end of the first year)");
+        _("How many years it takes for an infected host to start dying"
+          " (value 0 for hosts dying at the end of the first year)");
     opt.first_year_to_die->guisection = _("Mortality");
 
     opt.dead_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
