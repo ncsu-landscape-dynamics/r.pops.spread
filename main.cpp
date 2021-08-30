@@ -212,6 +212,7 @@ struct PoPSOptions
     struct Option *anthro_direction, *anthro_kappa;
     struct Option *percent_natural_dispersal;
     struct Option *infected_to_dead_rate, *first_year_to_die;
+    struct Option *mortality_frequency, *mortality_frequency_n;
     struct Option *dead_series;
     struct Option *seed, *runs, *threads;
     struct Option *single_series;
@@ -487,7 +488,7 @@ int main(int argc, char *argv[])
     opt.step_num_units->answer = const_cast<char*>("1");
     opt.step_num_units->label = _("Number of days/weeks/months in each step");
     opt.step_num_units->description = _("Step is given by number and unit, e.g. step_num_units=5 and step_unit=day means step is 5 days");
-    opt.step_num_units->options = "1-100";
+    opt.step_num_units->options = "1-";
     opt.step_num_units->required = YES;
     opt.step_num_units->guisection = _("Time");
 
@@ -504,7 +505,7 @@ int main(int argc, char *argv[])
     opt.output_frequency_n->type = TYPE_INTEGER;
     opt.output_frequency_n->key = "output_frequency_n";
     opt.output_frequency_n->description = "Output frequency every N steps";
-    opt.output_frequency_n->options = "1-100";
+    opt.output_frequency_n->options = "1-";
     opt.output_frequency_n->answer = const_cast<char*>("1");
     opt.output_frequency_n->required = NO;
     opt.output_frequency_n->guisection = _("Time");
@@ -624,8 +625,8 @@ int main(int argc, char *argv[])
     opt.first_year_to_die->label =
         _("Time lag from infection until mortality can occur in years");
     opt.first_year_to_die->description =
-        _("How many years it takes for an infected host to die"
-          " (value 1 for hosts dying at the end of the first year)");
+        _("How many years it takes for an infected host to start dying"
+          " (value 0 for hosts dying at the end of the first year)");
     opt.first_year_to_die->guisection = _("Mortality");
 
     opt.dead_series = G_define_standard_option(G_OPT_R_BASENAME_OUTPUT);
@@ -637,6 +638,24 @@ int main(int argc, char *argv[])
           " (requires mortality to be activated)");
     opt.dead_series->required = NO;
     opt.dead_series->guisection = _("Mortality");
+
+    opt.mortality_frequency = G_define_option();
+    opt.mortality_frequency->type = TYPE_STRING;
+    opt.mortality_frequency->key = "mortality_frequency";
+    opt.mortality_frequency->description =
+        _("Mortality frequency");
+    opt.mortality_frequency->options = "yearly,monthly,weekly,daily,every_n_steps";
+    opt.mortality_frequency->required = NO;
+    opt.mortality_frequency->guisection = _("Mortality");
+
+    opt.mortality_frequency_n = G_define_option();
+    opt.mortality_frequency_n->type = TYPE_INTEGER;
+    opt.mortality_frequency_n->key = "mortality_frequency_n";
+    opt.mortality_frequency_n->description =
+        _("Mortality frequency every N steps");
+    opt.mortality_frequency_n->options = "1-";
+    opt.mortality_frequency_n->required = NO;
+    opt.mortality_frequency_n->guisection = _("Mortality");
 
     flg.mortality = G_define_flag();
     flg.mortality->key = 'm';
@@ -700,13 +719,13 @@ int main(int argc, char *argv[])
     G_option_exclusive(opt.temperature_coefficient_file, opt.weather_coefficient_file, NULL);
 
     // mortality
-    // flag and rate required always
-    // for simplicity of the code outputs allowed only with output
-    // for single run (avgs from runs likely not needed)
-    G_option_requires(flg.mortality, opt.infected_to_dead_rate, NULL);
-    G_option_requires(opt.first_year_to_die, flg.mortality, NULL);
-    G_option_requires_all(opt.dead_series, flg.mortality,
-                          opt.single_series, NULL);
+    // With flag, the lag, rate, and frequency are always required.
+    // For simplicity of the code, mortality outputs are allowed only with the
+    // corresponding main outputs for single run.
+    G_option_collective(flg.mortality, opt.first_year_to_die,
+                        opt.infected_to_dead_rate, opt.mortality_frequency, NULL);
+    G_option_requires_all(opt.dead_series, flg.mortality, opt.single_series, NULL);
+    G_option_requires_all(opt.mortality_frequency_n, opt.mortality_frequency, NULL);
     // TODO: requires_all does not understand the default?
     // treatment_app needs to be removed from here and check separately
     G_option_requires_all(opt.treatments,
@@ -782,7 +801,7 @@ int main(int argc, char *argv[])
     if (kernel_type_from_string(config.anthro_kernel_type) != DispersalKernelType::None)
         config.use_anthropogenic_kernel = true;
 
-    config.anthro_scale = 0;
+    config.anthro_scale = 1;
     if (config.use_anthropogenic_kernel && !opt.anthro_scale->answer)
         fatal_option_required_for_value(opt.anthro_scale, opt.anthro_kernel);
     else if (opt.anthro_scale->answer)
@@ -830,9 +849,13 @@ int main(int argc, char *argv[])
         config.latency_period_steps = std::stoi(opt.latency_period->answer);
 
     // mortality
-    config.use_mortality = false;
-    config.first_mortality_year = 1;  // starts at 1 (same as the opt)
-    config.mortality_rate = 0.0;
+    if (flg.mortality->answer) {
+        config.use_mortality = true;
+        config.mortality_time_lag = std::stoi(opt.first_year_to_die->answer);  // starts at 1 (same as the opt)
+        config.mortality_rate = std::stod(opt.infected_to_dead_rate->answer);
+        config.mortality_frequency = opt.mortality_frequency->answer;
+        config.mortality_frequency_n = opt.mortality_frequency_n->answer ? std::stoi(opt.mortality_frequency_n->answer) : 0;
+    }
 
     if (opt.lethal_temperature->answer)
         config.lethal_temperature = std::stod(opt.lethal_temperature->answer);
@@ -851,22 +874,18 @@ int main(int argc, char *argv[])
 
     config.create_schedules();
 
-    int num_mortality_years = config.num_mortality_years();
+    int num_mortality_steps = config.num_mortality_steps();
     if (flg.mortality->answer) {
-        config.use_mortality = true;
-        if (opt.first_year_to_die->answer) {
-            config.first_mortality_year = std::stoi(opt.first_year_to_die->answer);
-            if (config.first_mortality_year > num_mortality_years) {
-                G_fatal_error(
-                    _("%s is too large (%d). It must be smaller or "
-                      " equal than number of simulation years (%d)."),
-                    opt.first_year_to_die->key,
-                    config.first_mortality_year, num_mortality_years);
-            }
+        if (config.mortality_time_lag > num_mortality_steps) {
+            G_fatal_error(
+                        _("%s is too large (%d). It must be smaller or "
+                          " equal than number of simulation years (%d)."),
+                        opt.first_year_to_die->key,
+                        config.mortality_time_lag, num_mortality_steps);
         }
-        if (opt.infected_to_dead_rate->answer)
-            config.mortality_rate = std::stod(opt.infected_to_dead_rate->answer);
     }
+    else
+        num_mortality_steps = 1;
 
     unsigned seed_value;
     if (opt.seed->answer) {
@@ -958,7 +977,9 @@ int main(int argc, char *argv[])
     std::vector<Img> dispersers;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
+    std::vector<Img> total_species_rasts(num_runs, species_rast);
     std::vector<Img> resistant_rasts(num_runs, Img(S_species_rast, 0));
+    std::vector<Img> total_exposed_rasts(num_runs, Img(S_species_rast, 0));
 
     // We always create at least one exposed for simplicity, but we
     // could also just leave it empty.
@@ -973,7 +994,7 @@ int main(int argc, char *argv[])
     // infected cohort for each year (index is cohort age)
     // age starts with 0 (in year 1), 0 is oldest
     std::vector<std::vector<Img> > mortality_tracker_vector(
-        num_runs, std::vector<Img>(config.num_mortality_years(), Img(S_species_rast, 0)));
+        num_runs, std::vector<Img>(num_mortality_steps, Img(S_species_rast, 0)));
 
     // we are using only the first dead img for visualization, but for
     // parallelization we need all allocated anyway
@@ -1001,8 +1022,8 @@ int main(int argc, char *argv[])
             window.ns_res,
             config.rate_num_steps(),
             suitable_cells));
-    // Unused quarantine escape tracking
-    Img empty;
+    // Unused quarantine escape tracking still requires full raster.
+    Img empty(S_species_rast, 0);
     QuarantineEscape<Img> quarantine(empty,
                                      config.ew_res,
                                      config.ns_res,
@@ -1053,7 +1074,9 @@ int main(int argc, char *argv[])
                                 inf_species_rasts[run],
                                 sus_species_rasts[run],
                                 lvtree_rast,
+                                total_species_rasts[run],
                                 dispersers[run],
+                                total_exposed_rasts[run],
                                 exposed_vectors[run],
                                 mortality_tracker_vector[run],
                                 dead_in_current_year[run],
