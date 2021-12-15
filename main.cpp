@@ -975,6 +975,7 @@ int main(int argc, char *argv[])
     // build the Sporulation object
     std::vector<Model<Img, DImg, int>> models;
     std::vector<Img> dispersers;
+    std::vector<Img> established_dispersers;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
     std::vector<Img> inf_species_rasts(num_runs, I_species_rast);
     std::vector<Img> total_species_rasts(num_runs, species_rast);
@@ -1005,11 +1006,13 @@ int main(int argc, char *argv[])
 
     models.reserve(num_runs);
     dispersers.reserve(num_runs);
+    established_dispersers.reserve(num_runs);
     for (unsigned i = 0; i < num_runs; ++i) {
         Config config_copy = config;
         config_copy.random_seed = seed_value++;
         models.emplace_back(config_copy);
         dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
+        established_dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
     }
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
@@ -1076,6 +1079,7 @@ int main(int argc, char *argv[])
                                 lvtree_rast,
                                 total_species_rasts[run],
                                 dispersers[run],
+                                established_dispersers[run],
                                 total_exposed_rasts[run],
                                 exposed_vectors[run],
                                 mortality_tracker_vector[run],
@@ -1089,6 +1093,7 @@ int main(int argc, char *argv[])
                                 quarantine,
                                 empty,
                                 movements,
+                                Network<Img::IndexType>::null_network(),
                                 suitable_cells);
                     ++weather_step;
                 }
