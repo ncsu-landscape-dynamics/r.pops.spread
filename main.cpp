@@ -266,24 +266,34 @@ std::vector<std::string> split(const std::string& s, char delimiter)
     return tokens;
 }
 
+class SteeringCommand{
+public:
+    enum class Command {None, Play, Pause, StepForward, StepBack, Stop, GoTo,
+                        LoadData, ChangeName, SyncRuns};
+    SteeringCommand(const Command cmd): command(cmd) {}
+    Command command;
+    string basename;
+    int goto_checkpoint;
+    string treatment_input;
+    string treatment_date;
+    int treatment_length;
+    TreatmentApplication treatment_app;
+};
 
-enum class SteeringCommand {None, Play, Pause, StepForward, StepBack, Stop, GoTo,
-                            LoadData, ChangeName, SyncRuns};
-
- const char* print_command(const SteeringCommand &cmd)
+const char* print_command(const SteeringCommand::Command &cmd)
 {
     switch(cmd)
     {
-    case SteeringCommand::None: return "None";
-    case SteeringCommand::Play: return "Play";
-    case SteeringCommand::Pause: return "Pause";
-    case SteeringCommand::StepForward: return "StepForward";
-    case SteeringCommand::StepBack: return "StepBack";
-    case SteeringCommand::Stop: return "Stop";
-    case SteeringCommand::GoTo: return "GoTo";
-    case SteeringCommand::LoadData: return "LoadData";
-    case SteeringCommand::ChangeName: return "ChangeName";
-    case SteeringCommand::SyncRuns: return "SyncRuns";
+    case SteeringCommand::Command::None: return "None";
+    case SteeringCommand::Command::Play: return "Play";
+    case SteeringCommand::Command::Pause: return "Pause";
+    case SteeringCommand::Command::StepForward: return "StepForward";
+    case SteeringCommand::Command::StepBack: return "StepBack";
+    case SteeringCommand::Command::Stop: return "Stop";
+    case SteeringCommand::Command::GoTo: return "GoTo";
+    case SteeringCommand::Command::LoadData: return "LoadData";
+    case SteeringCommand::Command::ChangeName: return "ChangeName";
+    case SteeringCommand::Command::SyncRuns: return "SyncRuns";
     default: return "Undefined";
     }
 }
@@ -294,12 +304,6 @@ private:
     std::mutex mutex;
 
 public:
-    string basename;
-    int goto_checkpoint;
-    string treatment_input;
-    string treatment_date;
-    int treatment_length;
-    TreatmentApplication treatment_app;
     inline void store(SteeringCommand cmd);
     inline SteeringCommand get();
 };
@@ -309,6 +313,7 @@ void Steering::store(SteeringCommand cmd) {
     command_queue.push(cmd);
 }
 
+
 SteeringCommand Steering::get() {
     std::lock_guard<std::mutex> lk(mutex);
     if (!command_queue.empty()) {
@@ -317,7 +322,7 @@ SteeringCommand Steering::get() {
         return cmd;
     }
     else {
-        return SteeringCommand::None;
+        return SteeringCommand(SteeringCommand::Command::None);
     }
 }
 void steering_client(tcp_client &c, string ip_address, int port, Steering &steering)
@@ -334,7 +339,7 @@ void steering_client(tcp_client &c, string ip_address, int port, Steering &steer
         if (rec_error <= 0){
             cerr << "receive failed\n";
             c.close_socket();
-            steering.store(SteeringCommand::Stop);
+            steering.store(SteeringCommand(SteeringCommand::Command::Stop));
             break;
         }
         else {
@@ -344,42 +349,46 @@ void steering_client(tcp_client &c, string ip_address, int port, Steering &steer
                 if (message.substr(0, 3) == "cmd") {
                     string cmd = message.substr(4, message.length() - 4);
                     if (cmd == "play") {
-                        steering.store(SteeringCommand::Play);
+                        steering.store(SteeringCommand(SteeringCommand::Command::Play));
                     }
                     else if (cmd == "pause") {
-                        steering.store(SteeringCommand::Pause);
+                        steering.store(SteeringCommand(SteeringCommand::Command::Pause));
                     }
                     else if (cmd == "stepf") {
-                        steering.store(SteeringCommand::StepForward);
+                        steering.store(SteeringCommand(SteeringCommand::Command::StepForward));
                     }
                     else if (cmd == "stepb") {
-                        steering.store(SteeringCommand::StepBack);
+                        steering.store(SteeringCommand(SteeringCommand::Command::StepBack));
                     }
                     else if (cmd == "stop") {
-                        steering.store(SteeringCommand::Stop);
+                        steering.store(SteeringCommand(SteeringCommand::Command::Stop));
                         break_flag = true;
                         break;
                     }
                 } else if (message.substr(0, 4) == "load") {
                     std::vector<std::string> received_load = split(message, ':');
-                    steering.treatment_input = received_load[1];
-                    steering.treatment_date = received_load[2];
-                    steering.treatment_length = std::stoul(received_load[3]);
-                    steering.treatment_app = treatment_app_enum_from_string(received_load[4]);
-                    cout << "received load name: " << steering.treatment_input << endl;
-                    steering.store(SteeringCommand::LoadData);
+                    SteeringCommand sc = SteeringCommand(SteeringCommand::Command::LoadData);
+                    sc.treatment_input = received_load[1];
+                    sc.treatment_date = received_load[2];
+                    sc.treatment_length = std::stoul(received_load[3]);
+                    sc.treatment_app = treatment_app_enum_from_string(received_load[4]);
+                    cout << "received load name: " << sc.treatment_input << endl;
+                    cout << "received load date: " << sc.treatment_date << endl;
+                    steering.store(sc);
                 } else if (message.substr(0, 4) == "name") {
+                    SteeringCommand sc = SteeringCommand(SteeringCommand::Command::ChangeName);
                     string name = message.substr(5, message.length() - 5);
                     cout << "received base name: " << name << endl;
-                    steering.basename = name;
-                    steering.store(SteeringCommand::ChangeName);
+                    sc.basename = name;
+                    steering.store(sc);
                 } else if (message.substr(0, 4) == "goto") {
+                    SteeringCommand sc = SteeringCommand(SteeringCommand::Command::GoTo);
                     string year = message.substr(5, message.length() - 5);
                     cout << "received goto year: " << year << endl;
-                    steering.goto_checkpoint = std::stoi(year);
-                    steering.store(SteeringCommand::GoTo);
+                    sc.goto_checkpoint = std::stoi(year);
+                    steering.store(sc);
                 } else if (message.substr(0, 4) == "sync") {
-                    steering.store(SteeringCommand::SyncRuns);
+                    steering.store(SteeringCommand(SteeringCommand::Command::SyncRuns));
                 } else
                     cout << "X" << message << "X" << rec_error << endl;
             }
@@ -1307,27 +1316,27 @@ int main(int argc, char *argv[])
     // main simulation loop (weekly or monthly steps)
     unsigned current_index = 0;
     while (true) {
-        SteeringCommand cmd = SteeringCommand::None;
+        SteeringCommand cmd = SteeringCommand(SteeringCommand::Command::None);
         {
             cmd = steering_obj.get();
         }
-        if (cmd != SteeringCommand::None){
-            G_verbose_message("Code: %s", print_command(cmd));
+        if (cmd.command != SteeringCommand::Command::None){
+            G_verbose_message("Code: %s", print_command(cmd.command));
         }
-        if (cmd == SteeringCommand::Play) { // play from
+        if (cmd.command == SteeringCommand::Command::Play) { // play from
             current_end = config.scheduler().get_num_steps() - 1;
         }
-        else if (cmd == SteeringCommand::Pause) { // pause
+        else if (cmd.command == SteeringCommand::Command::Pause) { // pause
             current_end = current_index;
         }
-        else if (cmd == SteeringCommand::StepForward) { // 1 step forward
+        else if (cmd.command == SteeringCommand::Command::StepForward) { // 1 step forward
             unsigned tmp = current_index + 1;
             while (!steering_schedule[tmp]) tmp++;
             current_end = tmp;
             if (current_end > config.scheduler().get_num_steps() - 1)
                 current_end = config.scheduler().get_num_steps() - 1;
         }
-        else if (cmd == SteeringCommand::StepBack) { // 1 step back
+        else if (cmd.command == SteeringCommand::Command::StepBack) { // 1 step back
             if (last_checkpoint - 1 >= 0) {
                 --last_checkpoint;
                 current_end = step_checkpoint[last_checkpoint];
@@ -1354,23 +1363,24 @@ int main(int argc, char *argv[])
             // the simulation for this year
             //            continue;
         }
-        else if (cmd == SteeringCommand::Stop) { // complete stop
+        else if (cmd.command == SteeringCommand::Command::Stop) { // complete stop
             break;
         }
-        else if (cmd == SteeringCommand::LoadData) { // load treatments
-            G_verbose_message("Loading treatments: %s", steering_obj.treatment_input.c_str());
-            Date tr_date = treatment_date_from_string(steering_obj.treatment_date);
+        else if (cmd.command == SteeringCommand::Command::LoadData) { // load treatments
+            G_verbose_message("Loading treatments: %s", cmd.treatment_input.c_str());
+            Date tr_date = treatment_date_from_string(cmd.treatment_date);
             treatments.clear_after_step(config.scheduler().schedule_action_date(tr_date));
-            DImg tr = raster_from_grass_float(steering_obj.treatment_input);
+            DImg tr = raster_from_grass_float(cmd.treatment_input);
+            std::cout << "SteeringCommand::LoadData " << tr_date << std::endl;
             treatments.add_treatment(tr, tr_date,
-                                     steering_obj.treatment_length, steering_obj.treatment_app);
+                                     cmd.treatment_length, cmd.treatment_app);
         }
-        else if (cmd == SteeringCommand::ChangeName) { // base name changed
-            G_verbose_message("Base name: %s", steering_obj.basename.c_str());
+        else if (cmd.command == SteeringCommand::Command::ChangeName) { // base name changed
+            G_verbose_message("Base name: %s", cmd.basename.c_str());
         }
-        else if (cmd == SteeringCommand::GoTo) { // go to specific checkpoint
-            G_verbose_message("Go to checkpoint: %d", steering_obj.goto_checkpoint);
-            int goto_checkpoint = steering_obj.goto_checkpoint;
+        else if (cmd.command == SteeringCommand::Command::GoTo) { // go to specific checkpoint
+            G_verbose_message("Go to checkpoint: %d", cmd.goto_checkpoint);
+            int goto_checkpoint = cmd.goto_checkpoint;
             if (goto_checkpoint < 0 || goto_checkpoint >= num_checkpoints) {/* do nothing */}
             else if (goto_checkpoint <= last_checkpoint) {
                 // go back
@@ -1398,7 +1408,7 @@ int main(int argc, char *argv[])
                 // go forward
             }
         }
-        else if (cmd == SteeringCommand::SyncRuns) {
+        else if (cmd.command == SteeringCommand::Command::SyncRuns) {
             // compute sums of infected for each run
             /* This doesn't work well, because the exported ones are always first
                since we can't know the average run in advance. When going back the syncing
