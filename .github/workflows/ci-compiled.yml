@@ -23,6 +23,8 @@ jobs:
         include:
         - version: main
           command: grass
+        - version: releasebranch_8_0
+          command: grass
         - version: releasebranch_7_8
           command: grass78
       fail-fast: false
