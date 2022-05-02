@@ -136,6 +136,11 @@ unsigned int get_num_answers(struct Option *opt)
     return i;
 }
 
+/** Read list of names from a file
+ *
+ * Assumes one name per line. The current implementation basically splits the file by
+ * lines and returns the resulting list of strings.
+ */
 std::vector<string> read_names(const char* filename)
 {
     std::vector<string> names;
@@ -147,6 +152,11 @@ std::vector<string> read_names(const char* filename)
     return names;
 }
 
+/** From a file option representing a raster series, create series of rasters.
+ *
+ * Calls fatal error if the input is not correct. It will read all rasters if there is
+ * more than needed.
+ */
 std::vector<DImg> file_to_series(struct Option* option, int expected) {
     file_exists_or_fatal_error(option);
     auto names{read_names(option->answer)};
