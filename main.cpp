@@ -443,7 +443,7 @@ int main(int argc, char *argv[])
     opt.survival_rate_month->type = TYPE_INTEGER;
     opt.survival_rate_month->key = "survival_month";
     opt.survival_rate_month->label =
-        _("Month when the pest or patogen dies due to low temperature");
+        _("Month when the pest or pathogen dies due to low temperature");
     opt.survival_rate_month->description =
         _("The survival rate is applied at selected month and day");
     opt.survival_rate_month->required = NO;
@@ -453,7 +453,7 @@ int main(int argc, char *argv[])
     opt.survival_rate_day->type = TYPE_INTEGER;
     opt.survival_rate_day->key = "survival_day";
     opt.survival_rate_day->label =
-        _("Day of selected month when the pest or patogen dies with given rate");
+        _("Day of selected month when the pest or pathogen dies with given rate");
     opt.survival_rate_day->description =
         _("The survival rate is applied at selected month and day");
     opt.survival_rate_day->required = NO;
@@ -462,7 +462,7 @@ int main(int argc, char *argv[])
     opt.survival_rate_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.survival_rate_file->key = "survival_rate";
     opt.survival_rate_file->label =
-        _("Input file with one suvival rate raster map name per line");
+        _("Input file with one survival rate raster map name per line");
     opt.survival_rate_file->description =
         _("Suvival rate is percentage (0-1)");
     opt.survival_rate_file->required = NO;
@@ -919,9 +919,9 @@ int main(int argc, char *argv[])
         config.mortality_frequency_n = opt.mortality_frequency_n->answer ? std::stoi(opt.mortality_frequency_n->answer) : 0;
     }
 
-    if (opt.lethal_temperature_months->answer)
+    if (opt.survival_rate_month->answer)
         config.survival_rate_month = std::stoi(opt.survival_rate_month->answer);
-    if (opt.lethal_temperature->answer)
+    if (opt.survival_rate_day->answer)
         config.survival_rate_day = std::stod(opt.survival_rate_day->answer);
     if (opt.survival_rate_file->answer)
         config.use_survival_rate = true;
