@@ -443,9 +443,9 @@ int main(int argc, char *argv[])
     opt.survival_rate_month->type = TYPE_INTEGER;
     opt.survival_rate_month->key = "survival_month";
     opt.survival_rate_month->label =
-        _("Month when the pest or pathogen dies due to low temperature");
+        _("Month when the pest or pathogen dies with given rate");
     opt.survival_rate_month->description =
-        _("The survival rate is applied at selected month and day");
+        _("The survival rate is applied at the selected month and day");
     opt.survival_rate_month->required = NO;
     opt.survival_rate_month->guisection = _("Weather");
 
@@ -455,7 +455,7 @@ int main(int argc, char *argv[])
     opt.survival_rate_day->label =
         _("Day of selected month when the pest or pathogen dies with given rate");
     opt.survival_rate_day->description =
-        _("The survival rate is applied at selected month and day");
+        _("The survival rate is applied at the selected month and day");
     opt.survival_rate_day->required = NO;
     opt.survival_rate_day->guisection = _("Weather");
 
@@ -463,8 +463,7 @@ int main(int argc, char *argv[])
     opt.survival_rate_file->key = "survival_rate";
     opt.survival_rate_file->label =
         _("Input file with one survival rate raster map name per line");
-    opt.survival_rate_file->description =
-        _("Suvival rate is percentage (0-1)");
+    opt.survival_rate_file->description = _("Suvival rate is percentage (0-1)");
     opt.survival_rate_file->required = NO;
     opt.survival_rate_file->guisection = _("Weather");
 
@@ -486,7 +485,7 @@ int main(int argc, char *argv[])
     opt.lethal_temperature_months->type = TYPE_INTEGER;
     opt.lethal_temperature_months->key = "lethal_month";
     opt.lethal_temperature_months->label =
-        _("Month when the pest or patogen dies due to low temperature");
+        _("Month when the pest or pathogen dies due to low temperature");
     opt.lethal_temperature_months->description =
         _("The temperature unit must be the same as for the"
           "temperature raster map (typically degrees of Celsius)");
@@ -1005,7 +1004,8 @@ int main(int argc, char *argv[])
 
     std::vector<DImg> survival_rates;
     if (opt.survival_rate_file->answer) {
-        survival_rates = file_to_series(opt.survival_rate_file, config.num_survival_rate());
+        survival_rates =
+            file_to_series(opt.survival_rate_file, config.num_survival_rate());
     }
 
     std::vector<DImg> actual_temperatures;
