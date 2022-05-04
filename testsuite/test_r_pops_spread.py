@@ -156,10 +156,10 @@ class TestSpread(TestCase):
         self.assertRasterExists("stddev")
         self.assertRasterExists("probability")
         end = end[:4]
-        self.assertRasterExists("average" + "_{}_12_31".format(end))
-        self.assertRasterExists("probability" + "_{}_12_31".format(end))
-        self.assertRasterExists("single" + "_{}_12_31".format(end))
-        self.assertRasterExists("stddev" + "_{}_12_31".format(end))
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
 
         ref_float = dict(datatype="DCELL")
         ref_int = dict(datatype="CELL")
@@ -167,16 +167,16 @@ class TestSpread(TestCase):
         self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
         self.assertRasterFitsInfo(raster="probability", reference=ref_float)
         self.assertRasterFitsInfo(
-            raster="single" + "_{}_12_31".format(end), reference=ref_int
+            raster=f"single_{end}_12_31", reference=ref_int
         )
         self.assertRasterFitsInfo(
-            raster="average" + "_{}_12_31".format(end), reference=ref_float
+            raster=f"average_{end}_12_31", reference=ref_float
         )
         self.assertRasterFitsInfo(
-            raster="probability" + "_{}_12_31".format(end), reference=ref_float
+            raster=f"probability_{end}_12_31", reference=ref_float
         )
         self.assertRasterFitsInfo(
-            raster="stddev" + "_{}_12_31".format(end), reference=ref_float
+            raster=f"stddev_{end}_12_31", reference=ref_float
         )
 
         values = dict(null_cells=0, min=0, max=18, mean=1.777)
@@ -226,10 +226,10 @@ class TestSpread(TestCase):
         self.assertRasterExists("stddev")
         self.assertRasterExists("probability")
         end = end[:4]
-        self.assertRasterExists("average" + "_{}_12_31".format(end))
-        self.assertRasterExists("probability" + "_{}_12_31".format(end))
-        self.assertRasterExists("single" + "_{}_12_31".format(end))
-        self.assertRasterExists("stddev" + "_{}_12_31".format(end))
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
 
         values = dict(null_cells=0, min=0, max=18, mean=1.777)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
@@ -280,7 +280,7 @@ class TestSpread(TestCase):
             mortality_frequency="yearly",
         )
         end = end[:4]
-        self.assertRasterExists("dead" + "_{}_12_31".format(end))
+        self.assertRasterExists(f"dead_{end}_12_31")
 
         values = dict(null_cells=0, min=0, max=6, mean=0.606)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
@@ -290,7 +290,7 @@ class TestSpread(TestCase):
         )
         values = dict(null_cells=0, min=0, max=15, mean=0.703)
         self.assertRasterFitsUnivar(
-            raster="dead" + "_{}_12_31".format(end), reference=values, precision=0.001
+            raster=f"dead_{end}_12_31", reference=values, precision=0.001
         )
 
     def test_outputs_mortality_many_runs(self):
@@ -334,7 +334,7 @@ class TestSpread(TestCase):
             overwrite=True,
         )
         end_for_name = end[:4]
-        self.assertRasterExists("dead" + "_{}_12_31".format(end_for_name))
+        self.assertRasterExists(f"dead_{end_for_name}_12_31")
 
         # The reference values were obtained from a run with 100 stochastic runs
         # with seed 1 and 3 non-zero digits were kept. The precision was chosen
@@ -348,7 +348,7 @@ class TestSpread(TestCase):
         )
         values = dict(null_cells=0, mean=0.681)
         self.assertRasterFitsUnivar(
-            raster="dead" + "_{}_12_31".format(end_for_name),
+            raster=f"dead_{end_for_name}_12_31",
             reference=values,
             precision=0.12,
         )
@@ -494,10 +494,10 @@ class TestSpread(TestCase):
         self.assertRasterExists("stddev")
         self.assertRasterExists("probability")
         end = end[:4]
-        self.assertRasterExists("average" + "_{}_12_31".format(end))
-        self.assertRasterExists("probability" + "_{}_12_31".format(end))
-        self.assertRasterExists("single" + "_{}_12_31".format(end))
-        self.assertRasterExists("stddev" + "_{}_12_31".format(end))
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
 
         ref_float = dict(datatype="DCELL")
         ref_int = dict(datatype="CELL")
@@ -505,16 +505,16 @@ class TestSpread(TestCase):
         self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
         self.assertRasterFitsInfo(raster="probability", reference=ref_float)
         self.assertRasterFitsInfo(
-            raster="single" + "_{}_12_31".format(end), reference=ref_int
+            raster=f"single_{end}_12_31", reference=ref_int
         )
         self.assertRasterFitsInfo(
-            raster="average" + "_{}_12_31".format(end), reference=ref_float
+            raster=f"average_{end}_12_31", reference=ref_float
         )
         self.assertRasterFitsInfo(
-            raster="probability" + "_{}_12_31".format(end), reference=ref_float
+            raster=f"probability_{end}_12_31", reference=ref_float
         )
         self.assertRasterFitsInfo(
-            raster="stddev" + "_{}_12_31".format(end), reference=ref_float
+            raster=f"stddev_{end}_12_31", reference=ref_float
         )
 
         values = dict(null_cells=0, min=0, max=18, mean=1.777)
@@ -560,10 +560,10 @@ class TestSpread(TestCase):
         self.assertRasterExists("stddev")
         self.assertRasterExists("probability")
         end = end[:4]
-        self.assertRasterExists("average" + "_{}_12_31".format(end))
-        self.assertRasterExists("probability" + "_{}_12_31".format(end))
-        self.assertRasterExists("single" + "_{}_12_31".format(end))
-        self.assertRasterExists("stddev" + "_{}_12_31".format(end))
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
 
         ref_float = dict(datatype="DCELL")
         ref_int = dict(datatype="CELL")
@@ -571,16 +571,16 @@ class TestSpread(TestCase):
         self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
         self.assertRasterFitsInfo(raster="probability", reference=ref_float)
         self.assertRasterFitsInfo(
-            raster="single" + "_{}_12_31".format(end), reference=ref_int
+            raster=f"single_{end}_12_31", reference=ref_int
         )
         self.assertRasterFitsInfo(
-            raster="average" + "_{}_12_31".format(end), reference=ref_float
+            raster=f"average_{end}_12_31", reference=ref_float
         )
         self.assertRasterFitsInfo(
-            raster="probability" + "_{}_12_31".format(end), reference=ref_float
+            raster=f"probability_{end}_12_31", reference=ref_float
         )
         self.assertRasterFitsInfo(
-            raster="stddev" + "_{}_12_31".format(end), reference=ref_float
+            raster=f"stddev_{end}_12_31", reference=ref_float
         )
 
         values = dict(null_cells=0, min=0, max=18, mean=0.431)
