@@ -6,9 +6,18 @@
 .. moduleauthor:: Vaclav Petras
 """
 
+import tempfile
+from pathlib import Path
+
 from grass.gunittest.case import TestCase
 from grass.gunittest.main import test
 from grass.gunittest.gmodules import call_module
+
+
+def items_to_file(items, filename):
+    """Save list of items to a file, one item per line"""
+    with open(filename, mode="w", encoding="utf-8") as file:
+        file.write("\n".join(items))
 
 
 class TestSpread(TestCase):
@@ -28,17 +37,31 @@ class TestSpread(TestCase):
         cls.runModule('r.mapcalc', expression='max_host = 100')
         cls.runModule('r.circle', flags='b', output='circle', coordinates=[639445, 218237], max=2000)
         cls.runModule('r.mapcalc', expression='treatment = if(isnull(circle), 0, 0.8)')
+        cls.runModule('r.mapcalc', expression='one = 1')
+        cls.runModule('r.mapcalc', expression='zero = 0')
+
+        cls.tmp_dir = tempfile.TemporaryDirectory()
+
+        years_2019_2022 = 4
+        months_in_year = 12
+        cls.steps_in_2019_2022_monthly = years_2019_2022 * months_in_year
+        # File with 100% survival rate time series
+        cls.survival_rate_100_percent = str(Path(cls.tmp_dir.name) / "survival_rate_100_percent.txt")
+        items_to_file(cls.steps_in_2019_2022_monthly * ["one"], cls.survival_rate_100_percent)
+        # File with 0% survival rate time series
+        cls.survival_rate_0_percent = str(Path(cls.tmp_dir.name) / "survival_rate_0_percent.txt")
+        items_to_file(cls.steps_in_2019_2022_monthly * ["zero"], cls.survival_rate_0_percent)
 
     @classmethod
     def tearDownClass(cls):
+        cls.tmp_dir.cleanup()
         cls.del_temp_region()
         cls.runModule('g.remove', flags='f', type='raster',
                       name=['max_host', 'infection_', 'infection', 'infection_nulls',
-                            'host', 'host_nulls', 'ndvi', 'circle', 'treatment'])
+                            'host', 'host_nulls', 'ndvi', 'circle', 'treatment', "one", "zero"])
 
     def tearDown(cls):
         """Remove maps after each test method"""
-        # TODO: eventually, removing maps should be handled through testing framework fucntions
         cls.runModule('g.remove', flags='f', type='raster',
                       pattern='average*,single*,stddev*,probability*,dead*')
                      
@@ -377,6 +400,75 @@ class TestSpread(TestCase):
         values = dict(null_cells=0, min=0, max=100, mean=44.247)
         self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
         values = dict(null_cells=0, min=0, max=0, mean=0)
+        self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
+
+    def test_survival_rate_100_percent(self):
+        """Check with 100% survival rate
+
+        The values were originally taken from the minimal parameter test.
+        """
+        start = '2019-01-01'
+        end = '2022-12-31'
+        self.assertModule(
+            'r.pops.spread', host='host', total_plants='max_host', infected='infection',
+            average='average', average_series='average', single_series='single',
+            stddev='stddev',
+            probability='probability',
+            probability_series='probability',
+            start_date=start, end_date=end,
+            natural_distance=50,
+            survival_rate=self.survival_rate_100_percent,
+            survival_month=2,
+            survival_day=15,
+            random_seed=1
+        )
+        self.assertRasterExists('average')
+        self.assertRasterExists('stddev')
+        self.assertRasterExists('probability')
+
+        ref_float = dict(datatype="DCELL")
+        self.assertRasterFitsInfo(raster="average", reference=ref_float)
+        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
+        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
+
+        values = dict(null_cells=0, min=0, max=18, mean=2.222)
+        self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=44.247)
+        self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=0, mean=0)
+        self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
+
+    def test_survival_rate_0_percent(self):
+        """Check with 0% survival rate"""
+        start = '2019-01-01'
+        end = '2022-12-31'
+        self.assertModule(
+            'r.pops.spread', host='host', total_plants='max_host', infected='infection',
+            average='average', average_series='average', single_series='single',
+            stddev='stddev',
+            probability='probability',
+            probability_series='probability',
+            start_date=start, end_date=end,
+            natural_distance=50,
+            survival_rate=self.survival_rate_0_percent,
+            survival_month=2,
+            survival_day=15,
+            random_seed=1,
+            runs=3,
+        )
+        self.assertRasterExists('average')
+        self.assertRasterExists('stddev')
+        self.assertRasterExists('probability')
+
+        ref_float = dict(datatype="DCELL")
+        self.assertRasterFitsInfo(raster="average", reference=ref_float)
+        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
+        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
+
+        values = dict(null_cells=0, min=0, max=0, mean=0)
+        self.assertRasterFitsUnivar(raster='average', reference=values, precision=0.001)
+        self.assertRasterFitsUnivar(raster='probability', reference=values, precision=0.001)
+        # Even with multiple runs, stddev should be still zero.
         self.assertRasterFitsUnivar(raster='stddev', reference=values, precision=0.001)
 
 

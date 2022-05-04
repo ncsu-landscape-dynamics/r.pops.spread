@@ -136,13 +136,38 @@ unsigned int get_num_answers(struct Option *opt)
     return i;
 }
 
-void read_names(std::vector<string>& names, const char* filename)
+/** Read list of names from a file
+ *
+ * Assumes one name per line. The current implementation basically splits the file by
+ * lines and returns the resulting list of strings.
+ */
+std::vector<string> read_names(const char* filename)
 {
+    std::vector<string> names;
     std::ifstream file(filename);
     string line;
     while (std::getline(file, line)) {
         names.push_back(line);
     }
+    return names;
+}
+
+/** From a file option representing a raster series, create series of rasters.
+ *
+ * Calls fatal error if the input is not correct. It will read all rasters if there is
+ * more than needed.
+ */
+std::vector<DImg> file_to_series(struct Option* option, int expected) {
+    file_exists_or_fatal_error(option);
+    auto names{read_names(option->answer)};
+    if (names.size() < size_t(expected))
+        G_fatal_error(_("Not enough names for %s in '%s' (%d expected)"),
+                      option->key, option->answer, expected);
+    std::vector<DImg> rasters;
+    for (const auto& name : names) {
+        rasters.push_back(raster_from_grass_float(name));
+    }
+    return rasters;
 }
 
 /*!
@@ -198,6 +223,9 @@ struct PoPSOptions
     struct Option *latency_period;
     struct Option *moisture_coefficient_file, *temperature_coefficient_file;
     struct Option *weather_coefficient_file;
+    struct Option *survival_rate_month;
+    struct Option *survival_rate_day;
+    struct Option *survival_rate_file;
     struct Option *lethal_temperature, *lethal_temperature_months;
     struct Option *temperature_file;
     struct Option *start_date, *end_date, *seasonality;
@@ -409,6 +437,38 @@ int main(int argc, char *argv[])
     opt.weather_coefficient_file->required = NO;
     opt.weather_coefficient_file->guisection = _("Weather");
 
+    // Survival rate
+
+    opt.survival_rate_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.survival_rate_file->key = "survival_rate";
+    opt.survival_rate_file->label =
+        _("Input file with one survival rate raster map name per line");
+    opt.survival_rate_file->description = _("Suvival rate is percentage (0-1)");
+    opt.survival_rate_file->required = NO;
+    opt.survival_rate_file->guisection = _("Weather");
+
+    opt.survival_rate_month = G_define_option();
+    opt.survival_rate_month->type = TYPE_INTEGER;
+    opt.survival_rate_month->key = "survival_month";
+    opt.survival_rate_month->label =
+        _("Month when the pest or pathogen dies with given rate");
+    opt.survival_rate_month->description =
+        _("The survival rate is applied at the selected month and day");
+    opt.survival_rate_month->required = NO;
+    opt.survival_rate_month->guisection = _("Weather");
+
+    opt.survival_rate_day = G_define_option();
+    opt.survival_rate_day->type = TYPE_INTEGER;
+    opt.survival_rate_day->key = "survival_day";
+    opt.survival_rate_day->label =
+        _("Day of selected month when the pest or pathogen dies with given rate");
+    opt.survival_rate_day->description =
+        _("The survival rate is applied at the selected month and day");
+    opt.survival_rate_day->required = NO;
+    opt.survival_rate_day->guisection = _("Weather");
+
+    // Temperature and lethal temperature
+
     opt.lethal_temperature = G_define_option();
     opt.lethal_temperature->type = TYPE_DOUBLE;
     opt.lethal_temperature->key = "lethal_temperature";
@@ -425,7 +485,7 @@ int main(int argc, char *argv[])
     opt.lethal_temperature_months->type = TYPE_INTEGER;
     opt.lethal_temperature_months->key = "lethal_month";
     opt.lethal_temperature_months->label =
-        _("Month when the pest or patogen dies due to low temperature");
+        _("Month when the pest or pathogen dies due to low temperature");
     opt.lethal_temperature_months->description =
         _("The temperature unit must be the same as for the"
           "temperature raster map (typically degrees of Celsius)");
@@ -735,6 +795,7 @@ int main(int argc, char *argv[])
                           NULL);
     // lethal temperature options
     G_option_collective(opt.lethal_temperature, opt.lethal_temperature_months, opt.temperature_file, NULL);
+    G_option_collective(opt.survival_rate_file, opt.survival_rate_month, opt.survival_rate_day, NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -857,6 +918,13 @@ int main(int argc, char *argv[])
         config.mortality_frequency_n = opt.mortality_frequency_n->answer ? std::stoi(opt.mortality_frequency_n->answer) : 0;
     }
 
+    if (opt.survival_rate_month->answer)
+        config.survival_rate_month = std::stoi(opt.survival_rate_month->answer);
+    if (opt.survival_rate_day->answer)
+        config.survival_rate_day = std::stod(opt.survival_rate_day->answer);
+    if (opt.survival_rate_file->answer)
+        config.use_survival_rate = true;
+
     if (opt.lethal_temperature->answer)
         config.lethal_temperature = std::stod(opt.lethal_temperature->answer);
     if (opt.lethal_temperature_months->answer)
@@ -890,15 +958,16 @@ int main(int argc, char *argv[])
     unsigned seed_value;
     if (opt.seed->answer) {
         seed_value = std::stoul(opt.seed->answer);
-        G_verbose_message(_("Read random seed from %s option: %ud"),
-                          opt.seed->key, seed_value);
-    } else {
+        G_verbose_message(
+            _("Read random seed from %s option: %u"), opt.seed->key, seed_value);
+    }
+    else {
         // flag or option is required, so no check needed
         // getting random seed using GRASS library
         // std::random_device is deterministic in MinGW (#338)
         seed_value = G_srand48_auto();
-        G_verbose_message(_("Generated random seed (-%c): %ud"),
-                          flg.generate_seed->key, seed_value);
+        G_verbose_message(
+            _("Generated random seed (-%c): %u"), flg.generate_seed->key, seed_value);
     }
 
     // read the suspectible UMCA raster image
@@ -922,30 +991,27 @@ int main(int argc, char *argv[])
     bool weather = false;
     bool moisture_temperature = false;
     if (opt.moisture_coefficient_file->answer && opt.temperature_coefficient_file->answer) {
-        read_names(moisture_names, opt.moisture_coefficient_file->answer);
-        read_names(temperature_names, opt.temperature_coefficient_file->answer);
+        moisture_names = read_names(opt.moisture_coefficient_file->answer);
+        temperature_names = read_names(opt.temperature_coefficient_file->answer);
         moisture_temperature = true;
     }
     if (opt.weather_coefficient_file->answer) {
-        read_names(weather_names, opt.weather_coefficient_file->answer);
+        weather_names = read_names(opt.weather_coefficient_file->answer);
         weather = true;
     }
     // Model gets pre-computed weather coefficient, so it does not
     // distinguish between these two.
     config.weather = weather || moisture_temperature;
 
-    std::vector<string> actual_temperature_names;
-    std::vector<DImg> actual_temperatures;
+    std::vector<DImg> survival_rates;
+    if (opt.survival_rate_file->answer) {
+        survival_rates =
+            file_to_series(opt.survival_rate_file, config.num_survival_rate());
+    }
 
+    std::vector<DImg> actual_temperatures;
     if (opt.temperature_file->answer) {
-        unsigned count_lethal = config.num_lethal();
-        file_exists_or_fatal_error(opt.temperature_file);
-        read_names(actual_temperature_names, opt.temperature_file->answer);
-        for (string name : actual_temperature_names) {
-            actual_temperatures.push_back(raster_from_grass_float(name));
-        }
-        if (actual_temperatures.size() < count_lethal)
-            G_fatal_error(_("Not enough temperatures"));
+        actual_temperatures = file_to_series(opt.temperature_file, config.num_lethal());
     }
 
     std::vector<DImg> weather_coefficients;
@@ -1038,6 +1104,8 @@ int main(int argc, char *argv[])
     std::vector<unsigned> unresolved_steps;
     unresolved_steps.reserve(config.scheduler().get_num_steps());
 
+    G_verbose_message(_("Number of steps: %u"), config.scheduler().get_num_steps());
+
     // main simulation loop
     unsigned current_index = 0;
     for (; current_index < config.scheduler().get_num_steps(); ++current_index) {
@@ -1085,6 +1153,7 @@ int main(int argc, char *argv[])
                                 mortality_tracker_vector[run],
                                 dead_in_current_year[run],
                                 actual_temperatures,
+                                survival_rates,
                                 weather_coefficients[weather_step],
                                 treatments,
                                 resistant_rasts[run],
