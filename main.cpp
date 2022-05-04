@@ -439,6 +439,14 @@ int main(int argc, char *argv[])
 
     // Survival rate
 
+    opt.survival_rate_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.survival_rate_file->key = "survival_rate";
+    opt.survival_rate_file->label =
+        _("Input file with one survival rate raster map name per line");
+    opt.survival_rate_file->description = _("Suvival rate is percentage (0-1)");
+    opt.survival_rate_file->required = NO;
+    opt.survival_rate_file->guisection = _("Weather");
+
     opt.survival_rate_month = G_define_option();
     opt.survival_rate_month->type = TYPE_INTEGER;
     opt.survival_rate_month->key = "survival_month";
@@ -458,14 +466,6 @@ int main(int argc, char *argv[])
         _("The survival rate is applied at the selected month and day");
     opt.survival_rate_day->required = NO;
     opt.survival_rate_day->guisection = _("Weather");
-
-    opt.survival_rate_file = G_define_standard_option(G_OPT_F_INPUT);
-    opt.survival_rate_file->key = "survival_rate";
-    opt.survival_rate_file->label =
-        _("Input file with one survival rate raster map name per line");
-    opt.survival_rate_file->description = _("Suvival rate is percentage (0-1)");
-    opt.survival_rate_file->required = NO;
-    opt.survival_rate_file->guisection = _("Weather");
 
     // Temperature and lethal temperature
 
@@ -958,15 +958,16 @@ int main(int argc, char *argv[])
     unsigned seed_value;
     if (opt.seed->answer) {
         seed_value = std::stoul(opt.seed->answer);
-        G_verbose_message(_("Read random seed from %s option: %ud"),
-                          opt.seed->key, seed_value);
-    } else {
+        G_verbose_message(
+            _("Read random seed from %s option: %u"), opt.seed->key, seed_value);
+    }
+    else {
         // flag or option is required, so no check needed
         // getting random seed using GRASS library
         // std::random_device is deterministic in MinGW (#338)
         seed_value = G_srand48_auto();
-        G_verbose_message(_("Generated random seed (-%c): %ud"),
-                          flg.generate_seed->key, seed_value);
+        G_verbose_message(
+            _("Generated random seed (-%c): %u"), flg.generate_seed->key, seed_value);
     }
 
     // read the suspectible UMCA raster image
@@ -1102,6 +1103,8 @@ int main(int argc, char *argv[])
 
     std::vector<unsigned> unresolved_steps;
     unresolved_steps.reserve(config.scheduler().get_num_steps());
+
+    G_verbose_message(_("Number of steps: %u"), config.scheduler().get_num_steps());
 
     // main simulation loop
     unsigned current_index = 0;
