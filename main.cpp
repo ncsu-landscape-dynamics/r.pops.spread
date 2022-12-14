@@ -1124,12 +1124,16 @@ int main(int argc, char *argv[])
             unsigned step_in_chunk = 0;
             // get weather for all the steps in chunk
             for (auto step : unresolved_steps) {
+                auto weather_step = config.scheduler().simulation_step_to_weather_step(step);
                 if (moisture_temperature) {
-                    DImg moisture(raster_from_grass_float(moisture_names[step]));
-                    DImg temperature(raster_from_grass_float(temperature_names[step]));
+                    DImg moisture(raster_from_grass_float(moisture_names[weather_step]));
+                    DImg temperature(raster_from_grass_float(temperature_names[weather_step]));
                     weather_coefficients[step_in_chunk] = moisture * temperature;
+                } else if (config.weather_distribution())   {
+                    means[step_in_chunk] = raster_from_grass_float(weather_mean_names[weather_step]);
+                    stddevs[step_in_chunk] = raster_from_grass_float(weather_stddev_names[weather_step]);
                 } else if (weather)
-                    weather_coefficients[step_in_chunk] = raster_from_grass_float(weather_names[step]);
+                    weather_coefficients[step_in_chunk] = raster_from_grass_float(weather_names[weather_step]);
                 ++step_in_chunk;
             }
 
@@ -1140,6 +1144,10 @@ int main(int argc, char *argv[])
                 int weather_step = 0;
                 for (auto step : unresolved_steps) {
                     dead_in_current_year[run].zero();
+                    if (config.weather_distribution())
+                        models[run].environment.update_weather_from_distribution(means[weather_step], stddevs[weather_step]);
+                    else
+                        models[run].environment.update_weather(weather_coefficients[weather_step]);
                     models[run].run_step(
                                 step,
                                 inf_species_rasts[run],
