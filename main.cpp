@@ -1174,14 +1174,16 @@ int main(int argc, char *argv[])
                 int weather_step = 0;
                 for (auto step : unresolved_steps) {
                     dead_in_current_year[run].zero();
-                    if (config.weather_type == "distribution")
+                    if (config.weather_type == "distribution") {
                         models[run].environment().update_weather_from_distribution(
                                     weather_coefficients[weather_step],
                                     weather_coefficient_stddevs[weather_step],
                                     models[run].random_number_generator());
-                    else
+                    }
+                    else {
                         models[run].environment().update_weather_coefficient(
                                     weather_coefficients[weather_step]);
+                    }
                     models[run].run_step(
                                 step,
                                 inf_species_rasts[run],
