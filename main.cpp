@@ -1029,6 +1029,7 @@ int main(int argc, char *argv[])
     config.weather = weather || moisture_temperature || weather_coefficient_distribution;
     if (weather_coefficient_distribution)
         config.weather_type = "distribution";
+    WeatherType weather_type = weather_type_from_string(config.weather_type);
 
     std::vector<DImg> survival_rates;
     if (opt.survival_rate_file->answer) {
@@ -1159,7 +1160,7 @@ int main(int argc, char *argv[])
                     DImg moisture(raster_from_grass_float(moisture_names[weather_step]));
                     DImg temperature(raster_from_grass_float(temperature_names[weather_step]));
                     weather_coefficients[step_in_chunk] = moisture * temperature;
-                } else if (config.weather_type == "distribution")   {
+                } else if (weather_type == WeatherType::Probabilistic) {
                     weather_coefficients[step_in_chunk] = raster_from_grass_float(weather_names[weather_step]);
                     weather_coefficient_stddevs[step_in_chunk] = raster_from_grass_float(weather_stddev_names[weather_step]);
                 } else if (weather)
@@ -1174,7 +1175,7 @@ int main(int argc, char *argv[])
                 int weather_step = 0;
                 for (auto step : unresolved_steps) {
                     dead_in_current_year[run].zero();
-                    if (config.weather_type == "distribution") {
+                    if (weather_type == WeatherType::Probabilistic) {
                         models[run].environment().update_weather_from_distribution(
                                     weather_coefficients[weather_step],
                                     weather_coefficient_stddevs[weather_step],
