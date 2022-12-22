@@ -80,10 +80,13 @@ jobs:
       with:
         path: nc_spm_08_grass7
         key: ${{ runner.os }}-nc_spm_08_grass7
+    - name: Get data download tool for v7 (g.download.location)
+      if: steps.cache-nc_spm_08_grass7.outputs.cache-hit != 'true' && version == 'releasebranch_7_8'
+      run: |
+        grass --tmp-location XY --exec g.extension g.download.location --verbose
     - name: Get sample data for testing (NC SPM sample location)
       if: steps.cache-nc_spm_08_grass7.outputs.cache-hit != 'true'
       run: |
-        grass --tmp-location XY --exec g.extension g.download.location --verbose
         grass --tmp-location XY --exec g.download.location url=https://grass.osgeo.org/sampledata/north_carolina/nc_spm_08_grass7.tar.gz path=~ --verbose
     - name: Run test (manually specified files)
       run: |
