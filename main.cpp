@@ -1026,9 +1026,11 @@ int main(int argc, char *argv[])
     }
     // Model gets pre-computed weather coefficient, so it does not
     // distinguish between these two.
-    config.weather = weather || moisture_temperature || weather_coefficient_distribution;
-    if (weather_coefficient_distribution)
-        config.weather_type = "distribution";
+    config.weather = weather || moisture_temperature;
+    if (config.weather && weather_coefficient_distribution)
+        config.weather_type = "probabilistic";
+    else if (config.weather)
+        config.weather_type = "deterministic";
     WeatherType weather_type = weather_type_from_string(config.weather_type);
 
     std::vector<DImg> survival_rates;
@@ -1181,7 +1183,7 @@ int main(int argc, char *argv[])
                                     weather_coefficient_stddevs[weather_step],
                                     models[run].random_number_generator());
                     }
-                    else {
+                    else if (weather_type == WeatherType::Deterministic) {
                         models[run].environment().update_weather_coefficient(
                                     weather_coefficients[weather_step]);
                     }
