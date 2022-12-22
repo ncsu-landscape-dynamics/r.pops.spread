@@ -229,11 +229,11 @@ struct PoPSOptions
     struct Option* model_type;
     struct Option* latency_period;
     struct Option *moisture_coefficient_file, *temperature_coefficient_file;
-    struct Option *weather_coefficient_file;
-    struct Option *weather_coefficient_stddev_file;
-    struct Option *survival_rate_month;
-    struct Option *survival_rate_day;
-    struct Option *survival_rate_file;
+    struct Option* weather_coefficient_file;
+    struct Option* weather_coefficient_stddev_file;
+    struct Option* survival_rate_month;
+    struct Option* survival_rate_day;
+    struct Option* survival_rate_file;
     struct Option *lethal_temperature, *lethal_temperature_months;
     struct Option* temperature_file;
     struct Option *start_date, *end_date, *seasonality;
@@ -793,10 +793,14 @@ int main(int argc, char* argv[])
     G_option_required(opt.seed, flg.generate_seed, NULL);
 
     // weather
-    G_option_collective(opt.moisture_coefficient_file, opt.temperature_coefficient_file, NULL);
-    G_option_exclusive(opt.moisture_coefficient_file, opt.weather_coefficient_file, NULL);
-    G_option_exclusive(opt.temperature_coefficient_file, opt.weather_coefficient_file, NULL);
-    G_option_requires_all(opt.weather_coefficient_stddev_file, opt.weather_coefficient_file, NULL);
+    G_option_collective(
+        opt.moisture_coefficient_file, opt.temperature_coefficient_file, NULL);
+    G_option_exclusive(
+        opt.moisture_coefficient_file, opt.weather_coefficient_file, NULL);
+    G_option_exclusive(
+        opt.temperature_coefficient_file, opt.weather_coefficient_file, NULL);
+    G_option_requires_all(
+        opt.weather_coefficient_stddev_file, opt.weather_coefficient_file, NULL);
 
     // mortality
     // With flag, the lag, rate, and frequency are always required.
@@ -1030,7 +1034,8 @@ int main(int argc, char* argv[])
     bool weather = false;
     bool moisture_temperature = false;
     bool weather_coefficient_distribution = false;
-    if (opt.moisture_coefficient_file->answer && opt.temperature_coefficient_file->answer) {
+    if (opt.moisture_coefficient_file->answer
+        && opt.temperature_coefficient_file->answer) {
         moisture_names = read_names(opt.moisture_coefficient_file->answer);
         temperature_names = read_names(opt.temperature_coefficient_file->answer);
         moisture_temperature = true;
@@ -1042,12 +1047,13 @@ int main(int argc, char* argv[])
     if (opt.weather_coefficient_stddev_file->answer) {
         weather_stddev_names = read_names(opt.weather_coefficient_stddev_file->answer);
         weather_coefficient_distribution = true;
-        if (weather_names.size() != weather_stddev_names.size()){
-            G_fatal_error(_("%s and %s must have the same size (not %d and %d)"),
-                          opt.weather_coefficient_file->key,
-                          opt.weather_coefficient_stddev_file->key,
-                          int(weather_names.size()),
-                          int(weather_stddev_names.size()));
+        if (weather_names.size() != weather_stddev_names.size()) {
+            G_fatal_error(
+                _("%s and %s must have the same size (not %d and %d)"),
+                opt.weather_coefficient_file->key,
+                opt.weather_coefficient_stddev_file->key,
+                int(weather_names.size()),
+                int(weather_stddev_names.size()));
         }
     }
     // Model gets pre-computed weather coefficient, so it does not
@@ -1192,14 +1198,21 @@ int main(int argc, char* argv[])
             for (auto step : unresolved_steps) {
                 auto weather_step = config.simulation_step_to_weather_step(step);
                 if (moisture_temperature) {
-                    DImg moisture(raster_from_grass_float(moisture_names[weather_step]));
-                    DImg temperature(raster_from_grass_float(temperature_names[weather_step]));
+                    DImg moisture(
+                        raster_from_grass_float(moisture_names[weather_step]));
+                    DImg temperature(
+                        raster_from_grass_float(temperature_names[weather_step]));
                     weather_coefficients[step_in_chunk] = moisture * temperature;
-                } else if (weather_type == WeatherType::Probabilistic) {
-                    weather_coefficients[step_in_chunk] = raster_from_grass_float(weather_names[weather_step]);
-                    weather_coefficient_stddevs[step_in_chunk] = raster_from_grass_float(weather_stddev_names[weather_step]);
-                } else if (weather)
-                    weather_coefficients[step_in_chunk] = raster_from_grass_float(weather_names[weather_step]);
+                }
+                else if (weather_type == WeatherType::Probabilistic) {
+                    weather_coefficients[step_in_chunk] =
+                        raster_from_grass_float(weather_names[weather_step]);
+                    weather_coefficient_stddevs[step_in_chunk] =
+                        raster_from_grass_float(weather_stddev_names[weather_step]);
+                }
+                else if (weather)
+                    weather_coefficients[step_in_chunk] =
+                        raster_from_grass_float(weather_names[weather_step]);
                 ++step_in_chunk;
             }
 
@@ -1212,13 +1225,13 @@ int main(int argc, char* argv[])
                     dead_in_current_year[run].zero();
                     if (weather_type == WeatherType::Probabilistic) {
                         models[run].environment().update_weather_from_distribution(
-                                    weather_coefficients[weather_step],
-                                    weather_coefficient_stddevs[weather_step],
-                                    models[run].random_number_generator());
+                            weather_coefficients[weather_step],
+                            weather_coefficient_stddevs[weather_step],
+                            models[run].random_number_generator());
                     }
                     else if (weather_type == WeatherType::Deterministic) {
                         models[run].environment().update_weather_coefficient(
-                                    weather_coefficients[weather_step]);
+                            weather_coefficients[weather_step]);
                     }
                     models[run].run_step(
                         step,
