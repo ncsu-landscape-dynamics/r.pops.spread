@@ -1247,7 +1247,7 @@ int main(int argc, char* argv[])
                         dead_in_current_year[run],
                         actual_temperatures,
                         survival_rates,
-                        weather_coefficients[weather_step],
+                        models[run].environment().weather_coefficient(),
                         treatments,
                         resistant_rasts[run],
                         outside_spores[run],
