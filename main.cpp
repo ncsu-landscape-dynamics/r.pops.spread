@@ -981,6 +981,45 @@ int main(int argc, char* argv[])
         config.spreadrate_frequency_n = 1;
     }
 
+    std::vector<string> moisture_names;
+    std::vector<string> temperature_names;
+    std::vector<string> weather_names;
+    std::vector<string> weather_stddev_names;
+    bool weather = false;
+    bool moisture_temperature = false;
+    bool weather_coefficient_distribution = false;
+    if (opt.moisture_coefficient_file->answer
+        && opt.temperature_coefficient_file->answer) {
+        moisture_names = read_names(opt.moisture_coefficient_file->answer);
+        temperature_names = read_names(opt.temperature_coefficient_file->answer);
+        moisture_temperature = true;
+    }
+    if (opt.weather_coefficient_file->answer) {
+        weather_names = read_names(opt.weather_coefficient_file->answer);
+        weather = true;
+    }
+    if (opt.weather_coefficient_stddev_file->answer) {
+        weather_stddev_names = read_names(opt.weather_coefficient_stddev_file->answer);
+        weather_coefficient_distribution = true;
+        if (weather_names.size() != weather_stddev_names.size()) {
+            G_fatal_error(
+                _("%s and %s must have the same size (not %d and %d)"),
+                opt.weather_coefficient_file->key,
+                opt.weather_coefficient_stddev_file->key,
+                int(weather_names.size()),
+                int(weather_stddev_names.size()));
+        }
+    }
+    config.weather_size = weather_names.size();
+    // Model gets pre-computed weather coefficient, so it does not
+    // distinguish between these two.
+    config.weather = weather || moisture_temperature;
+    if (config.weather && weather_coefficient_distribution)
+        config.weather_type = "probabilistic";
+    else if (config.weather)
+        config.weather_type = "deterministic";
+    WeatherType weather_type = weather_type_from_string(config.weather_type);
+
     config.create_schedules();
 
     int num_mortality_steps = config.num_mortality_steps();
@@ -1026,44 +1065,6 @@ int main(int argc, char* argv[])
 
     // Indices of suitable cells (i, j of all hosts)
     std::vector<std::vector<int>> suitable_cells = get_suitable_cells(species_rast);
-
-    std::vector<string> moisture_names;
-    std::vector<string> temperature_names;
-    std::vector<string> weather_names;
-    std::vector<string> weather_stddev_names;
-    bool weather = false;
-    bool moisture_temperature = false;
-    bool weather_coefficient_distribution = false;
-    if (opt.moisture_coefficient_file->answer
-        && opt.temperature_coefficient_file->answer) {
-        moisture_names = read_names(opt.moisture_coefficient_file->answer);
-        temperature_names = read_names(opt.temperature_coefficient_file->answer);
-        moisture_temperature = true;
-    }
-    if (opt.weather_coefficient_file->answer) {
-        weather_names = read_names(opt.weather_coefficient_file->answer);
-        weather = true;
-    }
-    if (opt.weather_coefficient_stddev_file->answer) {
-        weather_stddev_names = read_names(opt.weather_coefficient_stddev_file->answer);
-        weather_coefficient_distribution = true;
-        if (weather_names.size() != weather_stddev_names.size()) {
-            G_fatal_error(
-                _("%s and %s must have the same size (not %d and %d)"),
-                opt.weather_coefficient_file->key,
-                opt.weather_coefficient_stddev_file->key,
-                int(weather_names.size()),
-                int(weather_stddev_names.size()));
-        }
-    }
-    // Model gets pre-computed weather coefficient, so it does not
-    // distinguish between these two.
-    config.weather = weather || moisture_temperature;
-    if (config.weather && weather_coefficient_distribution)
-        config.weather_type = "probabilistic";
-    else if (config.weather)
-        config.weather_type = "deterministic";
-    WeatherType weather_type = weather_type_from_string(config.weather_type);
 
     std::vector<DImg> survival_rates;
     if (opt.survival_rate_file->answer) {
