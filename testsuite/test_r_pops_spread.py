@@ -54,7 +54,7 @@ class TestSpread(TestCase):
                 for name in cls.weather_names
             ]
             concurrent.futures.wait(futures)
-        cls.weather_file = Path(cls.tmp_dir.name) / "weather_coefficient.txt"
+        cls.weather_file = str(Path(cls.tmp_dir.name) / "weather_coefficient.txt")
         items_to_file(years_2019_2022 * cls.weather_names, cls.weather_file)
 
         # simulation resolution
