@@ -1130,8 +1130,7 @@ int main(int argc, char* argv[])
             suitable_cells));
     // Unused quarantine escape tracking still requires full raster.
     Img empty(S_species_rast, 0);
-    QuarantineEscape<Img> quarantine(
-        empty, config.ew_res, config.ns_res, 0, suitable_cells);
+    QuarantineEscape<Img> quarantine(empty, config.ew_res, config.ns_res, 0);
     // Unused movements
     std::vector<std::vector<int>> movements;
 
