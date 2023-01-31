@@ -1195,25 +1195,27 @@ int main(int argc, char* argv[])
             || current_index == config.scheduler().get_num_steps() - 1) {
             unsigned step_in_chunk = 0;
             // get weather for all the steps in chunk
-            for (auto step : unresolved_steps) {
-                auto weather_step = config.simulation_step_to_weather_step(step);
-                if (moisture_temperature) {
-                    DImg moisture(
-                        raster_from_grass_float(moisture_names[weather_step]));
-                    DImg temperature(
-                        raster_from_grass_float(temperature_names[weather_step]));
-                    weather_coefficients[step_in_chunk] = moisture * temperature;
+            if (weather) {
+                for (auto step : unresolved_steps) {
+                    auto weather_step = config.simulation_step_to_weather_step(step);
+                    if (moisture_temperature) {
+                        DImg moisture(
+                            raster_from_grass_float(moisture_names[weather_step]));
+                        DImg temperature(
+                            raster_from_grass_float(temperature_names[weather_step]));
+                        weather_coefficients[step_in_chunk] = moisture * temperature;
+                    }
+                    else if (weather_type == WeatherType::Probabilistic) {
+                        weather_coefficients[step_in_chunk] =
+                            raster_from_grass_float(weather_names[weather_step]);
+                        weather_coefficient_stddevs[step_in_chunk] =
+                            raster_from_grass_float(weather_stddev_names[weather_step]);
+                    }
+                    else if (weather)
+                        weather_coefficients[step_in_chunk] =
+                            raster_from_grass_float(weather_names[weather_step]);
+                    ++step_in_chunk;
                 }
-                else if (weather_type == WeatherType::Probabilistic) {
-                    weather_coefficients[step_in_chunk] =
-                        raster_from_grass_float(weather_names[weather_step]);
-                    weather_coefficient_stddevs[step_in_chunk] =
-                        raster_from_grass_float(weather_stddev_names[weather_step]);
-                }
-                else if (weather)
-                    weather_coefficients[step_in_chunk] =
-                        raster_from_grass_float(weather_names[weather_step]);
-                ++step_in_chunk;
             }
 
 // stochastic simulation runs
@@ -1247,7 +1249,7 @@ int main(int argc, char* argv[])
                         dead_in_current_year[run],
                         actual_temperatures,
                         survival_rates,
-                        models[run].environment().weather_coefficient(),
+                        weather_coefficients[weather_step],
                         treatments,
                         resistant_rasts[run],
                         outside_spores[run],
