@@ -29,35 +29,7 @@ class TestSpread(TestCase):
         """Create input data from the full NC SPM dataset"""
         cls.use_temp_region()
 
-        # We can remove the directory only at the end, so we can't use with statement.
-        cls.tmp_dir = (
-            tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
-        )
-
-        years_2019_2022 = 4
-        months_in_year = 12
-        weeks_in_year = 52
-
-        # weather resolution (extent will be larger than simulation extent)
-        cls.runModule("g.region", raster="lsat7_2002_30", res=1000, flags="a")
-
-        cls.weather_names = [f"weather_{i}" for i in range(weeks_in_year)]
-
-        def generate_random_raster(name):
-            gs.mapcalc((f"{name} = rand(0.0, 1.0)"), seed=1, superquiet=True)
-            return name
-
-        # Number of processes based on the machine.
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(generate_random_raster, name)
-                for name in cls.weather_names
-            ]
-            concurrent.futures.wait(futures)
-        cls.weather_file = str(Path(cls.tmp_dir.name) / "weather_coefficient.txt")
-        items_to_file(years_2019_2022 * cls.weather_names, cls.weather_file)
-
-        # simulation resolution
+        # Use simulation resolution.
         cls.runModule("g.region", raster="lsat7_2002_30", res=85.5, flags="a")
         cls.runModule(
             "r.mapcalc",
@@ -94,6 +66,15 @@ class TestSpread(TestCase):
         cls.runModule("r.mapcalc", expression="one = 1")
         cls.runModule("r.mapcalc", expression="zero = 0")
 
+        # We can remove the directory only at the end, so we can't use with statement.
+        cls.tmp_dir = (
+            tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        )
+
+        years_2019_2022 = 4
+        months_in_year = 12
+        weeks_in_year = 52
+
         cls.steps_in_2019_2022_monthly = years_2019_2022 * months_in_year
         # File with 100% survival rate time series
         cls.survival_rate_100_percent = str(
@@ -109,6 +90,38 @@ class TestSpread(TestCase):
         items_to_file(
             cls.steps_in_2019_2022_monthly * ["zero"], cls.survival_rate_0_percent
         )
+
+        # Use weather resolution (extent will be larger than simulation extent).
+        cls.runModule("g.region", raster="lsat7_2002_30", res=1000, flags="a")
+
+        cls.weather_names = [f"weather_{i}" for i in range(weeks_in_year)]
+        cls.weather_stddev_names = [f"weather_stddev_{i}" for i in range(weeks_in_year)]
+
+        def generate_random_raster(name, low, high):
+            gs.mapcalc((f"{name} = rand(double({low}), double({high}))"), seed=1, superquiet=True)
+            return name
+
+        # Number of processes based on the machine.
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(generate_random_raster, name, low=0, high=1)
+                for name in cls.weather_names
+            ]
+            futures.extend(executor.submit(generate_random_raster, name, low=0, high=0)
+                for name in cls.weather_stddev_names)
+            concurrent.futures.wait(futures)
+        cls.weather_file = str(Path(cls.tmp_dir.name) / "weather_coefficient.txt")
+        items_to_file(years_2019_2022 * cls.weather_names, cls.weather_file)
+
+        cls.weather_stddev_file = str(Path(cls.tmp_dir.name) / "weather_coefficient_stddev.txt")
+        items_to_file((years_2019_2022) * cls.weather_stddev_names, cls.weather_stddev_file)
+
+        # The zero raster was produced earlier.
+        cls.weather_zero_stddev_file = str(Path(cls.tmp_dir.name) / "weather_coefficient_zero_stddev.txt")
+        items_to_file((years_2019_2022 * weeks_in_year) * ["zero"], cls.weather_zero_stddev_file)
+
+        # Use simulation resolution for the computations.
+        cls.runModule("g.region", raster="lsat7_2002_30", res=85.5, flags="a")
 
     @classmethod
     def tearDownClass(cls):
@@ -132,6 +145,7 @@ class TestSpread(TestCase):
                 "one",
                 "zero",
                 *cls.weather_names,
+                *cls.weather_stddev_names,
             ],
         )
 
