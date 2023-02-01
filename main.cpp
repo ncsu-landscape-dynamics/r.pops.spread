@@ -765,6 +765,7 @@ int main(int argc, char* argv[])
     opt.runs->description =
         _("The individual runs will obtain different seeds"
           " and will be averaged for the output");
+    opt.runs->options = "1-";
     opt.runs->guisection = _("Randomness");
 
     opt.threads = G_define_option();
