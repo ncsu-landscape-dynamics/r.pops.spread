@@ -442,8 +442,9 @@ int main(int argc, char* argv[])
     opt.weather_coefficient_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.weather_coefficient_file->key = "weather_coefficient_file";
     opt.weather_coefficient_file->label =
+        _("Weather coefficients or weather coefficients mean values");
+    opt.weather_coefficient_file->description =
         _("Input file with one weather coefficient map name per line");
-    opt.weather_coefficient_file->description = _("Weather coefficient");
     opt.weather_coefficient_file->required = NO;
     opt.weather_coefficient_file->guisection = _("Weather");
 
