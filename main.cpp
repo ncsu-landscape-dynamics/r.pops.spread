@@ -1213,9 +1213,10 @@ int main(int argc, char* argv[])
                         weather_coefficient_stddevs[step_in_chunk] =
                             raster_from_grass_float(weather_stddev_names[weather_step]);
                     }
-                    else if (weather)
+                    else {
                         weather_coefficients[step_in_chunk] =
                             raster_from_grass_float(weather_names[weather_step]);
+                    }
                     ++step_in_chunk;
                 }
             }
