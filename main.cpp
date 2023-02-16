@@ -230,6 +230,7 @@ struct PoPSOptions
     struct Option* latency_period;
     struct Option *moisture_coefficient_file, *temperature_coefficient_file;
     struct Option* weather_coefficient_file;
+    struct Option* weather_coefficient_stddev_file;
     struct Option* survival_rate_month;
     struct Option* survival_rate_day;
     struct Option* survival_rate_file;
@@ -441,10 +442,20 @@ int main(int argc, char* argv[])
     opt.weather_coefficient_file = G_define_standard_option(G_OPT_F_INPUT);
     opt.weather_coefficient_file->key = "weather_coefficient_file";
     opt.weather_coefficient_file->label =
+        _("Weather coefficients or weather coefficients mean values");
+    opt.weather_coefficient_file->description =
         _("Input file with one weather coefficient map name per line");
-    opt.weather_coefficient_file->description = _("Weather coefficient");
     opt.weather_coefficient_file->required = NO;
     opt.weather_coefficient_file->guisection = _("Weather");
+
+    opt.weather_coefficient_stddev_file = G_define_standard_option(G_OPT_F_INPUT);
+    opt.weather_coefficient_stddev_file->key = "weather_coefficient_stddev_file";
+    opt.weather_coefficient_stddev_file->label =
+        _("Standard deviation of weather coefficient");
+    opt.weather_coefficient_stddev_file->description =
+        _("Input file with one standard deviation map name per line");
+    opt.weather_coefficient_stddev_file->required = NO;
+    opt.weather_coefficient_stddev_file->guisection = _("Weather");
 
     // Survival rate
 
@@ -755,6 +766,7 @@ int main(int argc, char* argv[])
     opt.runs->description =
         _("The individual runs will obtain different seeds"
           " and will be averaged for the output");
+    opt.runs->options = "1-";
     opt.runs->guisection = _("Randomness");
 
     opt.threads = G_define_option();
@@ -789,6 +801,8 @@ int main(int argc, char* argv[])
         opt.moisture_coefficient_file, opt.weather_coefficient_file, NULL);
     G_option_exclusive(
         opt.temperature_coefficient_file, opt.weather_coefficient_file, NULL);
+    G_option_requires_all(
+        opt.weather_coefficient_stddev_file, opt.weather_coefficient_file, NULL);
 
     // mortality
     // With flag, the lag, rate, and frequency are always required.
@@ -834,6 +848,7 @@ int main(int argc, char* argv[])
     file_exists_or_fatal_error(opt.moisture_coefficient_file);
     file_exists_or_fatal_error(opt.temperature_coefficient_file);
     file_exists_or_fatal_error(opt.weather_coefficient_file);
+    file_exists_or_fatal_error(opt.weather_coefficient_stddev_file);
 
     // Start creating the configuration.
     Config config;
@@ -968,6 +983,45 @@ int main(int argc, char* argv[])
         config.spreadrate_frequency_n = 1;
     }
 
+    std::vector<string> moisture_names;
+    std::vector<string> temperature_names;
+    std::vector<string> weather_names;
+    std::vector<string> weather_stddev_names;
+    bool weather = false;
+    bool moisture_temperature = false;
+    bool weather_coefficient_distribution = false;
+    if (opt.moisture_coefficient_file->answer
+        && opt.temperature_coefficient_file->answer) {
+        moisture_names = read_names(opt.moisture_coefficient_file->answer);
+        temperature_names = read_names(opt.temperature_coefficient_file->answer);
+        moisture_temperature = true;
+    }
+    if (opt.weather_coefficient_file->answer) {
+        weather_names = read_names(opt.weather_coefficient_file->answer);
+        weather = true;
+    }
+    if (opt.weather_coefficient_stddev_file->answer) {
+        weather_stddev_names = read_names(opt.weather_coefficient_stddev_file->answer);
+        weather_coefficient_distribution = true;
+        if (weather_names.size() != weather_stddev_names.size()) {
+            G_fatal_error(
+                _("%s and %s must have the same size (not %d and %d)"),
+                opt.weather_coefficient_file->key,
+                opt.weather_coefficient_stddev_file->key,
+                int(weather_names.size()),
+                int(weather_stddev_names.size()));
+        }
+    }
+    config.weather_size = weather_names.size();
+    // Model gets pre-computed weather coefficient, so it does not
+    // distinguish between these two.
+    config.weather = weather || moisture_temperature;
+    if (config.weather && weather_coefficient_distribution)
+        config.weather_type = "probabilistic";
+    else if (config.weather)
+        config.weather_type = "deterministic";
+    WeatherType weather_type = weather_type_from_string(config.weather_type);
+
     config.create_schedules();
 
     int num_mortality_steps = config.num_mortality_steps();
@@ -1014,25 +1068,6 @@ int main(int argc, char* argv[])
     // Indices of suitable cells (i, j of all hosts)
     std::vector<std::vector<int>> suitable_cells = get_suitable_cells(species_rast);
 
-    std::vector<string> moisture_names;
-    std::vector<string> temperature_names;
-    std::vector<string> weather_names;
-    bool weather = false;
-    bool moisture_temperature = false;
-    if (opt.moisture_coefficient_file->answer
-        && opt.temperature_coefficient_file->answer) {
-        moisture_names = read_names(opt.moisture_coefficient_file->answer);
-        temperature_names = read_names(opt.temperature_coefficient_file->answer);
-        moisture_temperature = true;
-    }
-    if (opt.weather_coefficient_file->answer) {
-        weather_names = read_names(opt.weather_coefficient_file->answer);
-        weather = true;
-    }
-    // Model gets pre-computed weather coefficient, so it does not
-    // distinguish between these two.
-    config.weather = weather || moisture_temperature;
-
     std::vector<DImg> survival_rates;
     if (opt.survival_rate_file->answer) {
         survival_rates =
@@ -1047,6 +1082,9 @@ int main(int argc, char* argv[])
     std::vector<DImg> weather_coefficients;
     if (weather || moisture_temperature)
         weather_coefficients.resize(config.scheduler().get_num_steps());
+    std::vector<DImg> weather_coefficient_stddevs;
+    if (weather_coefficient_distribution)
+        weather_coefficient_stddevs.resize(config.scheduler().get_num_steps());
 
     // treatments
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_date)
@@ -1159,16 +1197,28 @@ int main(int argc, char* argv[])
             || current_index == config.scheduler().get_num_steps() - 1) {
             unsigned step_in_chunk = 0;
             // get weather for all the steps in chunk
-            for (auto step : unresolved_steps) {
-                if (moisture_temperature) {
-                    DImg moisture(raster_from_grass_float(moisture_names[step]));
-                    DImg temperature(raster_from_grass_float(temperature_names[step]));
-                    weather_coefficients[step_in_chunk] = moisture * temperature;
+            if (weather) {
+                for (auto step : unresolved_steps) {
+                    auto weather_step = config.simulation_step_to_weather_step(step);
+                    if (moisture_temperature) {
+                        DImg moisture(
+                            raster_from_grass_float(moisture_names[weather_step]));
+                        DImg temperature(
+                            raster_from_grass_float(temperature_names[weather_step]));
+                        weather_coefficients[step_in_chunk] = moisture * temperature;
+                    }
+                    else if (weather_type == WeatherType::Probabilistic) {
+                        weather_coefficients[step_in_chunk] =
+                            raster_from_grass_float(weather_names[weather_step]);
+                        weather_coefficient_stddevs[step_in_chunk] =
+                            raster_from_grass_float(weather_stddev_names[weather_step]);
+                    }
+                    else {
+                        weather_coefficients[step_in_chunk] =
+                            raster_from_grass_float(weather_names[weather_step]);
+                    }
+                    ++step_in_chunk;
                 }
-                else if (weather)
-                    weather_coefficients[step_in_chunk] =
-                        raster_from_grass_float(weather_names[step]);
-                ++step_in_chunk;
             }
 
 // stochastic simulation runs
@@ -1178,6 +1228,16 @@ int main(int argc, char* argv[])
                 int weather_step = 0;
                 for (auto step : unresolved_steps) {
                     dead_in_current_year[run].zero();
+                    if (weather_type == WeatherType::Probabilistic) {
+                        models[run].environment().update_weather_from_distribution(
+                            weather_coefficients[weather_step],
+                            weather_coefficient_stddevs[weather_step],
+                            models[run].random_number_generator());
+                    }
+                    else if (weather_type == WeatherType::Deterministic) {
+                        models[run].environment().update_weather_coefficient(
+                            weather_coefficients[weather_step]);
+                    }
                     models[run].run_step(
                         step,
                         inf_species_rasts[run],
@@ -1192,7 +1252,6 @@ int main(int argc, char* argv[])
                         dead_in_current_year[run],
                         actual_temperatures,
                         survival_rates,
-                        weather_coefficients[weather_step],
                         treatments,
                         resistant_rasts[run],
                         outside_spores[run],
