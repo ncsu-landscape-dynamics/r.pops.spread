@@ -17,6 +17,17 @@ pops-core.
 
 ## [Unreleased]
 
+## [2.0.0] - 2021-12-02
+
+### Changed
+
+- Code is using list of suitable cell indices as a spatial index which runs faster.
+- New code for managing kernels in runtime runs up to four-times faster.
+
+## [1.1.0] - 2021-06-18
+
+- [Minor release of PoPS Core](https://github.com/ncsu-landscape-dynamics/pops-core/releases/tag/v1.1.0) (not updated in r.pops.spread)
+
 ## [1.0.2] - 2020-10-09
 
 - [Patch release of rpops](https://github.com/ncsu-landscape-dynamics/rpops/releases/tag/v1.0.2) (no changes for r.pops.spread)
@@ -253,7 +264,9 @@ pops-core.
 - Copy of GDAL code was removed from the repository, using system GDAL
   includes now. (Vaclav Petras)
 
-[unreleased]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/compare/v1.0.1...v2.0.0
+[1.1.0]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/compare/v1.0.1...v1.1.0
 [1.0.2]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/ncsu-landscape-dynamics/r.pops.spread/tree/v1.0.0
