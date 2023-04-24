@@ -1312,6 +1312,7 @@ int main(int argc, char* argv[])
     // save for the start checkpoint
     const Img I_species_rast_start = I_species_rast;
     const Img S_species_rast_start = S_species_rast;
+    const Img species_rast_start = species_rast;
 
     std::vector<DImg> survival_rates;
     if (opt.survival_rate_file->answer) {
@@ -1400,6 +1401,7 @@ int main(int argc, char* argv[])
         established_dispersers.emplace_back(
             I_species_rast.rows(), I_species_rast.cols());
     }
+    // TODO: outside spores are not yet checkpointed
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     // spread rate initialization
@@ -1466,6 +1468,10 @@ int main(int argc, char* argv[])
                 num_checkpoints, std::vector<Img>(num_runs, S_species_rast));
     std::vector<std::vector<Img>> resistant_checkpoint(
                 num_checkpoints, std::vector<Img>(num_runs, S_species_rast));
+    std::vector<std::vector<Img>> total_species_checkpoint(
+                num_checkpoints, std::vector<Img>(num_runs, S_species_rast));
+    std::vector<std::vector<Img>> total_exposed_checkpoint(
+                num_checkpoints, std::vector<Img>(num_runs, S_species_rast));
     std::vector<std::vector<std::vector<Img>>> exposed_checkpoint(
                 num_checkpoints,
                 std::vector<std::vector<Img>>(num_runs,
@@ -1480,10 +1486,13 @@ int main(int argc, char* argv[])
     unsigned max_run = 0;
     bool select_run = true;
     int last_checkpoint = 0;
+    // suitable cells change only with movements
     for (unsigned run = 0; run < num_runs; run++) {
         sus_checkpoint[last_checkpoint][run] = S_species_rast_start;
         inf_checkpoint[last_checkpoint][run] = I_species_rast_start;
         resistant_checkpoint[last_checkpoint][run] = resistant_rasts[0];
+        total_species_checkpoint[last_checkpoint][run] = species_rast_start;
+        total_exposed_checkpoint[last_checkpoint][run] = total_exposed_rasts[0];
         exposed_checkpoint[last_checkpoint][run] = exposed_vectors[0];
         step_checkpoint[last_checkpoint] = 0;
         selected_run_checkpoint[last_checkpoint] = selected_run;
@@ -1524,7 +1533,9 @@ int main(int argc, char* argv[])
                     sus_species_rasts[run] = sus_checkpoint[last_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[last_checkpoint][run];
                     resistant_rasts[run] = resistant_checkpoint[last_checkpoint][run];
+                    total_species_rasts[run] = total_species_checkpoint[last_checkpoint][run];
                     exposed_vectors[run] = exposed_checkpoint[last_checkpoint][run];
+                    total_exposed_rasts[run] = total_exposed_checkpoint[last_checkpoint][run];
                 }
                 unresolved_steps.clear();
                 Date dt = config.scheduler().get_step(current_end).end_date();
@@ -1570,7 +1581,9 @@ int main(int argc, char* argv[])
                     sus_species_rasts[run] = sus_checkpoint[goto_checkpoint][run];
                     inf_species_rasts[run] = inf_checkpoint[goto_checkpoint][run];
                     resistant_rasts[run] = resistant_checkpoint[goto_checkpoint][run];
+                    total_species_rasts[run] = total_species_checkpoint[goto_checkpoint][run];
                     exposed_vectors[run] = exposed_checkpoint[goto_checkpoint][run];
+                    total_exposed_rasts[run] = total_exposed_checkpoint[goto_checkpoint][run];
                 }
                 Date dt = config.scheduler().get_step(current_end).end_date();
                 G_verbose_message("Going to date: %d-%d-%d", dt.year(), dt.month(), dt.day());
@@ -1815,6 +1828,10 @@ int main(int argc, char* argv[])
                             if (run != selected_run) {
                                 sus_species_rasts[run] = sus_species_rasts[selected_run];
                                 inf_species_rasts[run] = inf_species_rasts[selected_run];
+                                resistant_rasts[run] = resistant_rasts[selected_run];
+                                total_species_rasts[run] = total_species_rasts[selected_run];
+                                total_exposed_rasts[run] = total_exposed_rasts[selected_run];
+                                exposed_vectors[run] = exposed_vectors[selected_run];
                             }
                         }
                         sync = false;
@@ -1845,8 +1862,10 @@ int main(int argc, char* argv[])
                 for (unsigned run = 0; run < num_runs; run++) {
                     sus_checkpoint[last_checkpoint][run] = sus_species_rasts[run];
                     inf_checkpoint[last_checkpoint][run] = inf_species_rasts[run];
+                    total_species_checkpoint[last_checkpoint][run] = total_species_rasts[run];
                     resistant_checkpoint[last_checkpoint][run] = resistant_rasts[run];
                     exposed_checkpoint[last_checkpoint][run] = exposed_vectors[run];
+                    total_exposed_checkpoint[last_checkpoint][run] = total_exposed_rasts[run];
                 }
             }
             current_index++;
