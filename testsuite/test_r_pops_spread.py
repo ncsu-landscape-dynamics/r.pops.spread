@@ -1075,6 +1075,275 @@ class TestSpread(TestCase):
         # Even with multiple runs, stddev should be still zero.
         self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
 
+    def test_with_and_without_anthropogenic_dispersal_multiple_seeds(self):
+        """Check that multiple seeds keep anthropogenic dispersal separate
+
+        Results of running with anthropogenic_dispersal and percent_natural_dispersal=1
+        will be the same as without running anthropogenic_dispersal or with
+        anthropogenic_dispersal with different seed when multiple seeds are used for
+        isolated generators.
+        """
+        start = "2019-01-01"
+        end = "2022-12-31"
+        seeds = {
+            "general": 1,
+            "natural_dispersal": 2,
+            "anthropogenic_dispersal": 1,
+            "weather": 2,
+            "lethal_temperature": 3,
+            "movement": 4,
+            "overpopulation": 5,
+            "survival_rate": 6,
+            "soil": 7,
+        }
+        random_seeds_parameter = (
+            ",".join([f"{key}={value}" for key, value in seeds.items()]),
+        )
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=1,
+            random_seeds=random_seeds_parameter,
+            runs=5,
+            nprocs=5,
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end_year = end[:4]
+        self.assertRasterExists(f"average_{end_year}_12_31")
+        self.assertRasterExists(f"probability_{end_year}_12_31")
+        self.assertRasterExists(f"single_{end_year}_12_31")
+        self.assertRasterExists(f"stddev_{end_year}_12_31")
+
+        # We test the specific values but they are not important
+        # for main purpose of the test.
+        ref_float = dict(datatype="DCELL")
+        ref_int = dict(datatype="CELL")
+        self.assertRasterFitsInfo(raster="average", reference=ref_float)
+        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
+        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
+        self.assertRasterFitsInfo(raster=f"single_{end_year}_12_31", reference=ref_int)
+        self.assertRasterFitsInfo(
+            raster=f"average_{end_year}_12_31", reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster=f"probability_{end_year}_12_31", reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster=f"stddev_{end_year}_12_31", reference=ref_float
+        )
+
+        values = dict(null_cells=0, min=0, max=18, mean=0.435)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=7.591)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=6.216, mean=0.115)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+        # Now we test with a different seed for anthropogenic dispersal.
+        # The percent_natural_dispersal is 1, so no anthropogenic dispersal will
+        # happen and the result should be the same.
+        seeds["anthropogenic_dispersal"] = 2345
+        random_seeds_parameter = (
+            ",".join([f"{key}={value}" for key, value in seeds.items()]),
+        )
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average_2",
+            average_series="average_2",
+            single_series="single_2",
+            stddev="stddev_2",
+            stddev_series="stddev_2",
+            probability="probability_2",
+            probability_series="probability_2",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=1,
+            random_seeds=random_seeds_parameter,
+            runs=5,
+            nprocs=5,
+        )
+
+        for reference, actual in [
+            ("average", "average_2"),
+            (f"single_{end_year}_12_31", f"single_2_{end_year}_12_31"),
+            ("stddev", "stddev_2"),
+            ("probability", "probability_2"),
+        ]:
+            self.assertRastersEqual(
+                reference,
+                actual,
+                precision=0.0,
+            )
+
+        # Disabling the anthropogenic dispersal completely should still give
+        # the same result. The result would not be the same if using only one seed.
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average_3",
+            average_series="average_3",
+            single_series="single_3",
+            stddev="stddev_3",
+            stddev_series="stddev_3",
+            probability="probability_3",
+            probability_series="probability_3",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            random_seeds=random_seeds_parameter,
+            runs=5,
+            nprocs=5,
+        )
+
+        for reference, actual in [
+            ("average", "average_3"),
+            (f"single_{end_year}_12_31", f"single_3_{end_year}_12_31"),
+            ("stddev", "stddev_3"),
+            ("probability", "probability_3"),
+        ]:
+            self.assertRastersEqual(
+                reference,
+                actual,
+                precision=0.0,
+            )
+
+    def test_with_and_without_anthropogenic_dispersal_single_seed(self):
+        """Check the assumption that single seed does not separate
+
+        Results of running with anthropogenic_dispersal and percent_natural_dispersal=1
+        will be different than without running anthropogenic_dispersal.
+        """
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=1,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end_year = end[:4]
+        self.assertRasterExists(f"average_{end_year}_12_31")
+        self.assertRasterExists(f"probability_{end_year}_12_31")
+        self.assertRasterExists(f"single_{end_year}_12_31")
+        self.assertRasterExists(f"stddev_{end_year}_12_31")
+
+        # Disabling the anthropogenic dispersal completely should still give
+        # the same result.
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average_3",
+            average_series="average_3",
+            single_series="single_3",
+            stddev="stddev_3",
+            stddev_series="stddev_3",
+            probability="probability_3",
+            probability_series="probability_3",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+        )
+
+        for reference, actual in [
+            ("average", "average_3"),
+            (f"single_{end_year}_12_31", f"single_3_{end_year}_12_31"),
+            ("stddev", "stddev_3"),
+            ("probability", "probability_3"),
+        ]:
+            self.assertRastersEqual(
+                reference,
+                actual,
+                precision=0.0,
+            )
+
 
 if __name__ == "__main__":
     test()
