@@ -1335,13 +1335,14 @@ class TestSpread(TestCase):
         for reference, actual in [
             ("average", "average_3"),
             (f"single_{end_year}_12_31", f"single_3_{end_year}_12_31"),
-            ("stddev", "stddev_3"),
-            ("probability", "probability_3"),
         ]:
-            self.assertRastersEqual(
+            # assertRastersNotEqual would be better and we could test all outputs,
+            # but it does not exist.
+            self.assertRastersDifference(
                 reference,
                 actual,
-                precision=0.0,
+                dict(min=-8, max=6),
+                precision=8,
             )
 
 
