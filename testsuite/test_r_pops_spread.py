@@ -1086,9 +1086,10 @@ class TestSpread(TestCase):
         start = "2019-01-01"
         end = "2022-12-31"
         seeds = {
-            "general": 1,
+            "disperser_generation": 1,
             "natural_dispersal": 2,
             "anthropogenic_dispersal": 1,
+            "establishment": 1,
             "weather": 2,
             "lethal_temperature": 3,
             "movement": 4,
@@ -1137,33 +1138,6 @@ class TestSpread(TestCase):
         self.assertRasterExists(f"probability_{end_year}_12_31")
         self.assertRasterExists(f"single_{end_year}_12_31")
         self.assertRasterExists(f"stddev_{end_year}_12_31")
-
-        # We test the specific values but they are not important
-        # for main purpose of the test.
-        ref_float = dict(datatype="DCELL")
-        ref_int = dict(datatype="CELL")
-        self.assertRasterFitsInfo(raster="average", reference=ref_float)
-        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
-        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
-        self.assertRasterFitsInfo(raster=f"single_{end_year}_12_31", reference=ref_int)
-        self.assertRasterFitsInfo(
-            raster=f"average_{end_year}_12_31", reference=ref_float
-        )
-        self.assertRasterFitsInfo(
-            raster=f"probability_{end_year}_12_31", reference=ref_float
-        )
-        self.assertRasterFitsInfo(
-            raster=f"stddev_{end_year}_12_31", reference=ref_float
-        )
-
-        values = dict(null_cells=0, min=0, max=18, mean=0.435)
-        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=7.591)
-        self.assertRasterFitsUnivar(
-            raster="probability", reference=values, precision=0.001
-        )
-        values = dict(null_cells=0, min=0, max=6.216, mean=0.115)
-        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
 
         # Now we test with a different seed for anthropogenic dispersal.
         # The percent_natural_dispersal is 1, so no anthropogenic dispersal will
@@ -1255,6 +1229,33 @@ class TestSpread(TestCase):
                 actual,
                 precision=0.0,
             )
+
+        # We test the specific values but they are not important
+        # for main purpose of the test.
+        ref_float = dict(datatype="DCELL")
+        ref_int = dict(datatype="CELL")
+        self.assertRasterFitsInfo(raster="average", reference=ref_float)
+        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
+        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
+        self.assertRasterFitsInfo(raster=f"single_{end_year}_12_31", reference=ref_int)
+        self.assertRasterFitsInfo(
+            raster=f"average_{end_year}_12_31", reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster=f"probability_{end_year}_12_31", reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster=f"stddev_{end_year}_12_31", reference=ref_float
+        )
+
+        values = dict(null_cells=0, min=0, max=18, mean=0.448)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=7.766)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.879, mean=0.116)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
 
     def test_with_and_without_anthropogenic_dispersal_single_seed(self):
         """Check the assumption that single seed does not separate
