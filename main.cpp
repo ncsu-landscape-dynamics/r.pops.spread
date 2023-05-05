@@ -1053,22 +1053,39 @@ int main(int argc, char* argv[])
     else
         num_mortality_steps = 1;
 
-    unsigned seed_value;
     if (opt.seed->answer) {
-        seed_value = std::stoul(opt.seed->answer);
+        config.random_seed = std::stoul(opt.seed->answer);
         G_verbose_message(
-            _("Read random seed from %s option: %u"), opt.seed->key, seed_value);
+            _("Using random seed from %s option: %u"),
+            opt.seed->key,
+            config.random_seed);
     }
     else if (opt.seeds->answer) {
         config.read_seeds(opt.seeds->answer, ',', '=');
+        try {
+            validate_random_number_generator_provider_config(config);
+        }
+        catch (const std::invalid_argument& error) {
+            G_fatal_error(
+                _("%s is incomplete or incorrectly formatted: %s"),
+                opt.seeds->key,
+                error.what());
+        }
+
+        G_verbose_message(
+            _("Using random seeds from %s option: %s"),
+            opt.seeds->key,
+            opt.seeds->answer);
     }
     else {
-        // flag or option is required, so no check needed
+        // Flag or option is required, so no further check is needed here.
         // getting random seed using GRASS library
         // std::random_device is deterministic in MinGW (#338)
-        seed_value = G_srand48_auto();
+        config.random_seed = G_srand48_auto();
         G_verbose_message(
-            _("Generated random seed (-%c): %u"), flg.generate_seed->key, seed_value);
+            _("Generated random seed (-%c): %u"),
+            flg.generate_seed->key,
+            config.random_seed);
     }
 
     // read the suspectible UMCA raster image
@@ -1166,6 +1183,7 @@ int main(int argc, char* argv[])
     dispersers.reserve(num_runs);
     established_dispersers.reserve(num_runs);
     auto tmp_seeds = config.random_seeds;
+    auto tmp_seed_value = config.random_seed;
     for (unsigned i = 0; i < num_runs; ++i) {
         Config config_copy = config;
         if (opt.seeds->answer) {
@@ -1174,9 +1192,14 @@ int main(int argc, char* argv[])
             }
         }
         else {
-            config_copy.random_seed = seed_value++;
+            config_copy.random_seed = tmp_seed_value++;
         }
-        models.emplace_back(config_copy);
+        try {
+            models.emplace_back(config_copy);
+        }
+        catch (const std::invalid_argument& error) {
+            G_fatal_error(_("Model configuration is invalid: %s"), error.what());
+        }
         dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
         established_dispersers.emplace_back(
             I_species_rast.rows(), I_species_rast.cols());
