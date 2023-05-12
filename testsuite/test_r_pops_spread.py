@@ -13,6 +13,7 @@ from pathlib import Path
 import grass.script as gs
 from grass.gunittest.case import TestCase
 from grass.gunittest.main import test
+from grass.gunittest.gmodules import call_module
 
 
 def items_to_file(items, filename):
@@ -98,7 +99,11 @@ class TestSpread(TestCase):
         cls.weather_stddev_names = [f"weather_stddev_{i}" for i in range(weeks_in_year)]
 
         def generate_random_raster(name, low, high):
-            gs.mapcalc((f"{name} = rand(double({low}), double({high}))"), seed=1, superquiet=True)
+            gs.mapcalc(
+                (f"{name} = rand(double({low}), double({high}))"),
+                seed=1,
+                superquiet=True,
+            )
             return name
 
         # Number of processes based on the machine.
@@ -107,18 +112,47 @@ class TestSpread(TestCase):
                 executor.submit(generate_random_raster, name, low=0, high=1)
                 for name in cls.weather_names
             ]
-            futures.extend(executor.submit(generate_random_raster, name, low=0, high=0)
-                for name in cls.weather_stddev_names)
+            futures.extend(
+                executor.submit(generate_random_raster, name, low=0, high=0)
+                for name in cls.weather_stddev_names
+            )
             concurrent.futures.wait(futures)
         cls.weather_file = str(Path(cls.tmp_dir.name) / "weather_coefficient.txt")
         items_to_file(years_2019_2022 * cls.weather_names, cls.weather_file)
 
-        cls.weather_stddev_file = str(Path(cls.tmp_dir.name) / "weather_coefficient_stddev.txt")
-        items_to_file((years_2019_2022) * cls.weather_stddev_names, cls.weather_stddev_file)
+        cls.weather_stddev_file = str(
+            Path(cls.tmp_dir.name) / "weather_coefficient_stddev.txt"
+        )
+        items_to_file(
+            (years_2019_2022) * cls.weather_stddev_names, cls.weather_stddev_file
+        )
 
         # The zero raster was produced earlier.
-        cls.weather_zero_stddev_file = str(Path(cls.tmp_dir.name) / "weather_coefficient_zero_stddev.txt")
-        items_to_file((years_2019_2022 * weeks_in_year) * ["zero"], cls.weather_zero_stddev_file)
+        cls.weather_zero_stddev_file = str(
+            Path(cls.tmp_dir.name) / "weather_coefficient_zero_stddev.txt"
+        )
+        items_to_file(
+            (years_2019_2022 * weeks_in_year) * ["zero"], cls.weather_zero_stddev_file
+        )
+
+        # Quarantine
+        cls.runModule("g.region", raster="lsat7_2002_30", res=85.5, flags="a")
+        cls.runModule(
+            "r.circle",
+            output="infected_patch",
+            coordinates=[639300, 220900],
+            max=100,
+            flags="b",
+        )
+        cls.runModule(
+            "g.region",
+            n="n-800",
+            s="s+800",
+            e="e-800",
+            w="w+800",
+            align="lsat7_2002_30",
+        )
+        gs.mapcalc("quarantine = 1", superquiet=True)
 
         # Use simulation resolution for the computations.
         cls.runModule("g.region", raster="lsat7_2002_30", res=85.5, flags="a")
@@ -144,6 +178,8 @@ class TestSpread(TestCase):
                 "treatment",
                 "one",
                 "zero",
+                "quarantine",
+                "infected_patch",
                 *cls.weather_names,
                 *cls.weather_stddev_names,
             ],
@@ -221,6 +257,52 @@ class TestSpread(TestCase):
         )
         values = dict(null_cells=0, min=0, max=7.547, mean=0.945)
         self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+    def test_quarantine(self):
+        """Check quarantine output"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        output = call_module(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infected_patch",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            quarantine="quarantine",
+            quarantine_output="-",
+            output_frequency="yearly",
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+        )
+        reference = (
+            "step,escape_probability,dist0,dir0,dist1,dir1,dist2,dir2,dist3,dir3,dist4,dir4\n"
+            "0,0.0,4873.0,90,4018.0,180,4873.0,90,4873.0,90,4873.0,90\n"
+            "1,0.0,4873.0,90,2052.0,180,4873.0,90,2394.0,180,4873.0,90\n"
+            "2,0.4,1966.0,180,,,,,171.0,90,4873.0,90\n"
+            "3,0.8,,,,,,,,,2137.0,90"
+        )
+        self.assertMultiLineEqual(output.strip(), reference)
 
     def test_weather_deterministic_strict(self):
         """Check deterministic weather with close-to-exact global statistics"""
