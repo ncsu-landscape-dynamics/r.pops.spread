@@ -1,4 +1,4 @@
 [submodule "pops"]
 	path = pops-core
-	url = https://github.com/ncsu-landscape-dynamics/PoPS.git
-	branch = master
+	url = https://github.com/ncsu-landscape-dynamics/pops-core.git
+	branch = main

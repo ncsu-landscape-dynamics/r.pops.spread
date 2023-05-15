@@ -468,6 +468,7 @@ struct PoPSOptions
     struct Option *stddev, *stddev_series;
     struct Option *probability, *probability_series;
     struct Option* spread_rate_output;
+    struct Option *quarantine, *quarantine_output;
     struct Option *output_frequency, *output_frequency_n;
     struct Option *ip_address, *port;
 };
@@ -585,6 +586,19 @@ int main(int argc, char* argv[])
         _("Output CSV file containg yearly spread rate in N, S, E, W directions");
     opt.spread_rate_output->required = NO;
     opt.spread_rate_output->guisection = _("Output");
+
+    opt.quarantine = G_define_standard_option(G_OPT_R_INPUT);
+    opt.quarantine->key = "quarantine";
+    opt.quarantine->required = NO;
+    opt.quarantine->label = _("Input raster map of quarantine areas");
+    opt.quarantine->description = _("Values > 0 represent quarantine areas");
+    opt.quarantine->guisection = _("Input");
+
+    opt.quarantine_output = G_define_standard_option(G_OPT_F_OUTPUT);
+    opt.quarantine_output->key = "quarantine_output";
+    opt.quarantine_output->description = _("Output CSV file containg yearly quarantine information");
+    opt.quarantine_output->required = NO;
+    opt.quarantine_output->guisection = _("Output");
 
     opt.model_type = G_define_option();
     opt.model_type->type = TYPE_STRING;
@@ -1071,6 +1085,7 @@ int main(int argc, char* argv[])
         NULL);
     G_option_collective(
         opt.survival_rate_file, opt.survival_rate_month, opt.survival_rate_day, NULL);
+    G_option_collective(opt.quarantine, opt.quarantine_output, NULL);
 
     if (G_parser(argc, argv))
         exit(EXIT_FAILURE);
@@ -1216,10 +1231,16 @@ int main(int argc, char* argv[])
         config.use_lethal_temperature = true;
 
     config.use_spreadrates = false;
-    if (opt.spread_rate_output) {
+    if (opt.spread_rate_output->answer) {
         config.use_spreadrates = true;
         config.spreadrate_frequency = "yearly";
         config.spreadrate_frequency_n = 1;
+    }
+    config.use_quarantine = false;
+    if (opt.quarantine_output->answer) {
+        config.use_quarantine = true;
+        config.quarantine_frequency = "yearly";
+        config.quarantine_frequency_n = 1;
     }
 
     std::vector<string> moisture_names;
@@ -1405,17 +1426,26 @@ int main(int argc, char* argv[])
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
     // spread rate initialization
+
     std::vector<SpreadRate<Img>> spread_rates(
         num_runs,
         SpreadRate<Img>(
             I_species_rast,
             window.ew_res,
             window.ns_res,
-            config.rate_num_steps(),
+            config.use_spreadrates ? config.rate_num_steps() : 0,
             suitable_cells));
-    // Unused quarantine escape tracking still requires full raster.
-    Img empty(S_species_rast, 0);
-    QuarantineEscape<Img> quarantine(empty, config.ew_res, config.ns_res, 0);
+    // Quarantine escape tracking
+    Img quarantine_rast(S_species_rast, 0);
+    if (config.use_quarantine)
+        quarantine_rast = raster_from_grass_integer(opt.quarantine->answer);
+    std::vector<QuarantineEscape<Img>> escape_infos(
+        num_runs,
+        QuarantineEscape<Img>(
+            quarantine_rast,
+            window.ew_res,
+            window.ns_res,
+            config.use_quarantine ? config.quarantine_num_steps() : 0));
     // Unused movements
     std::vector<std::vector<int>> movements;
 
@@ -1686,8 +1716,8 @@ int main(int argc, char* argv[])
                                     resistant_rasts[run],
                                     outside_spores[run],
                                     spread_rates[run],
-                                    quarantine,
-                                    empty,
+                                    escape_infos[run],
+                                    quarantine_rast,
                                     movements,
                                     Network<Img::IndexType>::null_network(),
                                     suitable_cells);
@@ -1995,6 +2025,12 @@ int main(int argc, char* argv[])
                     isnan(w) ? w : round(w));
             }
         }
+        G_close_option_file(fp);
+    }
+    if (opt.quarantine_output->answer) {
+        FILE* fp = G_open_option_file(opt.quarantine_output);
+        std::string output = write_quarantine_escape(escape_infos, config.quarantine_num_steps());
+        fprintf(fp, "%s", output.c_str());
         G_close_option_file(fp);
     }
 
