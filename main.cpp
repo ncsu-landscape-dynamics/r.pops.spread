@@ -256,7 +256,7 @@ struct PoPSOptions
     struct Option *stddev, *stddev_series;
     struct Option *probability, *probability_series;
     struct Option* spread_rate_output;
-    struct Option *quarantine, *quarantine_output;
+    struct Option *quarantine, *quarantine_output, *quarantine_directions;
     struct Option *output_frequency, *output_frequency_n;
 };
 
@@ -375,6 +375,17 @@ int main(int argc, char* argv[])
     opt.quarantine_output->description = _("Output CSV file containg yearly quarantine information");
     opt.quarantine_output->required = NO;
     opt.quarantine_output->guisection = _("Output");
+
+    opt.quarantine_directions = G_define_option();
+    opt.quarantine_directions->type = TYPE_STRING;
+    opt.quarantine_directions->key = "quarantine_directions";
+    opt.quarantine_directions->label = _("Quarantine directions to consider");
+    opt.quarantine_directions->description =
+        _("Comma separated directions to include"
+          "in the quarantine direction analysis, e.g., 'N,E' "
+          "(by default all directions (N, S E, W) are considered)");
+    opt.quarantine_directions->required = NO;
+    opt.quarantine_directions->guisection = _("Output");
 
     opt.model_type = G_define_option();
     opt.model_type->type = TYPE_STRING;
@@ -1002,6 +1013,8 @@ int main(int argc, char* argv[])
         config.use_quarantine = true;
         config.quarantine_frequency = "yearly";
         config.quarantine_frequency_n = 1;
+        if (opt.quarantine_directions->answer)
+            config.quarantine_directions = opt.quarantine_directions->answer;
     }
 
     std::vector<string> moisture_names;
@@ -1198,7 +1211,8 @@ int main(int argc, char* argv[])
             quarantine_rast,
             window.ew_res,
             window.ns_res,
-            config.use_quarantine ? config.quarantine_num_steps() : 0));
+            config.use_quarantine ? config.quarantine_num_steps() : 0,
+            config.quarantine_directions));
     // Unused movements
     std::vector<std::vector<int>> movements;
 
