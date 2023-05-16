@@ -677,7 +677,7 @@ class TestSpread(TestCase):
             anthropogenic_direction_strength=0,
             percent_natural_dispersal=0.95,
             dispersers_to_soils=0.9,
-            soil_survivial_steps=100,
+            soil_survival_steps=100,
             random_seed=1,
             runs=5,
             nprocs=5,
