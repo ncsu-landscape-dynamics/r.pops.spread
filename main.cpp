@@ -228,6 +228,8 @@ struct PoPSOptions
     struct Option *host, *total_plants, *infected, *outside_spores;
     struct Option* model_type;
     struct Option* latency_period;
+    struct Option* dispersers_to_soils;
+    struct Option* soil_survivial_steps;
     struct Option *moisture_coefficient_file, *temperature_coefficient_file;
     struct Option* weather_coefficient_file;
     struct Option* weather_coefficient_stddev_file;
@@ -372,7 +374,8 @@ int main(int argc, char* argv[])
 
     opt.quarantine_output = G_define_standard_option(G_OPT_F_OUTPUT);
     opt.quarantine_output->key = "quarantine_output";
-    opt.quarantine_output->description = _("Output CSV file containg yearly quarantine information");
+    opt.quarantine_output->description =
+        _("Output CSV file containg yearly quarantine information");
     opt.quarantine_output->required = NO;
     opt.quarantine_output->guisection = _("Output");
 
@@ -398,6 +401,27 @@ int main(int argc, char* argv[])
           " (unit is a simulation step)");
     opt.latency_period->required = NO;
     opt.latency_period->guisection = _("Model");
+
+    opt.dispersers_to_soils = G_define_option();
+    opt.dispersers_to_soils->type = TYPE_DOUBLE;
+    opt.dispersers_to_soils->key = "dispersers_to_soils";
+    opt.dispersers_to_soils->label = _("Ratio of dispersers going into soil");
+    opt.dispersers_to_soils->description =
+        _("Ratio (percentage) of generated dispersers going into soil instead "
+          "of being dispersed by the kernel");
+    opt.dispersers_to_soils->options = "0-1";
+    opt.dispersers_to_soils->required = NO;
+    opt.dispersers_to_soils->guisection = _("Model");
+
+    opt.soil_survivial_steps = G_define_option();
+    opt.soil_survivial_steps->type = TYPE_INTEGER;
+    opt.soil_survivial_steps->key = "soil_survivial_steps";
+    opt.soil_survivial_steps->label = _("Steps dispersers stay in the soil");
+    opt.soil_survivial_steps->description =
+        _("Number of simulation steps dispersers survive in the soil");
+    opt.soil_survivial_steps->options = "1-";
+    opt.soil_survivial_steps->required = NO;
+    opt.soil_survivial_steps->guisection = _("Model");
 
     opt.treatments = G_define_standard_option(G_OPT_R_INPUT);
     opt.treatments->key = "treatments";
@@ -844,6 +868,7 @@ int main(int argc, char* argv[])
         opt.lethal_temperature_months,
         opt.temperature_file,
         NULL);
+    G_option_collective(opt.soil_survivial_steps, opt.dispersers_to_soils, NULL);
     G_option_collective(
         opt.survival_rate_file, opt.survival_rate_month, opt.survival_rate_day, NULL);
     G_option_collective(opt.quarantine, opt.quarantine_output, NULL);
@@ -1107,6 +1132,15 @@ int main(int argc, char* argv[])
     if (weather_coefficient_distribution)
         weather_coefficient_stddevs.resize(config.scheduler().get_num_steps());
 
+    bool use_soils = false;
+    int soil_survival_steps = 0;
+    if (opt.soil_survivial_steps->answer) {
+        use_soils = true;
+        soil_survival_steps = std::stoi(opt.soil_survivial_steps->answer);
+        config.dispersers_to_soils_percentage =
+            std::stod(opt.dispersers_to_soils->answer);
+    }
+
     // treatments
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_date)
         && get_num_answers(opt.treatment_date)
@@ -1175,6 +1209,16 @@ int main(int argc, char* argv[])
         dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
         established_dispersers.emplace_back(
             I_species_rast.rows(), I_species_rast.cols());
+    }
+    std::vector<std::vector<Img>> soil_reservoirs(
+        use_soils ? num_runs : 0,
+        std::vector<Img>(
+            use_soils ? soil_survival_steps : 0,
+            Img(I_species_rast.rows(), I_species_rast.cols(), 0)));
+    if (use_soils) {
+        for (unsigned i = 0; i < num_runs; ++i) {
+            models[i].activate_soils(soil_reservoirs[i]);
+        }
     }
     std::vector<std::vector<std::tuple<int, int>>> outside_spores(num_runs);
 
@@ -1490,7 +1534,8 @@ int main(int argc, char* argv[])
     }
     if (opt.quarantine_output->answer) {
         FILE* fp = G_open_option_file(opt.quarantine_output);
-        std::string output = write_quarantine_escape(escape_infos, config.quarantine_num_steps());
+        std::string output =
+            write_quarantine_escape(escape_infos, config.quarantine_num_steps());
         fprintf(fp, "%s", output.c_str());
         G_close_option_file(fp);
     }
