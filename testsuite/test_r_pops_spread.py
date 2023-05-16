@@ -642,6 +642,83 @@ class TestSpread(TestCase):
             raster=f"single_{end_year}_12_31", reference=values, precision=0.001
         )
 
+    def test_soil_with_deterministic_weather_strict(self):
+        """Check soils with deterministic weather.
+
+        Uses close-to-exact global statistics.
+        """
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            weather_coefficient_file=self.weather_file,
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            dispersers_to_soils=0.9,
+            soil_survival_steps=100,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+        )
+        test_date = "2021_12_31"
+        end_year = end[:4]
+
+        # Final outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.040)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=1.120)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=6.000, mean=0.013)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+        # Time-series outputs
+        values = dict(null_cells=0, min=0, max=18.0, mean=0.035)
+        self.assertRasterFitsUnivar(
+            raster=f"average_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=100, mean=1.068)
+        self.assertRasterFitsUnivar(
+            raster=f"probability_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.238, mean=0.011)
+        self.assertRasterFitsUnivar(
+            raster=f"stddev_{test_date}", reference=values, precision=0.001
+        )
+
+        # Single run outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.034)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=18, mean=0.040)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{end_year}_12_31", reference=values, precision=0.001
+        )
+
     def test_nulls_in_input(self):
         """Same as test_outputs() but using inputs with null values."""
         start = "2019-01-01"
