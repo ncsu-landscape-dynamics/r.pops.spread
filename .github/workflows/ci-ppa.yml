@@ -2,15 +2,21 @@ name: CI with UbuntuGIS PPA
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+      paths-ignore:
+      - "*.md"
+      - CITATION.cff
+      - LICENSE
   schedule:
   # 01:00 Pacific Time (in UTC), every Friday (morning)
   - cron:  '0 8 * * 5'
 
 jobs:
-  test-with-ubuntugis-ppa:
+  build:
 
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
 
     steps:
     - uses: actions/checkout@v1
@@ -23,6 +29,13 @@ jobs:
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq grass grass-dev grass-doc
+    - name: Get Python version
+      run: |
+        python3 --version
+        python --version
+    - name: Get GRASS GIS version
+      run: |
+        grass --version
     - name: Install the module
       run: |
         grass --tmp-location XY --exec g.extension extension=r.pops.spread url=. --verbose
@@ -36,7 +49,7 @@ jobs:
       if: steps.cache-nc_spm_08_grass7.outputs.cache-hit != 'true'
       run: |
         grass --tmp-location XY --exec g.extension g.download.location --verbose
-        grass --tmp-location XY --exec g.download.location url=https://grass.osgeo.org/sampledata/north_carolina/nc_spm_08_grass7.tar.gz dbase=~ --verbose
+        grass --tmp-location XY --exec g.download.location url=https://grass.osgeo.org/sampledata/north_carolina/nc_spm_08_grass7.tar.gz path=~ --verbose
     - name: Run test (manually specified files)
       run: |
         cd testsuite/

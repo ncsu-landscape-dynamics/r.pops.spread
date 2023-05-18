@@ -1,21 +1,19 @@
-cff-version: 1.0.3
-message: If you use this software, please cite it using the references in the readme (this file is outdated).
+cff-version: 1.1.0
+message: If you use this software, please cite it using instructions in the readme file.
 authors:
   - family-names: Petras
     given-names: Vaclav
     orcid: https://orcid.org/0000-0001-5566-9236
   - family-names: Petrasova
     given-names: Anna
-    website: https://petrasovaa.github.io/
-  - family-names: Chen
-    given-names: Zexi
-    website: https://www.linkedin.com/in/zexi-chen/
-  - family-names: Tonini
-    given-names: Francesco
-    website: http://www.francescotonini.com/
+    orcid: https://orcid.org/0000-0002-5120-5538
+  - family-names: Jones
+    given-names: Chris M.
+    orcid: https://orcid.org/0000-0002-0229-2970
+  - family-names: Lawrimore
+    given-names: Margaret A.
+    orcid: https://orcid.org/0000-0003-2266-3588
+date-released: 2021-12-15
 title: r.pops.spread - PoPS model implemented as a GRASS GIS module
-version: 29074a1
-date-released: 2018-06-21
-url: https://grass.osgeo.org/grass74/manuals/addons/r.pops.spread.html
-repository-code: https://github.com/ncsu-landscape-dynamics/r.pops.spread
+version: 2.0.0
 license: GPL-2.0-or-later
