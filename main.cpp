@@ -1368,7 +1368,7 @@ int main(int argc, char* argv[])
     if (opt.treatment_app->answer)
         treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
     Treatments<Img, DImg> treatments(config.scheduler());
-    config.use_treatments = false;
+    config.use_treatments = true; // steering needs true here
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_date->answers[i_t]; i_t++) {
             DImg tr = raster_from_grass_float(opt.treatments->answers[i_t]);
@@ -1484,7 +1484,6 @@ int main(int argc, char* argv[])
     string ip = steering ? string(opt.ip_address->answer) : "";
     int port = steering ? atoi(opt.port->answer): 0;
     if (steering) {
-        config.use_treatments = true;
         client_thread = thread(steering_client, ref(c), ip, port, ref(steering_obj));
     }
 
