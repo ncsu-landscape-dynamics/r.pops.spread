@@ -935,6 +935,178 @@ class TestSpread(TestCase):
             raster="probability", reference=values, precision=0.001
         )
 
+    def test_sei_treatments_removal_ratio_to_all(self):
+        """Check outputs with SEI and treatment_length == 0"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            model_type="SEI",
+            latency_period=10,
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            treatments="treatment",
+            treatment_date="2020-12-01",
+            treatment_length=0,
+            treatment_application="ratio_to_all",
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end = end[:4]
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
+
+        # Final outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.405)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=10.163)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=6.087, mean=0.343)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+        test_date = "2021_12_31"
+        end_year = end[:4]
+
+        # Time-series outputs
+        values = dict(null_cells=0, min=0, max=18.0, mean=0.195)
+        self.assertRasterFitsUnivar(
+            raster=f"average_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=100, mean=5.357)
+        self.assertRasterFitsUnivar(
+            raster=f"probability_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.389, mean=0.147)
+        self.assertRasterFitsUnivar(
+            raster=f"stddev_{test_date}", reference=values, precision=0.001
+        )
+
+        # Single run outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.198)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=18, mean=0.405)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{end_year}_12_31", reference=values, precision=0.001
+        )
+
+    def test_sei_treatments_pesticide_ratio_to_all(self):
+        """Check outputs with SEI and treatment_length != 0 (pesticide)"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            model_type="SEI",
+            latency_period=10,
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            treatments="treatment",
+            treatment_date="2020-12-01",
+            treatment_length=500,
+            treatment_application="ratio_to_all",
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end = end[:4]
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
+
+        # Final outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.480)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=11.657)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=6.369, mean=0.388)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+        test_date = "2021_12_31"
+        end_year = end[:4]
+
+        # Time-series outputs
+        values = dict(null_cells=0, min=0, max=18.0, mean=0.218)
+        self.assertRasterFitsUnivar(
+            raster=f"average_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=100, mean=6.135)
+        self.assertRasterFitsUnivar(
+            raster=f"probability_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.276, mean=0.164)
+        self.assertRasterFitsUnivar(
+            raster=f"stddev_{test_date}", reference=values, precision=0.001
+        )
+
+        # Single run outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.221)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=18, mean=0.484)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{end_year}_12_31", reference=values, precision=0.001
+        )
+
     def test_outputs_sei_inf(self):
         """Test no change in infected in the first latency period.
 
