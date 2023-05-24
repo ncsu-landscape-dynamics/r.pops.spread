@@ -762,7 +762,9 @@ int main(int argc, char* argv[])
     opt.seeds->label = _("Seeds for isolated random number generators");
     opt.seeds->description = _(
         "Multiple seeds for separate processes as a list of pairs key=value (comma-separated). "
-        "Seeds must be provided for: ...");
+        "Seeds must be provided for: disperser_generation,natural_dispersal,"
+        "anthropogenic_dispersal,establishment,weather,movement,"
+        "overpopulation,survival_rate,soil");
     opt.seeds->guisection = _("Randomness");
 
     flg.generate_seed = G_define_flag();
