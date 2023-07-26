@@ -383,7 +383,7 @@ int main(int argc, char* argv[])
     opt.quarantine_directions->description =
         _("Comma separated directions to include"
           "in the quarantine direction analysis, e.g., 'N,E' "
-          "(by default all directions (N, S E, W) are considered)");
+          "(by default all directions (N, S, E, W) are considered)");
     opt.quarantine_directions->required = NO;
     opt.quarantine_directions->guisection = _("Output");
 
