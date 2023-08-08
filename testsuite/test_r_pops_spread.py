@@ -927,10 +927,119 @@ class TestSpread(TestCase):
             treatment_length=0,
             treatment_application="ratio_to_all",
         )
+        self.assertRasterExists(f"dead_2019_12_31")
+        self.assertRasterExists(f"dead_2020_12_31")
+        self.assertRasterExists(f"dead_2020_12_31")
+        self.assertRasterExists(f"dead_2022_12_31")
+
+        values = dict(null_cells=0, mean=0.028)
+        self.assertRasterFitsUnivar(
+            raster=f"dead_2019_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.089)
+        self.assertRasterFitsUnivar(
+            raster=f"dead_2020_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.234)
+        self.assertRasterFitsUnivar(
+            raster=f"dead_2021_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.537)
+        self.assertRasterFitsUnivar(
+            raster=f"dead_2022_12_31",
+            reference=values,
+            precision=0.12,
+        )
 
         values = dict(null_cells=0, min=0, max=6, mean=0.493)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
         values = dict(null_cells=0, min=0, max=100, mean=21.002)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+
+    def test_outputs_mortality_pesticide_treatment(self):
+        """Check mortality together with pesticide treatment (all_infected_in_cell)"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            mortality_frequency="yearly",
+            flags="m",
+            mortality_rate=0.5,
+            mortality_time_lag=0,
+            mortality_series="dead",
+            treatments="treatment",
+            treatment_date="2020-12-01",
+            treatment_length=1,
+            treatment_application="all_infected_in_cell",
+        )
+        self.assertRasterExists(f"dead_2019_12_31")
+        self.assertRasterExists(f"dead_2020_12_31")
+        self.assertRasterExists(f"dead_2020_12_31")
+        self.assertRasterExists(f"dead_2022_12_31")
+
+        values = dict(null_cells=0, mean=0.028)
+        self.assertRasterFitsUnivar(
+            raster=f"dead_2019_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.089)
+        self.assertRasterFitsUnivar(
+            raster=f"dead_2020_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.234)
+        self.assertRasterFitsUnivar(
+            raster=f"dead_2021_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.675)
+        self.assertRasterFitsUnivar(
+            raster=f"dead_2022_12_31",
+            reference=values,
+            precision=0.12,
+        )
+
+        values = dict(null_cells=0, min=0, max=5.6, mean=0.526)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=21.965)
         self.assertRasterFitsUnivar(
             raster="probability", reference=values, precision=0.001
         )
