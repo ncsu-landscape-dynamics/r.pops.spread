@@ -262,6 +262,7 @@ struct PoPSOptions
     struct Option *probability, *probability_series;
     struct Option* spread_rate_output;
     struct Option *quarantine, *quarantine_output, *quarantine_directions;
+    struct Option *dispersers_output, *established_dispersers_output;
     struct Option *output_frequency, *output_frequency_n;
 };
 
@@ -738,6 +739,20 @@ int main(int argc, char* argv[])
           " the anthropogenic dispersal kernel");
     opt.percent_natural_dispersal->options = "0-1";
     opt.percent_natural_dispersal->guisection = _("Dispersal");
+
+    opt.dispersers_output = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.dispersers_output->key = "dispersers_output";
+    opt.dispersers_output->label = _("Output raster of disperses");
+    opt.dispersers_output->description = _("Dispersers are accumulated over all steps and stochastic runs");
+    opt.dispersers_output->required = NO;
+    opt.dispersers_output->guisection = _("Output");
+
+    opt.established_dispersers_output = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.established_dispersers_output->key = "established_dispersers_output";
+    opt.established_dispersers_output->label = _("Output raster of established disperses");
+    opt.established_dispersers_output->description = _("Dispersers are accumulated over all steps and stochastic runs");
+    opt.established_dispersers_output->required = NO;
+    opt.established_dispersers_output->guisection = _("Output");
 
     opt.infected_to_dead_rate = G_define_option();
     opt.infected_to_dead_rate->type = TYPE_DOUBLE;
@@ -1274,6 +1289,9 @@ int main(int argc, char* argv[])
         established_dispersers.emplace_back(
             I_species_rast.rows(), I_species_rast.cols());
     }
+    std::vector<Img> dispersers_rasts(num_runs, Img(S_species_rast, 0));
+    std::vector<Img> established_dispersers_rasts(num_runs, Img(S_species_rast, 0));
+
     std::vector<std::vector<Img>> soil_reservoirs(
         use_soils ? num_runs : 0,
         std::vector<Img>(
@@ -1401,6 +1419,10 @@ int main(int argc, char* argv[])
                         Network<Img::IndexType>::null_network(),
                         suitable_cells);
                     ++weather_step;
+                    if (opt.dispersers_output->answer)
+                        dispersers_rasts[run] += dispersers[run];
+                    if (opt.established_dispersers_output->answer)
+                        established_dispersers_rasts[run] += established_dispersers[run];
                 }
             }
 
@@ -1604,6 +1626,31 @@ int main(int argc, char* argv[])
         fprintf(fp, "%s", output.c_str());
         G_close_option_file(fp);
     }
-
+    if (opt.dispersers_output->answer) {
+        DImg dispersers_rasts_sum(I_species_rast.rows(), I_species_rast.cols(), 0);
+        for (unsigned i = 0; i < num_runs; i++)
+            dispersers_rasts_sum += dispersers_rasts[i];
+        if (opt.dispersers_output->answer) {
+            // write final result
+            raster_to_grass(
+                        dispersers_rasts_sum,
+                        opt.dispersers_output->answer,
+                        "Sum of all dispersers",
+                        interval.end_date());
+        }
+    }
+    if (opt.established_dispersers_output->answer) {
+        DImg established_dispersers_rasts_sum(I_species_rast.rows(), I_species_rast.cols(), 0);
+        for (unsigned i = 0; i < num_runs; i++)
+            established_dispersers_rasts_sum += established_dispersers_rasts[i];
+        if (opt.established_dispersers_output->answer) {
+            // write final result
+            raster_to_grass(
+                        established_dispersers_rasts_sum,
+                        opt.established_dispersers_output->answer,
+                        "Sum of all established dispersers",
+                        interval.end_date());
+        }
+    }
     return 0;
 }

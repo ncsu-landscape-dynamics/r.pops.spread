@@ -191,7 +191,7 @@ class TestSpread(TestCase):
             "g.remove",
             flags="f",
             type="raster",
-            pattern="average*,single*,stddev*,probability*,dead*",
+            pattern="average*,single*,stddev*,probability*,dead*,*dispersers",
         )
 
     def test_outputs(self):
@@ -1405,6 +1405,53 @@ class TestSpread(TestCase):
         )
         # Even with multiple runs, stddev should be still zero.
         self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+    def test_outputs_dispersers(self):
+        """Check dead output of mortality"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            dispersers_output="dispersers",
+            established_dispersers_output="established_dispersers",
+        )
+        end = end[:4]
+        self.assertRasterExists("dispersers")
+        self.assertRasterExists("established_dispersers")
+
+        values = dict(null_cells=0, min=0, max=15530, mean=522.275)
+        self.assertRasterFitsUnivar(raster="dispersers", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=129, mean=8.833)
+        self.assertRasterFitsUnivar(
+            raster="established_dispersers", reference=values, precision=0.001
+        )
 
     def test_with_and_without_anthropogenic_dispersal_multiple_seeds(self):
         """Check that multiple seeds keep anthropogenic dispersal separate
