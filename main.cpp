@@ -1627,7 +1627,7 @@ int main(int argc, char* argv[])
         G_close_option_file(fp);
     }
     if (opt.dispersers_output->answer) {
-        DImg dispersers_rasts_sum(I_species_rast.rows(), I_species_rast.cols(), 0);
+        Img dispersers_rasts_sum(I_species_rast.rows(), I_species_rast.cols(), 0);
         for (unsigned i = 0; i < num_runs; i++)
             dispersers_rasts_sum += dispersers_rasts[i];
         if (opt.dispersers_output->answer) {
@@ -1640,7 +1640,7 @@ int main(int argc, char* argv[])
         }
     }
     if (opt.established_dispersers_output->answer) {
-        DImg established_dispersers_rasts_sum(I_species_rast.rows(), I_species_rast.cols(), 0);
+        Img established_dispersers_rasts_sum(I_species_rast.rows(), I_species_rast.cols(), 0);
         for (unsigned i = 0; i < num_runs; i++)
             established_dispersers_rasts_sum += established_dispersers_rasts[i];
         if (opt.established_dispersers_output->answer) {
