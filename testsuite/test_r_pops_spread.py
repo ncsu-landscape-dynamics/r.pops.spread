@@ -1442,12 +1442,13 @@ class TestSpread(TestCase):
             dispersers_output="dispersers",
             established_dispersers_output="established_dispersers",
         )
-        end = end[:4]
         self.assertRasterExists("dispersers")
         self.assertRasterExists("established_dispersers")
 
         values = dict(null_cells=0, min=0, max=15530, mean=522.275)
-        self.assertRasterFitsUnivar(raster="dispersers", reference=values, precision=0.001)
+        self.assertRasterFitsUnivar(
+            raster="dispersers", reference=values, precision=0.001
+        )
         values = dict(null_cells=0, min=0, max=129, mean=8.833)
         self.assertRasterFitsUnivar(
             raster="established_dispersers", reference=values, precision=0.001
