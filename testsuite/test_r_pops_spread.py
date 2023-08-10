@@ -927,32 +927,32 @@ class TestSpread(TestCase):
             treatment_length=0,
             treatment_application="ratio_to_all",
         )
-        self.assertRasterExists(f"dead_2019_12_31")
-        self.assertRasterExists(f"dead_2020_12_31")
-        self.assertRasterExists(f"dead_2020_12_31")
-        self.assertRasterExists(f"dead_2022_12_31")
+        self.assertRasterExists("dead_2019_12_31")
+        self.assertRasterExists("dead_2020_12_31")
+        self.assertRasterExists("dead_2021_12_31")
+        self.assertRasterExists("dead_2022_12_31")
 
         values = dict(null_cells=0, mean=0.028)
         self.assertRasterFitsUnivar(
-            raster=f"dead_2019_12_31",
+            raster="dead_2019_12_31",
             reference=values,
             precision=0.12,
         )
         values = dict(null_cells=0, mean=0.089)
         self.assertRasterFitsUnivar(
-            raster=f"dead_2020_12_31",
+            raster="dead_2020_12_31",
             reference=values,
             precision=0.12,
         )
         values = dict(null_cells=0, mean=0.234)
         self.assertRasterFitsUnivar(
-            raster=f"dead_2021_12_31",
+            raster="dead_2021_12_31",
             reference=values,
             precision=0.12,
         )
         values = dict(null_cells=0, mean=0.537)
         self.assertRasterFitsUnivar(
-            raster=f"dead_2022_12_31",
+            raster="dead_2022_12_31",
             reference=values,
             precision=0.12,
         )
@@ -1007,32 +1007,32 @@ class TestSpread(TestCase):
             treatment_length=1,
             treatment_application="all_infected_in_cell",
         )
-        self.assertRasterExists(f"dead_2019_12_31")
-        self.assertRasterExists(f"dead_2020_12_31")
-        self.assertRasterExists(f"dead_2020_12_31")
-        self.assertRasterExists(f"dead_2022_12_31")
+        self.assertRasterExists("dead_2019_12_31")
+        self.assertRasterExists("dead_2020_12_31")
+        self.assertRasterExists("dead_2021_12_31")
+        self.assertRasterExists("dead_2022_12_31")
 
         values = dict(null_cells=0, mean=0.028)
         self.assertRasterFitsUnivar(
-            raster=f"dead_2019_12_31",
+            raster="dead_2019_12_31",
             reference=values,
             precision=0.12,
         )
         values = dict(null_cells=0, mean=0.089)
         self.assertRasterFitsUnivar(
-            raster=f"dead_2020_12_31",
+            raster="dead_2020_12_31",
             reference=values,
             precision=0.12,
         )
         values = dict(null_cells=0, mean=0.234)
         self.assertRasterFitsUnivar(
-            raster=f"dead_2021_12_31",
+            raster="dead_2021_12_31",
             reference=values,
             precision=0.12,
         )
         values = dict(null_cells=0, mean=0.675)
         self.assertRasterFitsUnivar(
-            raster=f"dead_2022_12_31",
+            raster="dead_2022_12_31",
             reference=values,
             precision=0.12,
         )
