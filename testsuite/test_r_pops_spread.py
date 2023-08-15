@@ -22,6 +22,13 @@ def items_to_file(items, filename):
         file.write("\n".join(items))
 
 
+# Tests use dict function call because the syntax is simpler and there is
+# a lot values provided like that.
+# pylint: disable=use-dict-literal
+# We have one setup and many tests.
+# pylint: disable=too-many-lines,too-many-public-methods
+
+
 class TestSpread(TestCase):
     """Tests of r.pops.spread"""
 
@@ -190,7 +197,7 @@ class TestSpread(TestCase):
         self.runModule(
             "g.remove",
             flags="f",
-            type="raster",
+            type=["raster", "vector"],
             pattern="average*,single*,stddev*,probability*,dead*,*dispersers",
         )
 
@@ -1550,6 +1557,7 @@ class TestSpread(TestCase):
             nprocs=5,
             dispersers_output="dispersers",
             established_dispersers_output="established_dispersers",
+            outside_spores="outside_dispersers",
         )
         self.assertRasterExists("dispersers")
         self.assertRasterExists("established_dispersers")
@@ -1562,6 +1570,12 @@ class TestSpread(TestCase):
         self.assertRasterFitsUnivar(
             raster="established_dispersers", reference=values, precision=0.001
         )
+
+        self.assertVectorExists("outside_dispersers")
+        values = dict(level=2, num_dblinks=0)
+        self.assertVectorFitsExtendedInfo(vector="outside_dispersers", reference=values)
+        values = dict(points=129936, primitives=129936)
+        self.assertVectorFitsTopoInfo(vector="outside_dispersers", reference=values)
 
     def test_with_and_without_anthropogenic_dispersal_multiple_seeds(self):
         """Check that multiple seeds keep anthropogenic dispersal separate
