@@ -56,9 +56,6 @@ using std::isnan;
 
 using namespace pops;
 
-// TODO: for backwards compatibility, update eventually
-typedef Simulation<Img, DImg> Sporulation;
-
 #define DIM 1
 
 void fatal_option_required_for_value(struct Option* required, struct Option* given)
@@ -1076,7 +1073,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    // build the Sporulation object
+    // build the model object
     std::vector<Model<Img, DImg, int>> models;
     std::vector<Img> dispersers;
     std::vector<Img> established_dispersers;
