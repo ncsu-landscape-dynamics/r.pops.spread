@@ -18,6 +18,7 @@
 #include "graster.hpp"
 
 #include "pops/model.hpp"
+#include "pops/model_type.hpp"
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
 #include "pops/kernel.hpp"
@@ -26,6 +27,9 @@
 #include "pops/statistics.hpp"
 #include "pops/scheduling.hpp"
 #include "pops/quarantine.hpp"
+#include "pops/host_pool.hpp"
+#include "pops/pest_pool.hpp"
+#include "pops/multi_host_pool.hpp"
 
 extern "C" {
 #include <grass/gis.h>
@@ -1232,7 +1236,8 @@ int main(int argc, char* argv[])
     }
 
     // build the model object
-    std::vector<Model<Img, DImg, int>> models;
+    using SpreadModel = Model<Img, DImg, DImg::IndexType>;
+    std::vector<SpreadModel> models;
     std::vector<Img> dispersers;
     std::vector<Img> established_dispersers;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
@@ -1301,16 +1306,37 @@ int main(int argc, char* argv[])
     }
     std::vector<std::vector<std::tuple<int, int>>> outside_spores(num_runs);
 
-    // spread rate initialization
-
-    std::vector<SpreadRate<Img>> spread_rates(
+    SpreadModel::StandardSingleHostPool host_pool(
+        model_type_from_string(config.model_type),
+        S_species_rast,
+        exposed_vectors[0],
+        config.latency_period_steps,
+        I_species_rast,
+        total_exposed_rasts[0],
+        resistant_rasts[0],
+        mortality_tracker_vector[0],
+        dead_in_current_year[0],
+        species_rast,
+        models[0].environment(),
+        config.generate_stochasticity,
+        config.reproductive_rate,
+        config.establishment_stochasticity,
+        config.establishment_probability,
+        config.rows,
+        config.cols,
+        suitable_cells);
+    std::vector<SpreadModel::StandardSingleHostPool*> host_pools = {&host_pool};
+    SpreadModel::StandardMultiHostPool multi_host_pool(host_pools);
+    std::vector<SpreadRateAction<SpreadModel::StandardMultiHostPool, int>> spread_rates(
         num_runs,
-        SpreadRate<Img>(
-            I_species_rast,
-            window.ew_res,
-            window.ns_res,
-            config.use_spreadrates ? config.rate_num_steps() : 0,
-            suitable_cells));
+        SpreadRateAction<SpreadModel::StandardMultiHostPool, int>(
+            multi_host_pool,
+            config.rows,
+            config.cols,
+            config.ew_res,
+            config.ns_res,
+            config.use_spreadrates ? config.rate_num_steps() : 0
+            ));
     // Quarantine escape tracking
     Img quarantine_rast(S_species_rast, 0);
     if (config.use_quarantine)
@@ -1392,29 +1418,39 @@ int main(int argc, char* argv[])
                         models[run].environment().update_weather_coefficient(
                             weather_coefficients[weather_step]);
                     }
-                    models[run].run_step(
-                        step,
-                        inf_species_rasts[run],
+                    SpreadModel::StandardSingleHostPool host_pool(
+                        model_type_from_string(config.model_type),
                         sus_species_rasts[run],
-                        lvtree_rast,
-                        total_species_rasts[run],
-                        dispersers[run],
-                        established_dispersers[run],
-                        total_exposed_rasts[run],
                         exposed_vectors[run],
+                        config.latency_period_steps,
+                        inf_species_rasts[run],
+                        total_exposed_rasts[run],
+                        resistant_rasts[run],
                         mortality_tracker_vector[run],
                         dead_in_current_year[run],
+                        total_species_rasts[run],
+                        models[run].environment(),
+                        config.generate_stochasticity,
+                        config.reproductive_rate,
+                        config.establishment_stochasticity,
+                        config.establishment_probability,
+                        config.rows,
+                        config.cols,
+                        suitable_cells);
+                    std::vector<SpreadModel::StandardSingleHostPool*> host_pools = {&host_pool};
+                    SpreadModel::StandardMultiHostPool multi_host_pool(host_pools);
+                    PestPool<Img, DImg, int> pest_pool{
+                        dispersers[run], established_dispersers[run], outside_spores[run]};
+                    models[run].run_step(
+                        step,
+                        multi_host_pool,
+                        pest_pool,
+                        dispersers[run],
+                        lvtree_rast,
                         actual_temperatures,
                         survival_rates,
-                        treatments,
-                        resistant_rasts[run],
-                        outside_spores[run],
                         spread_rates[run],
-                        escape_infos[run],
-                        quarantine_rast,
-                        movements,
-                        Network<Img::IndexType>::null_network(),
-                        suitable_cells);
+                        Network<Img::IndexType>::null_network());
                     ++weather_step;
                     if (opt.dispersers_output->answer)
                         dispersers_rasts[run] += dispersers[run];
