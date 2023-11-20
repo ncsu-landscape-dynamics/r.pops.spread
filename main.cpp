@@ -1207,6 +1207,8 @@ int main(int argc, char* argv[])
             std::stod(opt.dispersers_to_soils->answer);
     }
 
+    using SpreadModel = Model<Img, DImg, DImg::IndexType>;
+
     // treatments
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_date)
         && get_num_answers(opt.treatment_date)
@@ -1221,7 +1223,7 @@ int main(int argc, char* argv[])
     TreatmentApplication treatment_app = TreatmentApplication::Ratio;
     if (opt.treatment_app->answer)
         treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
-    Treatments<Img, DImg> treatments(config.scheduler());
+    Treatments<SpreadModel::StandardSingleHostPool, DImg> treatments(config.scheduler());
     config.use_treatments = false;
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_date->answers[i_t]; i_t++) {
@@ -1236,7 +1238,6 @@ int main(int argc, char* argv[])
     }
 
     // build the model object
-    using SpreadModel = Model<Img, DImg, DImg::IndexType>;
     std::vector<SpreadModel> models;
     std::vector<Img> dispersers;
     std::vector<Img> established_dispersers;
@@ -1341,9 +1342,9 @@ int main(int argc, char* argv[])
     Img quarantine_rast(S_species_rast, 0);
     if (config.use_quarantine)
         quarantine_rast = raster_from_grass_integer(opt.quarantine->answer);
-    std::vector<QuarantineEscape<Img>> escape_infos(
+    std::vector<QuarantineEscapeAction<Img>> escape_infos(
         num_runs,
-        QuarantineEscape<Img>(
+        QuarantineEscapeAction<Img>(
             quarantine_rast,
             window.ew_res,
             window.ns_res,
@@ -1447,9 +1448,12 @@ int main(int argc, char* argv[])
                         pest_pool,
                         dispersers[run],
                         lvtree_rast,
+                        treatments,
                         actual_temperatures,
                         survival_rates,
                         spread_rates[run],
+                        escape_infos[run],
+                        quarantine_rast,
                         Network<Img::IndexType>::null_network());
                     ++weather_step;
                     if (opt.dispersers_output->answer)
