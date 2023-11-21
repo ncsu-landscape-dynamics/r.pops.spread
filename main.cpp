@@ -1454,6 +1454,7 @@ int main(int argc, char* argv[])
                         spread_rates[run],
                         escape_infos[run],
                         quarantine_rast,
+                        movements,
                         Network<Img::IndexType>::null_network());
                     ++weather_step;
                     if (opt.dispersers_output->answer)
