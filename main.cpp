@@ -1044,6 +1044,7 @@ int main(int argc, char* argv[])
                 ? std::stoi(opt.mortality_frequency_n->answer)
                 : 0;
     }
+    config.create_pest_host_use_table_from_parameters(1);
 
     if (opt.survival_rate_month->answer)
         config.survival_rate_month = std::stoi(opt.survival_rate_month->answer);
@@ -1311,29 +1312,57 @@ int main(int argc, char* argv[])
     }
     std::vector<std::vector<std::tuple<int, int>>> outside_spores(num_runs);
 
-    for (unsigned i = 0; i < num_runs; ++i) {
-        SpreadModel::StandardSingleHostPool host_pool(
-                    model_type_from_string(config.model_type),
-                    sus_species_rasts[i],
-                    exposed_vectors[i],
-                    config.latency_period_steps,
-                    inf_species_rasts[i],
-                    total_exposed_rasts[i],
-                    resistant_rasts[i],
-                    mortality_tracker_vector[i],
-                    dead_in_current_year[i],
-                    total_species_rasts[i],
-                    models[i].environment(),
-                    config.generate_stochasticity,
-                    config.reproductive_rate,
-                    config.establishment_stochasticity,
-                    config.establishment_probability,
-                    config.rows,
-                    config.cols,
-                    suitable_cells);
-        std::vector<SpreadModel::StandardSingleHostPool*> host_pools = {&host_pool};
-        multi_host_pools.emplace_back(host_pools);
-        pest_pools.emplace_back(dispersers[i], established_dispersers[i], outside_spores[i]);
+    // One host pool for each run (not multi-host case).
+    std::vector<std::unique_ptr<SpreadModel::StandardSingleHostPool>> host_pools;
+    host_pools.reserve(num_runs);
+    std::vector<
+        std::unique_ptr<pops::PestHostUseTable<SpreadModel::StandardSingleHostPool>>>
+        pest_host_use_tables;
+    pest_host_use_tables.reserve(num_runs);
+    std::vector<std::unique_ptr<
+        pops::CompetencyTable<SpreadModel::StandardSingleHostPool, Img::IndexType>>>
+        competency_tables;
+    competency_tables.reserve(num_runs);
+
+    for (unsigned run = 0; run < num_runs; ++run) {
+        pest_host_use_tables.emplace_back(
+            new pops::PestHostUseTable<SpreadModel::StandardSingleHostPool>(
+                config, models[run].environment()));
+        competency_tables.emplace_back(
+            new pops::
+                CompetencyTable<SpreadModel::StandardSingleHostPool, Img::IndexType>(
+                    config, models[run].environment()));
+
+        host_pools.emplace_back(new SpreadModel::StandardSingleHostPool(
+            model_type_from_string(config.model_type),
+            sus_species_rasts[run],
+            exposed_vectors[run],
+            config.latency_period_steps,
+            inf_species_rasts[run],
+            total_exposed_rasts[run],
+            resistant_rasts[run],
+            mortality_tracker_vector[run],
+            dead_in_current_year[run],
+            total_species_rasts[run],
+            models[run].environment(),
+            config.generate_stochasticity,
+            config.reproductive_rate,
+            config.establishment_stochasticity,
+            config.establishment_probability,
+            config.rows,
+            config.cols,
+            suitable_cells));
+        models[run].environment().add_host(host_pools[run].get());
+
+        competency_tables[run]->add_host_competencies({1}, 1);
+
+        std::vector<SpreadModel::StandardSingleHostPool*> tmp = {host_pools[run].get()};
+        multi_host_pools.emplace_back(tmp);
+        multi_host_pools[run].set_pest_host_use_table(*pest_host_use_tables[run]);
+        multi_host_pools[run].set_competency_table(*competency_tables[run]);
+
+        pest_pools.emplace_back(
+            dispersers[run], established_dispersers[run], outside_spores[run]);
     }
     std::vector<SpreadRateAction<SpreadModel::StandardMultiHostPool, int>> spread_rates(
         num_runs,
