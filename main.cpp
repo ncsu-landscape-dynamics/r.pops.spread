@@ -1357,7 +1357,7 @@ int main(int argc, char* argv[])
         competency_tables[run]->add_host_competencies({1}, 1);
 
         std::vector<SpreadModel::StandardSingleHostPool*> tmp = {host_pools[run].get()};
-        multi_host_pools.emplace_back(tmp);
+        multi_host_pools.emplace_back(tmp, config);
         multi_host_pools[run].set_pest_host_use_table(*pest_host_use_tables[run]);
         multi_host_pools[run].set_competency_table(*competency_tables[run]);
 
