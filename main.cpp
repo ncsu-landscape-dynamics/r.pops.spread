@@ -1322,8 +1322,8 @@ int main(int argc, char* argv[])
         std::unique_ptr<pops::PestHostUseTable<SpreadModel::StandardSingleHostPool>>>
         pest_host_use_tables;
     pest_host_use_tables.reserve(num_runs);
-    std::vector<std::unique_ptr<
-        pops::CompetencyTable<SpreadModel::StandardSingleHostPool, Img::IndexType>>>
+    std::vector<
+        std::unique_ptr<pops::CompetencyTable<SpreadModel::StandardSingleHostPool>>>
         competency_tables;
     competency_tables.reserve(num_runs);
 
@@ -1332,9 +1332,8 @@ int main(int argc, char* argv[])
             new pops::PestHostUseTable<SpreadModel::StandardSingleHostPool>(
                 config, models[run].environment()));
         competency_tables.emplace_back(
-            new pops::
-                CompetencyTable<SpreadModel::StandardSingleHostPool, Img::IndexType>(
-                    config, models[run].environment()));
+            new pops::CompetencyTable<SpreadModel::StandardSingleHostPool>(
+                config, models[run].environment()));
 
         host_pools.emplace_back(new SpreadModel::StandardSingleHostPool(
             model_type_from_string(config.model_type),
