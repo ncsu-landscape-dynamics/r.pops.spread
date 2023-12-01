@@ -1045,6 +1045,10 @@ int main(int argc, char* argv[])
                 : 0;
     }
     config.create_pest_host_table_from_parameters(1);
+    std::vector<std::vector<double>> competency_table_data;
+    competency_table_data.push_back({1, 1});
+    competency_table_data.push_back({0, 0});
+    config.read_competency_table(competency_table_data);
 
     if (opt.survival_rate_month->answer)
         config.survival_rate_month = std::stoi(opt.survival_rate_month->answer);
@@ -1355,8 +1359,6 @@ int main(int argc, char* argv[])
             config.cols,
             suitable_cells));
         models[run].environment().add_host(host_pools[run].get());
-
-        competency_tables[run]->add_host_competencies({1}, 1);
 
         std::vector<SpreadModel::StandardSingleHostPool*> tmp = {host_pools[run].get()};
         multi_host_pools.emplace_back(tmp, config);
