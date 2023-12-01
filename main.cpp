@@ -1293,9 +1293,12 @@ int main(int argc, char* argv[])
         catch (const std::invalid_argument& error) {
             G_fatal_error(_("Model configuration is invalid: %s"), error.what());
         }
-        dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
+        // For the model itself, this does not need to be initialized to 0 because the
+        // model only sets and then looks at suitable cells. However, the output is
+        // taken from all cells, so even the untouched cells need a value.
+        dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols(), 0);
         established_dispersers.emplace_back(
-            I_species_rast.rows(), I_species_rast.cols());
+            I_species_rast.rows(), I_species_rast.cols(), 0);
     }
     std::vector<Img> dispersers_rasts(num_runs, Img(S_species_rast, 0));
     std::vector<Img> established_dispersers_rasts(num_runs, Img(S_species_rast, 0));
