@@ -1462,7 +1462,6 @@ int main(int argc, char* argv[])
                         step,
                         multi_host_pools[run],
                         pest_pools[run],
-                        dispersers[run],
                         lvtree_rast,
                         treatments,
                         actual_temperatures,
