@@ -1044,7 +1044,7 @@ int main(int argc, char* argv[])
                 ? std::stoi(opt.mortality_frequency_n->answer)
                 : 0;
     }
-    config.create_pest_host_use_table_from_parameters(1);
+    config.create_pest_host_table_from_parameters(1);
 
     if (opt.survival_rate_month->answer)
         config.survival_rate_month = std::stoi(opt.survival_rate_month->answer);
@@ -1319,17 +1319,17 @@ int main(int argc, char* argv[])
     std::vector<std::unique_ptr<SpreadModel::StandardSingleHostPool>> host_pools;
     host_pools.reserve(num_runs);
     std::vector<
-        std::unique_ptr<pops::PestHostUseTable<SpreadModel::StandardSingleHostPool>>>
-        pest_host_use_tables;
-    pest_host_use_tables.reserve(num_runs);
+        std::unique_ptr<pops::PestHostTable<SpreadModel::StandardSingleHostPool>>>
+        pest_host_tables;
+    pest_host_tables.reserve(num_runs);
     std::vector<
         std::unique_ptr<pops::CompetencyTable<SpreadModel::StandardSingleHostPool>>>
         competency_tables;
     competency_tables.reserve(num_runs);
 
     for (unsigned run = 0; run < num_runs; ++run) {
-        pest_host_use_tables.emplace_back(
-            new pops::PestHostUseTable<SpreadModel::StandardSingleHostPool>(
+        pest_host_tables.emplace_back(
+            new pops::PestHostTable<SpreadModel::StandardSingleHostPool>(
                 config, models[run].environment()));
         competency_tables.emplace_back(
             new pops::CompetencyTable<SpreadModel::StandardSingleHostPool>(
@@ -1360,7 +1360,7 @@ int main(int argc, char* argv[])
 
         std::vector<SpreadModel::StandardSingleHostPool*> tmp = {host_pools[run].get()};
         multi_host_pools.emplace_back(tmp, config);
-        multi_host_pools[run].set_pest_host_use_table(*pest_host_use_tables[run]);
+        multi_host_pools[run].set_pest_host_table(*pest_host_tables[run]);
         multi_host_pools[run].set_competency_table(*competency_tables[run]);
 
         pest_pools.emplace_back(
