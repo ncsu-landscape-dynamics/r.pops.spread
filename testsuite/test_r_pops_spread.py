@@ -831,6 +831,75 @@ class TestSpread(TestCase):
             raster=f"dead_{end}_12_31", reference=values, precision=0.001
         )
 
+    def test_outputs_mortality_enabled_rate_0(self):
+        """Check with mortality rate 0 (values copied from basic outputs test)"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            flags="m",
+            mortality_rate=0,
+            mortality_time_lag=0,
+            mortality_series="dead",
+            mortality_frequency="yearly",
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end = end[:4]
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
+
+        ref_float = dict(datatype="DCELL")
+        ref_int = dict(datatype="CELL")
+        self.assertRasterFitsInfo(raster="average", reference=ref_float)
+        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
+        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
+        self.assertRasterFitsInfo(raster=f"single_{end}_12_31", reference=ref_int)
+        self.assertRasterFitsInfo(raster=f"average_{end}_12_31", reference=ref_float)
+        self.assertRasterFitsInfo(
+            raster=f"probability_{end}_12_31", reference=ref_float
+        )
+        self.assertRasterFitsInfo(raster=f"stddev_{end}_12_31", reference=ref_float)
+
+        values = dict(null_cells=0, min=0, max=18, mean=1.777)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=33.664)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=7.547, mean=0.945)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
     def test_outputs_mortality_many_runs(self):
         """Check mortality with many stochastic runs"""
         start = "2019-01-01"
