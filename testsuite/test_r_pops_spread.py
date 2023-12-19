@@ -146,11 +146,12 @@ class TestSpread(TestCase):
         cls.runModule("g.region", raster="lsat7_2002_30", res=85.5, flags="a")
         cls.runModule(
             "r.circle",
-            output="infected_patch",
+            output="raw_infected_patch",
             coordinates=[639300, 220900],
             max=100,
             flags="b",
         )
+        gs.mapcalc("infected_patch = min(raw_infected_patch, host)", superquiet=True)
         cls.runModule(
             "g.region",
             n="n-800",
@@ -187,6 +188,7 @@ class TestSpread(TestCase):
                 "zero",
                 "quarantine",
                 "infected_patch",
+                "raw_infected_patch",
                 *cls.weather_names,
                 *cls.weather_stddev_names,
             ],
