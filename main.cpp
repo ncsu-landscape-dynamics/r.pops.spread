@@ -744,14 +744,17 @@ int main(int argc, char* argv[])
     opt.dispersers_output = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.dispersers_output->key = "dispersers_output";
     opt.dispersers_output->label = _("Output raster of disperses");
-    opt.dispersers_output->description = _("Dispersers are accumulated over all steps and stochastic runs");
+    opt.dispersers_output->description =
+        _("Dispersers are accumulated over all steps and stochastic runs");
     opt.dispersers_output->required = NO;
     opt.dispersers_output->guisection = _("Output");
 
     opt.established_dispersers_output = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.established_dispersers_output->key = "established_dispersers_output";
-    opt.established_dispersers_output->label = _("Output raster of established disperses");
-    opt.established_dispersers_output->description = _("Dispersers are accumulated over all steps and stochastic runs");
+    opt.established_dispersers_output->label =
+        _("Output raster of established disperses");
+    opt.established_dispersers_output->description =
+        _("Dispersers are accumulated over all steps and stochastic runs");
     opt.established_dispersers_output->required = NO;
     opt.established_dispersers_output->guisection = _("Output");
 
@@ -1228,7 +1231,8 @@ int main(int argc, char* argv[])
     TreatmentApplication treatment_app = TreatmentApplication::Ratio;
     if (opt.treatment_app->answer)
         treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
-    Treatments<SpreadModel::StandardSingleHostPool, DImg> treatments(config.scheduler());
+    Treatments<SpreadModel::StandardSingleHostPool, DImg> treatments(
+        config.scheduler());
     config.use_treatments = false;
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_date->answers[i_t]; i_t++) {
@@ -1374,8 +1378,7 @@ int main(int argc, char* argv[])
             config.cols,
             config.ew_res,
             config.ns_res,
-            config.use_spreadrates ? config.rate_num_steps() : 0
-            ));
+            config.use_spreadrates ? config.rate_num_steps() : 0));
     // Quarantine escape tracking
     Img quarantine_rast(S_species_rast, 0);
     if (config.use_quarantine)
@@ -1475,7 +1478,8 @@ int main(int argc, char* argv[])
                     if (opt.dispersers_output->answer)
                         dispersers_rasts[run] += dispersers[run];
                     if (opt.established_dispersers_output->answer)
-                        established_dispersers_rasts[run] += established_dispersers[run];
+                        established_dispersers_rasts[run] +=
+                            established_dispersers[run];
                 }
             }
 
@@ -1686,23 +1690,24 @@ int main(int argc, char* argv[])
         if (opt.dispersers_output->answer) {
             // write final result
             raster_to_grass(
-                        dispersers_rasts_sum,
-                        opt.dispersers_output->answer,
-                        "Sum of all dispersers",
-                        interval.end_date());
+                dispersers_rasts_sum,
+                opt.dispersers_output->answer,
+                "Sum of all dispersers",
+                interval.end_date());
         }
     }
     if (opt.established_dispersers_output->answer) {
-        Img established_dispersers_rasts_sum(I_species_rast.rows(), I_species_rast.cols(), 0);
+        Img established_dispersers_rasts_sum(
+            I_species_rast.rows(), I_species_rast.cols(), 0);
         for (unsigned i = 0; i < num_runs; i++)
             established_dispersers_rasts_sum += established_dispersers_rasts[i];
         if (opt.established_dispersers_output->answer) {
             // write final result
             raster_to_grass(
-                        established_dispersers_rasts_sum,
-                        opt.established_dispersers_output->answer,
-                        "Sum of all established dispersers",
-                        interval.end_date());
+                established_dispersers_rasts_sum,
+                opt.established_dispersers_output->answer,
+                "Sum of all established dispersers",
+                interval.end_date());
         }
     }
     return 0;
