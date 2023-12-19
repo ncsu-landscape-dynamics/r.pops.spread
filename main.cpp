@@ -1358,8 +1358,6 @@ int main(int argc, char* argv[])
             config.rows,
             config.cols,
             suitable_cells));
-        models[run].environment().add_host(host_pools[run].get());
-
         std::vector<SpreadModel::StandardSingleHostPool*> tmp = {host_pools[run].get()};
         multi_host_pools.emplace_back(tmp, config);
         multi_host_pools[run].set_pest_host_table(*pest_host_tables[run]);
