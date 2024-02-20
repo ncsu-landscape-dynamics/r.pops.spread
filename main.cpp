@@ -18,6 +18,7 @@
 #include "graster.hpp"
 
 #include "pops/model.hpp"
+#include "pops/model_type.hpp"
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
 #include "pops/kernel.hpp"
@@ -26,6 +27,9 @@
 #include "pops/statistics.hpp"
 #include "pops/scheduling.hpp"
 #include "pops/quarantine.hpp"
+#include "pops/host_pool.hpp"
+#include "pops/pest_pool.hpp"
+#include "pops/multi_host_pool.hpp"
 
 extern "C" {
 #include <grass/gis.h>
@@ -55,9 +59,6 @@ using std::round;
 using std::isnan;
 
 using namespace pops;
-
-// TODO: for backwards compatibility, update eventually
-typedef Simulation<Img, DImg> Sporulation;
 
 #define DIM 1
 
@@ -743,14 +744,17 @@ int main(int argc, char* argv[])
     opt.dispersers_output = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.dispersers_output->key = "dispersers_output";
     opt.dispersers_output->label = _("Output raster of disperses");
-    opt.dispersers_output->description = _("Dispersers are accumulated over all steps and stochastic runs");
+    opt.dispersers_output->description =
+        _("Dispersers are accumulated over all steps and stochastic runs");
     opt.dispersers_output->required = NO;
     opt.dispersers_output->guisection = _("Output");
 
     opt.established_dispersers_output = G_define_standard_option(G_OPT_R_OUTPUT);
     opt.established_dispersers_output->key = "established_dispersers_output";
-    opt.established_dispersers_output->label = _("Output raster of established disperses");
-    opt.established_dispersers_output->description = _("Dispersers are accumulated over all steps and stochastic runs");
+    opt.established_dispersers_output->label =
+        _("Output raster of established disperses");
+    opt.established_dispersers_output->description =
+        _("Dispersers are accumulated over all steps and stochastic runs");
     opt.established_dispersers_output->required = NO;
     opt.established_dispersers_output->guisection = _("Output");
 
@@ -1043,6 +1047,11 @@ int main(int argc, char* argv[])
                 ? std::stoi(opt.mortality_frequency_n->answer)
                 : 0;
     }
+    config.create_pest_host_table_from_parameters(1);
+    std::vector<std::vector<double>> competency_table_data;
+    competency_table_data.push_back({1, 1});
+    competency_table_data.push_back({0, 0});
+    config.read_competency_table(competency_table_data);
 
     if (opt.survival_rate_month->answer)
         config.survival_rate_month = std::stoi(opt.survival_rate_month->answer);
@@ -1206,6 +1215,8 @@ int main(int argc, char* argv[])
             std::stod(opt.dispersers_to_soils->answer);
     }
 
+    using SpreadModel = Model<Img, DImg, DImg::IndexType>;
+
     // treatments
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_date)
         && get_num_answers(opt.treatment_date)
@@ -1220,7 +1231,8 @@ int main(int argc, char* argv[])
     TreatmentApplication treatment_app = TreatmentApplication::Ratio;
     if (opt.treatment_app->answer)
         treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
-    Treatments<Img, DImg> treatments(config.scheduler());
+    Treatments<SpreadModel::StandardSingleHostPool, DImg> treatments(
+        config.scheduler());
     config.use_treatments = false;
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_date->answers[i_t]; i_t++) {
@@ -1234,8 +1246,8 @@ int main(int argc, char* argv[])
         }
     }
 
-    // build the Sporulation object
-    std::vector<Model<Img, DImg, int>> models;
+    // build the model object
+    std::vector<SpreadModel> models;
     std::vector<Img> dispersers;
     std::vector<Img> established_dispersers;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
@@ -1243,6 +1255,8 @@ int main(int argc, char* argv[])
     std::vector<Img> total_species_rasts(num_runs, species_rast);
     std::vector<Img> resistant_rasts(num_runs, Img(S_species_rast, 0));
     std::vector<Img> total_exposed_rasts(num_runs, Img(S_species_rast, 0));
+    std::vector<SpreadModel::StandardMultiHostPool> multi_host_pools;
+    std::vector<PestPool<Img, DImg, int>> pest_pools;
 
     // We always create at least one exposed for simplicity, but we
     // could also just leave it empty.
@@ -1265,6 +1279,8 @@ int main(int argc, char* argv[])
     Img accumulated_dead(Img(S_species_rast, 0));
 
     models.reserve(num_runs);
+    multi_host_pools.reserve(num_runs);
+    pest_pools.reserve(num_runs);
     dispersers.reserve(num_runs);
     established_dispersers.reserve(num_runs);
     auto tmp_seeds = config.random_seeds;
@@ -1285,9 +1301,12 @@ int main(int argc, char* argv[])
         catch (const std::invalid_argument& error) {
             G_fatal_error(_("Model configuration is invalid: %s"), error.what());
         }
-        dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
+        // For the model itself, this does not need to be initialized to 0 because the
+        // model only sets and then looks at suitable cells. However, the output is
+        // taken from all cells, so even the untouched cells need a value.
+        dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols(), 0);
         established_dispersers.emplace_back(
-            I_species_rast.rows(), I_species_rast.cols());
+            I_species_rast.rows(), I_species_rast.cols(), 0);
     }
     std::vector<Img> dispersers_rasts(num_runs, Img(S_species_rast, 0));
     std::vector<Img> established_dispersers_rasts(num_runs, Img(S_species_rast, 0));
@@ -1304,28 +1323,75 @@ int main(int argc, char* argv[])
     }
     std::vector<std::vector<std::tuple<int, int>>> outside_spores(num_runs);
 
-    // spread rate initialization
+    // One host pool for each run (not multi-host case).
+    std::vector<std::unique_ptr<SpreadModel::StandardSingleHostPool>> host_pools;
+    host_pools.reserve(num_runs);
+    std::vector<
+        std::unique_ptr<pops::PestHostTable<SpreadModel::StandardSingleHostPool>>>
+        pest_host_tables;
+    pest_host_tables.reserve(num_runs);
+    std::vector<
+        std::unique_ptr<pops::CompetencyTable<SpreadModel::StandardSingleHostPool>>>
+        competency_tables;
+    competency_tables.reserve(num_runs);
 
-    std::vector<SpreadRate<Img>> spread_rates(
-        num_runs,
-        SpreadRate<Img>(
-            I_species_rast,
-            window.ew_res,
-            window.ns_res,
-            config.use_spreadrates ? config.rate_num_steps() : 0,
+    for (unsigned run = 0; run < num_runs; ++run) {
+        pest_host_tables.emplace_back(
+            new pops::PestHostTable<SpreadModel::StandardSingleHostPool>(
+                config, models[run].environment()));
+        competency_tables.emplace_back(
+            new pops::CompetencyTable<SpreadModel::StandardSingleHostPool>(
+                config, models[run].environment()));
+
+        host_pools.emplace_back(new SpreadModel::StandardSingleHostPool(
+            model_type_from_string(config.model_type),
+            sus_species_rasts[run],
+            exposed_vectors[run],
+            config.latency_period_steps,
+            inf_species_rasts[run],
+            total_exposed_rasts[run],
+            resistant_rasts[run],
+            mortality_tracker_vector[run],
+            dead_in_current_year[run],
+            total_species_rasts[run],
+            models[run].environment(),
+            config.generate_stochasticity,
+            config.reproductive_rate,
+            config.establishment_stochasticity,
+            config.establishment_probability,
+            config.rows,
+            config.cols,
             suitable_cells));
+        std::vector<SpreadModel::StandardSingleHostPool*> tmp = {host_pools[run].get()};
+        multi_host_pools.emplace_back(tmp, config);
+        multi_host_pools[run].set_pest_host_table(*pest_host_tables[run]);
+        multi_host_pools[run].set_competency_table(*competency_tables[run]);
+
+        pest_pools.emplace_back(
+            dispersers[run], established_dispersers[run], outside_spores[run]);
+    }
+    std::vector<SpreadRateAction<SpreadModel::StandardMultiHostPool, int>> spread_rates(
+        num_runs,
+        SpreadRateAction<SpreadModel::StandardMultiHostPool, int>(
+            multi_host_pools[0],
+            config.rows,
+            config.cols,
+            config.ew_res,
+            config.ns_res,
+            config.use_spreadrates ? config.rate_num_steps() : 0));
     // Quarantine escape tracking
     Img quarantine_rast(S_species_rast, 0);
     if (config.use_quarantine)
         quarantine_rast = raster_from_grass_integer(opt.quarantine->answer);
-    std::vector<QuarantineEscape<Img>> escape_infos(
+    std::vector<QuarantineEscapeAction<Img>> escape_infos(
         num_runs,
-        QuarantineEscape<Img>(
+        QuarantineEscapeAction<Img>(
             quarantine_rast,
             window.ew_res,
             window.ns_res,
             config.use_quarantine ? config.quarantine_num_steps() : 0,
             config.quarantine_directions));
+
     // Unused movements
     std::vector<std::vector<int>> movements;
 
@@ -1397,32 +1463,23 @@ int main(int argc, char* argv[])
                     }
                     models[run].run_step(
                         step,
-                        inf_species_rasts[run],
-                        sus_species_rasts[run],
+                        multi_host_pools[run],
+                        pest_pools[run],
                         lvtree_rast,
-                        total_species_rasts[run],
-                        dispersers[run],
-                        established_dispersers[run],
-                        total_exposed_rasts[run],
-                        exposed_vectors[run],
-                        mortality_tracker_vector[run],
-                        dead_in_current_year[run],
+                        treatments,
                         actual_temperatures,
                         survival_rates,
-                        treatments,
-                        resistant_rasts[run],
-                        outside_spores[run],
                         spread_rates[run],
                         escape_infos[run],
                         quarantine_rast,
                         movements,
-                        Network<Img::IndexType>::null_network(),
-                        suitable_cells);
+                        Network<Img::IndexType>::null_network());
                     ++weather_step;
                     if (opt.dispersers_output->answer)
                         dispersers_rasts[run] += dispersers[run];
                     if (opt.established_dispersers_output->answer)
-                        established_dispersers_rasts[run] += established_dispersers[run];
+                        established_dispersers_rasts[run] +=
+                            established_dispersers[run];
                 }
             }
 
@@ -1633,23 +1690,24 @@ int main(int argc, char* argv[])
         if (opt.dispersers_output->answer) {
             // write final result
             raster_to_grass(
-                        dispersers_rasts_sum,
-                        opt.dispersers_output->answer,
-                        "Sum of all dispersers",
-                        interval.end_date());
+                dispersers_rasts_sum,
+                opt.dispersers_output->answer,
+                "Sum of all dispersers",
+                interval.end_date());
         }
     }
     if (opt.established_dispersers_output->answer) {
-        Img established_dispersers_rasts_sum(I_species_rast.rows(), I_species_rast.cols(), 0);
+        Img established_dispersers_rasts_sum(
+            I_species_rast.rows(), I_species_rast.cols(), 0);
         for (unsigned i = 0; i < num_runs; i++)
             established_dispersers_rasts_sum += established_dispersers_rasts[i];
         if (opt.established_dispersers_output->answer) {
             // write final result
             raster_to_grass(
-                        established_dispersers_rasts_sum,
-                        opt.established_dispersers_output->answer,
-                        "Sum of all established dispersers",
-                        interval.end_date());
+                established_dispersers_rasts_sum,
+                opt.established_dispersers_output->answer,
+                "Sum of all established dispersers",
+                interval.end_date());
         }
     }
     return 0;
