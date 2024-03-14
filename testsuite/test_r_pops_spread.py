@@ -1010,29 +1010,43 @@ class TestSpread(TestCase):
         self.assertRasterExists("dead_2021_12_31")
         self.assertRasterExists("dead_2022_12_31")
 
-        values = dict(null_cells=0, mean=0.028)
+        values = dict(null_cells=0, mean=0.028, sum=782)
         self.assertRasterFitsUnivar(
             raster="dead_2019_12_31",
             reference=values,
             precision=0.12,
         )
-        values = dict(null_cells=0, mean=0.089)
+        values = dict(null_cells=0, mean=0.089, sum=2483)
         self.assertRasterFitsUnivar(
             raster="dead_2020_12_31",
             reference=values,
             precision=0.12,
         )
-        values = dict(null_cells=0, mean=0.234)
+        values = dict(null_cells=0, mean=0.234, sum=6552)
         self.assertRasterFitsUnivar(
             raster="dead_2021_12_31",
             reference=values,
             precision=0.12,
         )
-        values = dict(null_cells=0, mean=0.537)
+        values = dict(null_cells=0, mean=0.537, sum=15037)
         self.assertRasterFitsUnivar(
             raster="dead_2022_12_31",
             reference=values,
             precision=0.12,
+        )
+
+        precision = 0.1
+        self.assertRasterFitsUnivar(
+            raster="single_2019_12_31", reference=dict(sum=1469), precision=precision
+        )
+        self.assertRasterFitsUnivar(
+            raster="single_2020_12_31", reference=dict(sum=3231), precision=precision
+        )
+        self.assertRasterFitsUnivar(
+            raster="single_2021_12_31", reference=dict(sum=7310), precision=precision
+        )
+        self.assertRasterFitsUnivar(
+            raster="single_2022_12_31", reference=dict(sum=14260), precision=precision
         )
 
         values = dict(null_cells=0, min=0, max=6, mean=0.493)
