@@ -23,7 +23,6 @@ jobs:
         include:
         - version: main
         - version: releasebranch_8_4
-        - version: releasebranch_8_2
       fail-fast: false
 
     runs-on: ubuntu-24.04
