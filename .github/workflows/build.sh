@@ -35,8 +35,6 @@ cd grass
     --with-cxx \
     --with-zstd \
     --with-bzlib \
-    --with-blas \
-    --with-lapack \
     --with-readline \
     --with-openmp \
     --with-pthread \
@@ -48,6 +46,7 @@ cd grass
     --with-sqlite \
     --with-fftw \
     --with-netcdf \
+    --without-opengl \
     --without-pdal
 
 make
