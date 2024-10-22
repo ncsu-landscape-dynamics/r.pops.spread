@@ -46,6 +46,7 @@ cd grass
     --with-sqlite \
     --with-fftw \
     --with-netcdf \
+    --without-opengl \
     --without-pdal
 
 make
