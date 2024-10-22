@@ -22,14 +22,11 @@ jobs:
       matrix:
         include:
         - version: main
-          command: grass
+        - version: releasebranch_8_4
         - version: releasebranch_8_2
-          command: grass
-        - version: releasebranch_8_0
-          command: grass
       fail-fast: false
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v1
@@ -61,11 +58,6 @@ jobs:
     - name: Add the bin directory to PATH
       run: |
         echo "$HOME/install/bin" >> $GITHUB_PATH
-    - name: Make simple grass command available
-      run: |
-        if [ ! -f "$HOME/install/bin/grass" ]; then
-          ln -s "$HOME/install/bin/${{ matrix.command }}" "$HOME/install/bin/grass"
-        fi
     - name: Get GRASS GIS version
       run: |
         grass --version
@@ -78,10 +70,6 @@ jobs:
       with:
         path: nc_spm_08_grass7
         key: ${{ runner.os }}-nc_spm_08_grass7
-    - name: Get data download tool for v7 (g.download.location)
-      if: steps.cache-nc_spm_08_grass7.outputs.cache-hit != 'true' && matrix.version == 'releasebranch_7_8'
-      run: |
-        grass --tmp-location XY --exec g.extension g.download.location --verbose
     - name: Get sample data for testing (NC SPM sample location)
       if: steps.cache-nc_spm_08_grass7.outputs.cache-hit != 'true'
       run: |
