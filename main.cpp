@@ -18,6 +18,7 @@
 #include "graster.hpp"
 
 #include "pops/model.hpp"
+#include "pops/model_type.hpp"
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
 #include "pops/kernel.hpp"
@@ -1343,9 +1344,10 @@ int main(int argc, char* argv[])
                 config, models[run].environment()));
 
         host_pools.emplace_back(new SpreadModel::StandardSingleHostPool(
-            config,
+            model_type_from_string(config.model_type),
             sus_species_rasts[run],
             exposed_vectors[run],
+            config.latency_period_steps,
             inf_species_rasts[run],
             total_exposed_rasts[run],
             resistant_rasts[run],
@@ -1353,6 +1355,12 @@ int main(int argc, char* argv[])
             dead_in_current_year[run],
             total_species_rasts[run],
             models[run].environment(),
+            config.generate_stochasticity,
+            config.reproductive_rate,
+            config.establishment_stochasticity,
+            config.establishment_probability,
+            config.rows,
+            config.cols,
             suitable_cells));
         std::vector<SpreadModel::StandardSingleHostPool*> tmp = {host_pools[run].get()};
         multi_host_pools.emplace_back(tmp, config);
