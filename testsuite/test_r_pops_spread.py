@@ -822,13 +822,13 @@ class TestSpread(TestCase):
         end = end[:4]
         self.assertRasterExists(f"dead_{end}_12_31")
 
-        values = dict(null_cells=0, min=0, max=6, mean=0.606)
+        values = dict(null_cells=0, min=0, max=4.2, mean=0.145)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=24.961)
+        values = dict(null_cells=0, min=0, max=100, mean=8.032)
         self.assertRasterFitsUnivar(
             raster="probability", reference=values, precision=0.001
         )
-        values = dict(null_cells=0, min=0, max=15, mean=0.703)
+        values = dict(null_cells=0, min=0, max=16, mean=0.456)
         self.assertRasterFitsUnivar(
             raster=f"dead_{end}_12_31", reference=values, precision=0.001
         )
@@ -945,17 +945,20 @@ class TestSpread(TestCase):
         end_for_name = end[:4]
         self.assertRasterExists(f"dead_{end_for_name}_12_31")
 
-        # The reference values were obtained from a run with 100 stochastic runs
-        # with seed 1 and 3 non-zero digits were kept. The precision was chosen
+        # The original reference values were obtained from a run with 100 stochastic
+        # runs with seed 1 and 3 non-zero digits were kept. The precision was chosen
         # so that 100 additional runs with 1 stochastic run and different seeds
         # than the original set would each still pass the test.
-        values = dict(null_cells=0, mean=0.653)
+        # After mortality rounding, the reference values were simply replaced by the
+        # new results, but the precision was kept the same. 100 additional runs still
+        # pass the test.
+        values = dict(null_cells=0, mean=0.143)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.14)
-        values = dict(null_cells=0, mean=25.9)
+        values = dict(null_cells=0, mean=7.9)
         self.assertRasterFitsUnivar(
             raster="probability", reference=values, precision=4.0
         )
-        values = dict(null_cells=0, mean=0.681)
+        values = dict(null_cells=0, mean=0.456)
         self.assertRasterFitsUnivar(
             raster=f"dead_{end_for_name}_12_31",
             reference=values,
@@ -1010,25 +1013,25 @@ class TestSpread(TestCase):
         self.assertRasterExists("dead_2021_12_31")
         self.assertRasterExists("dead_2022_12_31")
 
-        values = dict(null_cells=0, mean=0.028, sum=782)
+        values = dict(null_cells=0, mean=0.028, sum=1196)
         self.assertRasterFitsUnivar(
             raster="dead_2019_12_31",
             reference=values,
             precision=0.12,
         )
-        values = dict(null_cells=0, mean=0.089, sum=2483)
+        values = dict(null_cells=0, mean=0.089, sum=2937)
         self.assertRasterFitsUnivar(
             raster="dead_2020_12_31",
             reference=values,
             precision=0.12,
         )
-        values = dict(null_cells=0, mean=0.234, sum=6552)
+        values = dict(null_cells=0, mean=0.234, sum=5345)
         self.assertRasterFitsUnivar(
             raster="dead_2021_12_31",
             reference=values,
             precision=0.12,
         )
-        values = dict(null_cells=0, mean=0.537, sum=15037)
+        values = dict(null_cells=0, mean=0.309, sum=8636)
         self.assertRasterFitsUnivar(
             raster="dead_2022_12_31",
             reference=values,
@@ -1037,21 +1040,21 @@ class TestSpread(TestCase):
 
         precision = 0.1
         self.assertRasterFitsUnivar(
-            raster="single_2019_12_31", reference=dict(sum=1469), precision=precision
+            raster="single_2019_12_31", reference=dict(sum=1055), precision=precision
         )
         self.assertRasterFitsUnivar(
-            raster="single_2020_12_31", reference=dict(sum=3231), precision=precision
+            raster="single_2020_12_31", reference=dict(sum=1236), precision=precision
         )
         self.assertRasterFitsUnivar(
-            raster="single_2021_12_31", reference=dict(sum=7310), precision=precision
+            raster="single_2021_12_31", reference=dict(sum=1605), precision=precision
         )
         self.assertRasterFitsUnivar(
-            raster="single_2022_12_31", reference=dict(sum=14260), precision=precision
+            raster="single_2022_12_31", reference=dict(sum=2097), precision=precision
         )
 
-        values = dict(null_cells=0, min=0, max=6, mean=0.493)
+        values = dict(null_cells=0, min=0, max=3.4, mean=0.103)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=21.002)
+        values = dict(null_cells=0, min=0, max=100, mean=5.848)
         self.assertRasterFitsUnivar(
             raster="probability", reference=values, precision=0.001
         )
@@ -1122,16 +1125,16 @@ class TestSpread(TestCase):
             reference=values,
             precision=0.12,
         )
-        values = dict(null_cells=0, mean=0.675)
+        values = dict(null_cells=0, mean=0.327)
         self.assertRasterFitsUnivar(
             raster="dead_2022_12_31",
             reference=values,
             precision=0.12,
         )
 
-        values = dict(null_cells=0, min=0, max=5.6, mean=0.526)
+        values = dict(null_cells=0, min=0, max=3.4, mean=0.111)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=21.965)
+        values = dict(null_cells=0, min=0, max=100, mean=6.160)
         self.assertRasterFitsUnivar(
             raster="probability", reference=values, precision=0.001
         )
