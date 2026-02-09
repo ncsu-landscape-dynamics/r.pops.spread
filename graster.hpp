@@ -1,5 +1,5 @@
 /*
- * PoPS model - Reading and writing GRASS GIS rasters as Raster
+ * PoPS model - Reading and writing GRASS rasters as Raster
  *
  * Copyright (C) 2019 by the authors.
  *
@@ -29,7 +29,7 @@ extern "C" {
 #include <string>
 #include <type_traits>
 
-/** Convert pops::Date to GRASS GIS TimeStamp */
+/** Convert pops::Date to GRASS TimeStamp */
 void date_to_grass(pops::Date date, struct TimeStamp* timestamp)
 {
     struct DateTime date_time;
@@ -80,7 +80,7 @@ inline bool grass_raster_is_null_value(const CELL* value)
     return Rast_is_c_null_value(value);
 }
 
-/** Set a value to zero (0) if it is null (GRASS GIS NULL) */
+/** Set a value to zero (0) if it is null (GRASS NULL) */
 template<typename Number>
 inline void set_null_to_zero(Number* value)
 {
@@ -146,7 +146,7 @@ enum class NullOutputPolicy
 // point in doing any conversions, so using it as default.
 constexpr auto DefaultNullOutputPolicy = NullOutputPolicy::NoConversions;
 
-/** Read a GRASS GIS raster map to the Raster
+/** Read a GRASS raster map to the Raster
  *
  * The caller is required to specify the type of the raster as a
  * template parameter:
@@ -155,7 +155,7 @@ constexpr auto DefaultNullOutputPolicy = NullOutputPolicy::NoConversions;
  * raster_from_grass<double>(name)
  * ````
  *
- * Given the types of GRASS GIS raster maps, it supports only
+ * Given the types of GRASS raster maps, it supports only
  * int, float, and double (CELL, FCELL, and DCELL).
  */
 template<typename Number>
@@ -190,7 +190,7 @@ inline pops::Raster<Number> raster_from_grass(
     return raster_from_grass<Number>(name.c_str(), null_policy);
 }
 
-/** Converts type to GRASS GIS raster map type identifier.
+/** Converts type to GRASS raster map type identifier.
  *
  * Use `::value` to obtain the map type identifier.
  * When conversion is not possible, compile error about `value` not
@@ -201,25 +201,25 @@ struct GrassRasterMapType
 {
 };
 
-/** Specialization for GRASS GIS raster map type convertor */
+/** Specialization for GRASS raster map type convertor */
 template<>
 struct GrassRasterMapType<CELL> : std::integral_constant<RASTER_MAP_TYPE, CELL_TYPE>
 {
 };
 
-/** Specialization for GRASS GIS raster map type convertor */
+/** Specialization for GRASS raster map type convertor */
 template<>
 struct GrassRasterMapType<FCELL> : std::integral_constant<RASTER_MAP_TYPE, FCELL_TYPE>
 {
 };
 
-/** Specialization for GRASS GIS raster map type convertor */
+/** Specialization for GRASS raster map type convertor */
 template<>
 struct GrassRasterMapType<DCELL> : std::integral_constant<RASTER_MAP_TYPE, DCELL_TYPE>
 {
 };
 
-/** Write a Raster to a GRASS GIS raster map.
+/** Write a Raster to a GRASS raster map.
  *
  * When used, the template is resolved based on the parameter.
  */
@@ -286,7 +286,7 @@ inline void raster_to_grass(
 
 /** Overload of raster_to_grass()
  *
- * Converts PoPS date to GRASS GIS timestamp.
+ * Converts PoPS date to GRASS timestamp.
  */
 template<typename Number>
 inline void raster_to_grass(
@@ -315,7 +315,7 @@ typedef int Integer;
 // cost when using const char* as it would be if we use
 // const std::string& as parameter while supporting both.
 
-/** Wrapper to read GRASS GIS raster into floating point Raster */
+/** Wrapper to read GRASS raster into floating point Raster */
 template<typename String>
 inline pops::Raster<Float> raster_from_grass_float(
     String name, NullInputPolicy null_policy = DefaultNullInputPolicy)
@@ -323,7 +323,7 @@ inline pops::Raster<Float> raster_from_grass_float(
     return raster_from_grass<Float>(name, null_policy);
 }
 
-/** Wrapper to read GRASS GIS raster into integer type Raster */
+/** Wrapper to read GRASS raster into integer type Raster */
 template<typename String>
 inline pops::Raster<Integer> raster_from_grass_integer(
     String name, NullInputPolicy null_policy = DefaultNullInputPolicy)

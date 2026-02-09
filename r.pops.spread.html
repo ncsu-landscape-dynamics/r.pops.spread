@@ -1,6 +1,6 @@
 <h2>DESCRIPTION</h2>
 
-Module <em>r.pops.spread</em>
+Tool <em>r.pops.spread</em>
 is a dynamic species distribution model for pest or pathogen spread in forest
 or agricultural ecosystems. The model is process based
 meaning that it uses understanding of the effect of weather on reproduction
@@ -17,7 +17,7 @@ spread of the pest or pathogen into the future using simulation.
 <h3>About the model</h3>
 
 <p>
-The module is using the PoPS Core library which is implementing
+The tool is using the PoPS Core library which is implementing
 the PoPS model and it is a central part of the
 <a href="https://popsmodel.org/">Pest or Pathogen Spread (PoPS)</a> project.
 
@@ -38,18 +38,18 @@ version of the model was written in R, later with Rcpp (Tonini, 2017),
 and was based on Meentemeyer (2011) paper.
 
 <p>
-The current implementation of the GRASS GIS module is using PoPS Core
+The current implementation of the GRASS tool is using PoPS Core
 header-only C++ library which implements the PoPS model.
 The primary development of
 <a href="https://github.com/ncsu-landscape-dynamics/pops-core">PoPS Core</a>
 and of
-<a href="https://github.com/ncsu-landscape-dynamics/r.pops.spread">this module</a>
+<a href="https://github.com/ncsu-landscape-dynamics/r.pops.spread">this tool</a>
 happens in a
-separate repositories and GRASS GIS Addons repository contains the latest
+separate repositories and GRASS Addons repository contains the latest
 release of the model.
 An alternative
 <a href="https://github.com/ncsu-landscape-dynamics/r.pops.spread/tree/steering">steering version</a>
-of this module exists which includes a set of
+of this tool exists which includes a set of
 features supporting geospatial simulation steering (Petrasova, 2020)
 which is useful for exploring adaptive management scenarios.
 
@@ -72,7 +72,7 @@ a given use case is to go through one of the available tutorials.
 
 Typically, the model needs to be calibrated.
 You can obtain the calibration from a published work,
-colleague, calibrate the model manually (in GRASS GIS),
+colleague, calibrate the model manually (in GRASS),
 or use the R interface to PoPS called
 <a href="https://github.com/ncsu-landscape-dynamics/rpops">rpops</a>
 which has dedicated functions for calibration.
@@ -86,7 +86,7 @@ The directions of wind consider north (N) to be grid north, if your
 true north is different direction, you need to make an adjustment.
 
 <li>
-The module currently does not handle NULL (no data) as input, so you
+The tool currently does not handle NULL (no data) as input, so you
 need to change the NULLs to (most likely) zeros, for example:
 <code>r.null map=infection null=0</code>.
 
@@ -187,7 +187,7 @@ r.pops.spread host=host total_plants=all infected=infected_2005 \
 
 <h2>REFERENCES</h2>
 
-To cite this module, please refer to
+To cite this tool, please refer to
 <a href="https://github.com/ncsu-landscape-dynamics/r.pops.spread#how-to-cite">How to cite</a>
 section in the readme file.
 

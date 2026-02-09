@@ -23,7 +23,7 @@ BRANCH="$3"
 
 cd $WORKDIR
 
-# GRASS GIS
+# GRASS build
 
 git clone https://github.com/OSGeo/grass.git --branch "$BRANCH" --depth=1
 
