@@ -1128,8 +1128,8 @@ int main(int argc, char* argv[])
     if (flg.mortality->answer) {
         if (config.mortality_time_lag > num_mortality_steps) {
             G_fatal_error(
-                _("%s is too large (%d). It must be smaller or "
-                  " equal than number of simulation years (%d)."),
+                _("%s is too large (%d). It must be smaller than "
+                  " or equal to the number of simulation years (%d)."),
                 opt.first_year_to_die->key,
                 config.mortality_time_lag,
                 num_mortality_steps);
