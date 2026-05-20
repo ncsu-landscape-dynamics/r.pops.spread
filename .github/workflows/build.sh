@@ -55,7 +55,7 @@ make install
 # Delete the source code.
 # The source code should not be needed anymore and
 # it may cause problems when it is in the same directory used further
-# for the compilation of the module itself
+# for the compilation of the tool itself
 # (e.g., g.extension will recurse to it).
 cd ..
 rm -rf grass

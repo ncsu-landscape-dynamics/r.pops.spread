@@ -32,7 +32,7 @@ header-only C++ library which implements the PoPS model. The primary
 development of [PoPS
 Core](https://github.com/ncsu-landscape-dynamics/pops-core) and of [this
 tool](https://github.com/ncsu-landscape-dynamics/r.pops.spread)
-happens in a separate repositories and GRASS Addons repository
+happens in separate repositories and GRASS Addons repository
 contains the latest release of the model. An alternative [steering
 version](https://github.com/ncsu-landscape-dynamics/r.pops.spread/tree/steering)
 of this tool exists which includes a set of features supporting
