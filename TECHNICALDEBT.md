@@ -108,4 +108,4 @@ optionally linked in an entry.
 - Some of the Date class methods have still misleading names (e.g.,
   increased versus increase).
 - Methods and functions should use underscores not camel case (using
-  Python and GRASS GIS convention).
+  Python and GRASS convention).

@@ -1,4 +1,4 @@
-name: CI with latest GRASS GIS
+name: CI with latest GRASS
 
 on:
   push:
@@ -48,16 +48,16 @@ jobs:
     - name: Set number of cores for compilation
       run: |
         echo "MAKEFLAGS=-j$(nproc)" >> $GITHUB_ENV
-    - name: Set LD_LIBRARY_PATH for GRASS GIS compilation
+    - name: Set LD_LIBRARY_PATH for GRASS compilation
       run: |
         echo "LD_LIBRARY_PATH=$HOME/install/lib" >> $GITHUB_ENV
-    - name: Get and build GRASS GIS
+    - name: Get and build GRASS
       run: |
         .github/workflows/build.sh /tmp $HOME/install ${{ matrix.version }}
     - name: Add the bin directory to PATH
       run: |
         echo "$HOME/install/bin" >> $GITHUB_PATH
-    - name: Get GRASS GIS version
+    - name: Get GRASS version
       run: |
         grass --version
     - name: Install the module
