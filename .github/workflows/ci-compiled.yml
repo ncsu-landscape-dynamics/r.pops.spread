@@ -22,6 +22,7 @@ jobs:
       matrix:
         include:
         - version: main
+        - version: releasebranch_8_5
         - version: releasebranch_8_4
       fail-fast: false
 
