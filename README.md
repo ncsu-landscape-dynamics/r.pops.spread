@@ -2,19 +2,19 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5160178.svg)](https://doi.org/10.5281/zenodo.5160178)
 
-This is a GRASS GIS module *r.pops.spread* for simulating spread of
-pests and pathogens. The module is a GRASS GIS interface to the PoPS
+This is a GRASS tool *r.pops.spread* for simulating spread of
+pests and pathogens. The tool is a GRASS interface to the PoPS
 (Pest or Pathogen Spread) model implemented in C++ library maintained
 in the [PoPS Core repository](https://github.com/ncsu-landscape-dynamics/pops-core).
 
-The purpose of the *r.pops.spread* module is to provide easy way of
-running the model in GRASS GIS environment once you have calibrated
+The purpose of the *r.pops.spread* tool is to provide easy way of
+running the model in GRASS environment once you have calibrated
 the model for your purposes. You can obtain the calibration from a
 colleague or published work or you can calibrate the model manually (in
-GRASS GIS) or use the R interface to PoPS called
+GRASS) or use the R interface to PoPS called
 [rpops](https://github.com/ncsu-landscape-dynamics/rpops) to do that.
 
-Note: Earlier versions of this module were called *r.spread.pest* and
+Note: Earlier versions of this tool were called *r.spread.pest* and
 *r.spread.sod*.
 
 ## How to cite
@@ -42,7 +42,7 @@ In addition to citing the above paper, we also encourage you to
 reference, link, and/or acknowledge specific version of the software
 you are using, for example:
 
-* *We have used r.pops.spread GRASS module version 1.0.2 from
+* *We have used r.pops.spread GRASS tool version 1.0.2 from
   <https://github.com/ncsu-landscape-dynamics/r.pops.spread>
   [DOI: 10.5281/zenodo.5160179](https://doi.org/10.5281/zenodo.5160179)*.
 
@@ -53,8 +53,8 @@ You can find the DOI for the specific version you are using at
 
 ### Download and install
 
-The latest release of the *r.pops.spread* module is available in GRASS GIS Addons repository
-and can be installed directly in GRASS GIS through graphical user
+The latest release of the *r.pops.spread* tool is available in GRASS Addons repository
+and can be installed directly in GRASS through graphical user
 interface or using the following command:
 
 ```
@@ -149,7 +149,7 @@ Compile:
 
     grass --tmp-location XY --exec g.extension module=r.pops.spread url=.
 
-Run (assuming you checked how to create a GRASS GIS mapset with our data):
+Run (assuming you checked how to create a GRASS mapset with our data):
 
     grass .../modeling/scenario1 --exec r.pops.spread ...
 

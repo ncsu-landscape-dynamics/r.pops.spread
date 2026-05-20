@@ -1012,7 +1012,7 @@ int main(int argc, char* argv[])
             std::stod(opt.percent_natural_dispersal->answer);
 
     // warn about limits to backwards compatibility
-    // "none" is consistent with other GRASS GIS modules
+    // "none" is consistent with other GRASS tools
     warn_about_depreciated_option_value(opt.natural_direction, "NONE", "none");
     warn_about_depreciated_option_value(opt.anthro_kernel, "NONE", "none");
     warn_about_depreciated_option_value(opt.anthro_direction, "NONE", "none");
