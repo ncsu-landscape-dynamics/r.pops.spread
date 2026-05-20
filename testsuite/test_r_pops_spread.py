@@ -834,7 +834,11 @@ class TestSpread(TestCase):
         )
 
     def test_outputs_mortality_time_lag(self):
-        """Check dead output of mortality with mortality time lag"""
+        """Check dead output of mortality with mortality time lag
+
+        Lag keeps hosts alive longer to spread the disease, giving more
+        infection and fewer dead hosts than lag=0 (test_outputs_mortality).
+        """
         start = "2019-01-01"
         end = "2022-12-31"
         self.assertModule(
