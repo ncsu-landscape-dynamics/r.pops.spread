@@ -33,7 +33,8 @@ git clone https://github.com/OSGeo/grass.git --branch "$BRANCH" --depth=1
 
 cd grass
 
-# GRASS build with CMake. The set of enabled features mirrors build.sh.
+# GRASS build with CMake. The enabled features mirror build.sh (Autotools).
+# CMake makes each enabled WITH_* a required dependency, so unused defaults are off.
 cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
@@ -52,7 +53,12 @@ cmake -S . -B build \
     -DWITH_PDAL=OFF \
     -DWITH_GUI=OFF \
     -DWITH_DOCS=OFF \
-    -DWITH_NLS=OFF
+    -DWITH_NLS=OFF \
+    -DWITH_X11=OFF \
+    -DWITH_CAIRO=OFF \
+    -DWITH_POSTGRES=OFF \
+    -DWITH_CBLAS=OFF \
+    -DWITH_LAPACKE=OFF
 
 cmake --build build
 cmake --install build
