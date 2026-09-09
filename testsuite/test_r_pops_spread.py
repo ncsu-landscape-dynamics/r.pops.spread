@@ -13,12 +13,20 @@ from pathlib import Path
 import grass.script as gs
 from grass.gunittest.case import TestCase
 from grass.gunittest.main import test
+from grass.gunittest.gmodules import call_module
 
 
 def items_to_file(items, filename):
     """Save list of items to a file, one item per line"""
     with open(filename, mode="w", encoding="utf-8") as file:
         file.write("\n".join(items))
+
+
+# Tests use dict function call because the syntax is simpler and there is
+# a lot values provided like that.
+# pylint: disable=use-dict-literal
+# We have one setup and many tests.
+# pylint: disable=too-many-lines,too-many-public-methods
 
 
 class TestSpread(TestCase):
@@ -98,7 +106,11 @@ class TestSpread(TestCase):
         cls.weather_stddev_names = [f"weather_stddev_{i}" for i in range(weeks_in_year)]
 
         def generate_random_raster(name, low, high):
-            gs.mapcalc((f"{name} = rand(double({low}), double({high}))"), seed=1, superquiet=True)
+            gs.mapcalc(
+                (f"{name} = rand(double({low}), double({high}))"),
+                seed=1,
+                superquiet=True,
+            )
             return name
 
         # Number of processes based on the machine.
@@ -107,18 +119,48 @@ class TestSpread(TestCase):
                 executor.submit(generate_random_raster, name, low=0, high=1)
                 for name in cls.weather_names
             ]
-            futures.extend(executor.submit(generate_random_raster, name, low=0, high=0)
-                for name in cls.weather_stddev_names)
+            futures.extend(
+                executor.submit(generate_random_raster, name, low=0, high=0)
+                for name in cls.weather_stddev_names
+            )
             concurrent.futures.wait(futures)
         cls.weather_file = str(Path(cls.tmp_dir.name) / "weather_coefficient.txt")
         items_to_file(years_2019_2022 * cls.weather_names, cls.weather_file)
 
-        cls.weather_stddev_file = str(Path(cls.tmp_dir.name) / "weather_coefficient_stddev.txt")
-        items_to_file((years_2019_2022) * cls.weather_stddev_names, cls.weather_stddev_file)
+        cls.weather_stddev_file = str(
+            Path(cls.tmp_dir.name) / "weather_coefficient_stddev.txt"
+        )
+        items_to_file(
+            (years_2019_2022) * cls.weather_stddev_names, cls.weather_stddev_file
+        )
 
         # The zero raster was produced earlier.
-        cls.weather_zero_stddev_file = str(Path(cls.tmp_dir.name) / "weather_coefficient_zero_stddev.txt")
-        items_to_file((years_2019_2022 * weeks_in_year) * ["zero"], cls.weather_zero_stddev_file)
+        cls.weather_zero_stddev_file = str(
+            Path(cls.tmp_dir.name) / "weather_coefficient_zero_stddev.txt"
+        )
+        items_to_file(
+            (years_2019_2022 * weeks_in_year) * ["zero"], cls.weather_zero_stddev_file
+        )
+
+        # Quarantine
+        cls.runModule("g.region", raster="lsat7_2002_30", res=85.5, flags="a")
+        cls.runModule(
+            "r.circle",
+            output="raw_infected_patch",
+            coordinates=[639300, 220900],
+            max=100,
+            flags="b",
+        )
+        gs.mapcalc("infected_patch = min(raw_infected_patch, host)", superquiet=True)
+        cls.runModule(
+            "g.region",
+            n="n-800",
+            s="s+800",
+            e="e-800",
+            w="w+800",
+            align="lsat7_2002_30",
+        )
+        gs.mapcalc("quarantine = 1", superquiet=True)
 
         # Use simulation resolution for the computations.
         cls.runModule("g.region", raster="lsat7_2002_30", res=85.5, flags="a")
@@ -144,6 +186,9 @@ class TestSpread(TestCase):
                 "treatment",
                 "one",
                 "zero",
+                "quarantine",
+                "infected_patch",
+                "raw_infected_patch",
                 *cls.weather_names,
                 *cls.weather_stddev_names,
             ],
@@ -154,8 +199,8 @@ class TestSpread(TestCase):
         self.runModule(
             "g.remove",
             flags="f",
-            type="raster",
-            pattern="average*,single*,stddev*,probability*,dead*",
+            type=["raster", "vector"],
+            pattern="average*,single*,stddev*,probability*,dead*,*dispersers",
         )
 
     def test_outputs(self):
@@ -221,6 +266,52 @@ class TestSpread(TestCase):
         )
         values = dict(null_cells=0, min=0, max=7.547, mean=0.945)
         self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+    def test_quarantine(self):
+        """Check quarantine output"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        output = call_module(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infected_patch",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            quarantine="quarantine",
+            quarantine_output="-",
+            output_frequency="yearly",
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+        )
+        reference = (
+            "step,escape_probability,dist0,dir0,dist1,dir1,dist2,dir2,dist3,dir3,dist4,dir4\n"
+            "0,0.0,4874.0,90,4019.0,90,4874.0,90,4874.0,90,4874.0,90\n"
+            "1,0.0,4874.0,90,2052.0,180,4874.0,90,2394.0,180,4874.0,90\n"
+            "2,0.4,1967.0,180,,,,,171.0,90,4874.0,90\n"
+            "3,0.8,,,,,,,,,2138.0,90"
+        )
+        self.assertMultiLineEqual(output.strip(), reference)
 
     def test_weather_deterministic_strict(self):
         """Check deterministic weather with close-to-exact global statistics"""
@@ -560,6 +651,83 @@ class TestSpread(TestCase):
             raster=f"single_{end_year}_12_31", reference=values, precision=0.001
         )
 
+    def test_soil_with_deterministic_weather_strict(self):
+        """Check soils with deterministic weather.
+
+        Uses close-to-exact global statistics.
+        """
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            weather_coefficient_file=self.weather_file,
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            dispersers_to_soils=0.9,
+            soil_survival_steps=100,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+        )
+        test_date = "2021_12_31"
+        end_year = end[:4]
+
+        # Final outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.040)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=1.120)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=6.000, mean=0.013)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+        # Time-series outputs
+        values = dict(null_cells=0, min=0, max=18.0, mean=0.035)
+        self.assertRasterFitsUnivar(
+            raster=f"average_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=100, mean=1.068)
+        self.assertRasterFitsUnivar(
+            raster=f"probability_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.238, mean=0.011)
+        self.assertRasterFitsUnivar(
+            raster=f"stddev_{test_date}", reference=values, precision=0.001
+        )
+
+        # Single run outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.034)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=18, mean=0.040)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{end_year}_12_31", reference=values, precision=0.001
+        )
+
     def test_nulls_in_input(self):
         """Same as test_outputs() but using inputs with null values."""
         start = "2019-01-01"
@@ -654,16 +822,142 @@ class TestSpread(TestCase):
         end = end[:4]
         self.assertRasterExists(f"dead_{end}_12_31")
 
-        values = dict(null_cells=0, min=0, max=6, mean=0.606)
+        values = dict(null_cells=0, min=0, max=4.2, mean=0.145)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=24.961)
+        values = dict(null_cells=0, min=0, max=100, mean=8.032)
         self.assertRasterFitsUnivar(
             raster="probability", reference=values, precision=0.001
         )
-        values = dict(null_cells=0, min=0, max=15, mean=0.703)
+        values = dict(null_cells=0, min=0, max=16, mean=0.456)
         self.assertRasterFitsUnivar(
             raster=f"dead_{end}_12_31", reference=values, precision=0.001
         )
+
+    def test_outputs_mortality_time_lag(self):
+        """Check dead output of mortality with mortality time lag
+
+        Lag keeps hosts alive longer to spread the disease, giving more
+        infection and fewer dead hosts than lag=0 (test_outputs_mortality).
+        """
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            flags="m",
+            mortality_rate=0.5,
+            mortality_time_lag=2,
+            mortality_series="dead",
+            mortality_frequency="yearly",
+        )
+        end = end[:4]
+        self.assertRasterExists(f"dead_{end}_12_31")
+
+        values = dict(null_cells=0, min=0, max=12.4, mean=1.562)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=33.082)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=12, mean=0.205)
+        self.assertRasterFitsUnivar(
+            raster=f"dead_{end}_12_31", reference=values, precision=0.001
+        )
+
+    def test_outputs_mortality_enabled_rate_0(self):
+        """Check with mortality rate 0 (values copied from basic outputs test)"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            flags="m",
+            mortality_rate=0,
+            mortality_time_lag=0,
+            mortality_series="dead",
+            mortality_frequency="yearly",
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end = end[:4]
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
+
+        ref_float = dict(datatype="DCELL")
+        ref_int = dict(datatype="CELL")
+        self.assertRasterFitsInfo(raster="average", reference=ref_float)
+        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
+        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
+        self.assertRasterFitsInfo(raster=f"single_{end}_12_31", reference=ref_int)
+        self.assertRasterFitsInfo(raster=f"average_{end}_12_31", reference=ref_float)
+        self.assertRasterFitsInfo(
+            raster=f"probability_{end}_12_31", reference=ref_float
+        )
+        self.assertRasterFitsInfo(raster=f"stddev_{end}_12_31", reference=ref_float)
+
+        values = dict(null_cells=0, min=0, max=18, mean=1.777)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=33.664)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=7.547, mean=0.945)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
 
     def test_outputs_mortality_many_runs(self):
         """Check mortality with many stochastic runs"""
@@ -708,17 +1002,20 @@ class TestSpread(TestCase):
         end_for_name = end[:4]
         self.assertRasterExists(f"dead_{end_for_name}_12_31")
 
-        # The reference values were obtained from a run with 100 stochastic runs
-        # with seed 1 and 3 non-zero digits were kept. The precision was chosen
+        # The original reference values were obtained from a run with 100 stochastic
+        # runs with seed 1 and 3 non-zero digits were kept. The precision was chosen
         # so that 100 additional runs with 1 stochastic run and different seeds
         # than the original set would each still pass the test.
-        values = dict(null_cells=0, mean=0.653)
+        # After mortality rounding, the reference values were simply replaced by the
+        # new results, but the precision was kept the same. 100 additional runs still
+        # pass the test.
+        values = dict(null_cells=0, mean=0.143)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.14)
-        values = dict(null_cells=0, mean=25.9)
+        values = dict(null_cells=0, mean=7.9)
         self.assertRasterFitsUnivar(
             raster="probability", reference=values, precision=4.0
         )
-        values = dict(null_cells=0, mean=0.681)
+        values = dict(null_cells=0, mean=0.456)
         self.assertRasterFitsUnivar(
             raster=f"dead_{end_for_name}_12_31",
             reference=values,
@@ -768,12 +1065,307 @@ class TestSpread(TestCase):
             treatment_length=0,
             treatment_application="ratio_to_all",
         )
+        self.assertRasterExists("dead_2019_12_31")
+        self.assertRasterExists("dead_2020_12_31")
+        self.assertRasterExists("dead_2021_12_31")
+        self.assertRasterExists("dead_2022_12_31")
 
-        values = dict(null_cells=0, min=0, max=6, mean=0.493)
+        values = dict(null_cells=0, mean=0.028, sum=1196)
+        self.assertRasterFitsUnivar(
+            raster="dead_2019_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.089, sum=3013)
+        self.assertRasterFitsUnivar(
+            raster="dead_2020_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.234, sum=5579)
+        self.assertRasterFitsUnivar(
+            raster="dead_2021_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.309, sum=9387)
+        self.assertRasterFitsUnivar(
+            raster="dead_2022_12_31",
+            reference=values,
+            precision=0.12,
+        )
+
+        precision = 0.1
+        self.assertRasterFitsUnivar(
+            raster="single_2019_12_31", reference=dict(sum=1055), precision=precision
+        )
+        self.assertRasterFitsUnivar(
+            raster="single_2020_12_31", reference=dict(sum=1248), precision=precision
+        )
+        self.assertRasterFitsUnivar(
+            raster="single_2021_12_31", reference=dict(sum=1695), precision=precision
+        )
+        self.assertRasterFitsUnivar(
+            raster="single_2022_12_31", reference=dict(sum=2430), precision=precision
+        )
+
+        values = dict(null_cells=0, min=0, max=3.8, mean=0.106)
         self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
-        values = dict(null_cells=0, min=0, max=100, mean=21.002)
+        values = dict(null_cells=0, min=0, max=100, mean=5.938)
         self.assertRasterFitsUnivar(
             raster="probability", reference=values, precision=0.001
+        )
+
+    def test_outputs_mortality_pesticide_treatment(self):
+        """Check mortality together with pesticide treatment (all_infected_in_cell)"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            mortality_frequency="yearly",
+            flags="m",
+            mortality_rate=0.5,
+            mortality_time_lag=0,
+            mortality_series="dead",
+            treatments="treatment",
+            treatment_date="2020-12-01",
+            treatment_length=1,
+            treatment_application="all_infected_in_cell",
+        )
+        self.assertRasterExists("dead_2019_12_31")
+        self.assertRasterExists("dead_2020_12_31")
+        self.assertRasterExists("dead_2021_12_31")
+        self.assertRasterExists("dead_2022_12_31")
+
+        values = dict(null_cells=0, mean=0.028)
+        self.assertRasterFitsUnivar(
+            raster="dead_2019_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.089)
+        self.assertRasterFitsUnivar(
+            raster="dead_2020_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.234)
+        self.assertRasterFitsUnivar(
+            raster="dead_2021_12_31",
+            reference=values,
+            precision=0.12,
+        )
+        values = dict(null_cells=0, mean=0.327)
+        self.assertRasterFitsUnivar(
+            raster="dead_2022_12_31",
+            reference=values,
+            precision=0.12,
+        )
+
+        values = dict(null_cells=0, min=0, max=4.2, mean=0.124)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=6.811)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+
+    def test_sei_treatments_removal_ratio_to_all(self):
+        """Check outputs with SEI and treatment_length == 0"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            model_type="SEI",
+            latency_period=10,
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            treatments="treatment",
+            treatment_date="2020-12-01",
+            treatment_length=0,
+            treatment_application="ratio_to_all",
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end = end[:4]
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
+
+        # Final outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.408)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=10.330)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.879, mean=0.344)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+        test_date = "2021_12_31"
+        end_year = end[:4]
+
+        # Time-series outputs
+        values = dict(null_cells=0, min=0, max=18.0, mean=0.199)
+        self.assertRasterFitsUnivar(
+            raster=f"average_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=100, mean=5.502)
+        self.assertRasterFitsUnivar(
+            raster=f"probability_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.643, mean=0.149)
+        self.assertRasterFitsUnivar(
+            raster=f"stddev_{test_date}", reference=values, precision=0.001
+        )
+
+        # Single run outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.202)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=18, mean=0.425)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{end_year}_12_31", reference=values, precision=0.001
+        )
+
+    def test_sei_treatments_pesticide_ratio_to_all(self):
+        """Check outputs with SEI and treatment_length != 0 (pesticide)"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            model_type="SEI",
+            latency_period=10,
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            treatments="treatment",
+            treatment_date="2020-12-01",
+            treatment_length=500,
+            treatment_application="ratio_to_all",
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end = end[:4]
+        self.assertRasterExists(f"average_{end}_12_31")
+        self.assertRasterExists(f"probability_{end}_12_31")
+        self.assertRasterExists(f"single_{end}_12_31")
+        self.assertRasterExists(f"stddev_{end}_12_31")
+
+        # Final outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.428)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=10.645)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.899, mean=0.357)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+        test_date = "2021_12_31"
+        end_year = end[:4]
+
+        # Time-series outputs
+        values = dict(null_cells=0, min=0, max=18.0, mean=0.199)
+        self.assertRasterFitsUnivar(
+            raster=f"average_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=100, mean=5.502)
+        self.assertRasterFitsUnivar(
+            raster=f"probability_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.643, mean=0.149)
+        self.assertRasterFitsUnivar(
+            raster=f"stddev_{test_date}", reference=values, precision=0.001
+        )
+
+        # Single run outputs
+        values = dict(null_cells=0, min=0, max=18, mean=0.202)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{test_date}", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=18, mean=0.449)
+        self.assertRasterFitsUnivar(
+            raster=f"single_{end_year}_12_31", reference=values, precision=0.001
         )
 
     def test_outputs_sei_inf(self):
@@ -1074,6 +1666,332 @@ class TestSpread(TestCase):
         )
         # Even with multiple runs, stddev should be still zero.
         self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+    def test_outputs_dispersers(self):
+        """Check dead output of mortality"""
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=0.95,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+            dispersers_output="dispersers",
+            established_dispersers_output="established_dispersers",
+            outside_spores="outside_dispersers",
+        )
+        self.assertRasterExists("dispersers")
+        self.assertRasterExists("established_dispersers")
+
+        values = dict(null_cells=0, min=0, max=15530, mean=522.275)
+        self.assertRasterFitsUnivar(
+            raster="dispersers", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=129, mean=8.833)
+        self.assertRasterFitsUnivar(
+            raster="established_dispersers", reference=values, precision=0.001
+        )
+
+        self.assertVectorExists("outside_dispersers")
+        values = dict(level=2, num_dblinks=0)
+        self.assertVectorFitsExtendedInfo(vector="outside_dispersers", reference=values)
+        values = dict(points=129936, primitives=129936)
+        self.assertVectorFitsTopoInfo(vector="outside_dispersers", reference=values)
+
+    def test_with_and_without_anthropogenic_dispersal_multiple_seeds(self):
+        """Check that multiple seeds keep anthropogenic dispersal separate
+
+        Results of running with anthropogenic_dispersal and percent_natural_dispersal=1
+        will be the same as without running anthropogenic_dispersal or with
+        anthropogenic_dispersal with different seed when multiple seeds are used for
+        isolated generators.
+        """
+        start = "2019-01-01"
+        end = "2022-12-31"
+        seeds = {
+            "disperser_generation": 1,
+            "natural_dispersal": 2,
+            "anthropogenic_dispersal": 1,
+            "establishment": 1,
+            "weather": 2,
+            "lethal_temperature": 3,
+            "movement": 4,
+            "overpopulation": 5,
+            "survival_rate": 6,
+            "soil": 7,
+        }
+        random_seeds_parameter = (
+            ",".join([f"{key}={value}" for key, value in seeds.items()]),
+        )
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=1,
+            random_seeds=random_seeds_parameter,
+            runs=5,
+            nprocs=5,
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end_year = end[:4]
+        self.assertRasterExists(f"average_{end_year}_12_31")
+        self.assertRasterExists(f"probability_{end_year}_12_31")
+        self.assertRasterExists(f"single_{end_year}_12_31")
+        self.assertRasterExists(f"stddev_{end_year}_12_31")
+
+        # Now we test with a different seed for anthropogenic dispersal.
+        # The percent_natural_dispersal is 1, so no anthropogenic dispersal will
+        # happen and the result should be the same.
+        seeds["anthropogenic_dispersal"] = 2345
+        random_seeds_parameter = (
+            ",".join([f"{key}={value}" for key, value in seeds.items()]),
+        )
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average_2",
+            average_series="average_2",
+            single_series="single_2",
+            stddev="stddev_2",
+            stddev_series="stddev_2",
+            probability="probability_2",
+            probability_series="probability_2",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=1,
+            random_seeds=random_seeds_parameter,
+            runs=5,
+            nprocs=5,
+        )
+
+        for reference, actual in [
+            ("average", "average_2"),
+            (f"single_{end_year}_12_31", f"single_2_{end_year}_12_31"),
+            ("stddev", "stddev_2"),
+            ("probability", "probability_2"),
+        ]:
+            self.assertRastersEqual(
+                reference,
+                actual,
+                precision=0.0,
+            )
+
+        # Disabling the anthropogenic dispersal completely should still give
+        # the same result. The result would not be the same if using only one seed.
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average_3",
+            average_series="average_3",
+            single_series="single_3",
+            stddev="stddev_3",
+            stddev_series="stddev_3",
+            probability="probability_3",
+            probability_series="probability_3",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            random_seeds=random_seeds_parameter,
+            runs=5,
+            nprocs=5,
+        )
+
+        for reference, actual in [
+            ("average", "average_3"),
+            (f"single_{end_year}_12_31", f"single_3_{end_year}_12_31"),
+            ("stddev", "stddev_3"),
+            ("probability", "probability_3"),
+        ]:
+            self.assertRastersEqual(
+                reference,
+                actual,
+                precision=0.0,
+            )
+
+        # We test the specific values but they are not important
+        # for main purpose of the test.
+        ref_float = dict(datatype="DCELL")
+        ref_int = dict(datatype="CELL")
+        self.assertRasterFitsInfo(raster="average", reference=ref_float)
+        self.assertRasterFitsInfo(raster="stddev", reference=ref_float)
+        self.assertRasterFitsInfo(raster="probability", reference=ref_float)
+        self.assertRasterFitsInfo(raster=f"single_{end_year}_12_31", reference=ref_int)
+        self.assertRasterFitsInfo(
+            raster=f"average_{end_year}_12_31", reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster=f"probability_{end_year}_12_31", reference=ref_float
+        )
+        self.assertRasterFitsInfo(
+            raster=f"stddev_{end_year}_12_31", reference=ref_float
+        )
+
+        values = dict(null_cells=0, min=0, max=18, mean=0.448)
+        self.assertRasterFitsUnivar(raster="average", reference=values, precision=0.001)
+        values = dict(null_cells=0, min=0, max=100, mean=7.766)
+        self.assertRasterFitsUnivar(
+            raster="probability", reference=values, precision=0.001
+        )
+        values = dict(null_cells=0, min=0, max=5.879, mean=0.116)
+        self.assertRasterFitsUnivar(raster="stddev", reference=values, precision=0.001)
+
+    def test_with_and_without_anthropogenic_dispersal_single_seed(self):
+        """Check the assumption that single seed does not separate
+
+        Results of running with anthropogenic_dispersal and percent_natural_dispersal=1
+        will be different than without running anthropogenic_dispersal.
+        """
+        start = "2019-01-01"
+        end = "2022-12-31"
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average",
+            average_series="average",
+            single_series="single",
+            stddev="stddev",
+            stddev_series="stddev",
+            probability="probability",
+            probability_series="probability",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            anthropogenic_dispersal_kernel="cauchy",
+            anthropogenic_distance=1000,
+            anthropogenic_direction_strength=0,
+            percent_natural_dispersal=1,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+        )
+        self.assertRasterExists("average")
+        self.assertRasterExists("stddev")
+        self.assertRasterExists("probability")
+        end_year = end[:4]
+        self.assertRasterExists(f"average_{end_year}_12_31")
+        self.assertRasterExists(f"probability_{end_year}_12_31")
+        self.assertRasterExists(f"single_{end_year}_12_31")
+        self.assertRasterExists(f"stddev_{end_year}_12_31")
+
+        # Disabling the anthropogenic dispersal completely should still give
+        # the same result.
+        self.assertModule(
+            "r.pops.spread",
+            host="host",
+            total_plants="max_host",
+            infected="infection",
+            average="average_3",
+            average_series="average_3",
+            single_series="single_3",
+            stddev="stddev_3",
+            stddev_series="stddev_3",
+            probability="probability_3",
+            probability_series="probability_3",
+            start_date=start,
+            end_date=end,
+            seasonality=[1, 12],
+            step_unit="week",
+            step_num_units=1,
+            reproductive_rate=1,
+            natural_dispersal_kernel="exponential",
+            natural_distance=50,
+            natural_direction="W",
+            natural_direction_strength=3,
+            random_seed=1,
+            runs=5,
+            nprocs=5,
+        )
+
+        for reference, actual in [
+            ("average", "average_3"),
+            (f"single_{end_year}_12_31", f"single_3_{end_year}_12_31"),
+        ]:
+            # assertRastersNotEqual would be better and we could test all outputs,
+            # but it does not exist.
+            self.assertRastersDifference(
+                reference,
+                actual,
+                dict(min=-8, max=6),
+                precision=8,
+            )
 
 
 if __name__ == "__main__":

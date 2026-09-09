@@ -1,9 +1,10 @@
-name: CI with latest GRASS GIS
+name: CI with compiled GRASS
 
 on:
   push:
     branches:
       - main
+      - steering
   pull_request:
       paths-ignore:
       - "*.md"
@@ -16,30 +17,39 @@ on:
 jobs:
   build:
 
-    name: compiled ${{ matrix.version }}
+    name: ${{ matrix.name }}
 
     strategy:
       matrix:
         include:
-        - version: main
-          command: grass
-        - version: releasebranch_8_2
-          command: grass
-        - version: releasebranch_8_0
-          command: grass
+        - name: compiled main
+          version: main
+          build-script: build.sh
+        - name: compiled releasebranch_8_5
+          version: releasebranch_8_5
+          build-script: build.sh
+        - name: compiled releasebranch_8_4
+          version: releasebranch_8_4
+          build-script: build.sh
+        - name: compiled main with CMake
+          version: main
+          build-script: build-cmake.sh
+        - name: compiled releasebranch_8_5 with CMake
+          version: releasebranch_8_5
+          build-script: build-cmake.sh
       fail-fast: false
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
       with:
         submodules: true
     
     - name: Get dependencies
       run: |
         sudo apt-get update -y
-        sudo apt-get install -y wget git gawk findutils
+        sudo apt-get install -y wget git gawk findutils cmake
         xargs -a <(awk '! /^ *(#|$)/' ".github/workflows/apt.txt") -r -- \
             sudo apt-get install -y --no-install-recommends --no-install-suggests
     - name: Get Python version
@@ -52,21 +62,16 @@ jobs:
     - name: Set number of cores for compilation
       run: |
         echo "MAKEFLAGS=-j$(nproc)" >> $GITHUB_ENV
-    - name: Set LD_LIBRARY_PATH for GRASS GIS compilation
+    - name: Set LD_LIBRARY_PATH for GRASS compilation
       run: |
         echo "LD_LIBRARY_PATH=$HOME/install/lib" >> $GITHUB_ENV
-    - name: Get and build GRASS GIS
+    - name: Get and build GRASS
       run: |
-        .github/workflows/build.sh /tmp $HOME/install ${{ matrix.version }}
+        .github/workflows/${{ matrix.build-script }} /tmp $HOME/install ${{ matrix.version }}
     - name: Add the bin directory to PATH
       run: |
         echo "$HOME/install/bin" >> $GITHUB_PATH
-    - name: Make simple grass command available
-      run: |
-        if [ ! -f "$HOME/install/bin/grass" ]; then
-          ln -s "$HOME/install/bin/${{ matrix.command }}" "$HOME/install/bin/grass"
-        fi
-    - name: Get GRASS GIS version
+    - name: Get GRASS version
       run: |
         grass --version
     - name: Install the module
@@ -74,14 +79,10 @@ jobs:
         grass --tmp-location XY --exec g.extension extension=r.pops.spread url=. --verbose
     - name: Cache data for testing
       id: cache-nc_spm_08_grass7
-      uses: actions/cache@v1
+      uses: actions/cache@v4
       with:
         path: nc_spm_08_grass7
         key: ${{ runner.os }}-nc_spm_08_grass7
-    - name: Get data download tool for v7 (g.download.location)
-      if: steps.cache-nc_spm_08_grass7.outputs.cache-hit != 'true' && matrix.version == 'releasebranch_7_8'
-      run: |
-        grass --tmp-location XY --exec g.extension g.download.location --verbose
     - name: Get sample data for testing (NC SPM sample location)
       if: steps.cache-nc_spm_08_grass7.outputs.cache-hit != 'true'
       run: |
@@ -90,4 +91,5 @@ jobs:
       run: |
         cd testsuite/
         grass -c ~/nc_spm_08_grass7/test --exec ./test_r_pops_spread.py
-        rm -rf ~/nc_spm_08_grass7/test
+        grass -c ~/nc_spm_08_grass7/test_steering --exec ./test_r_pops_spread_steering.py
+        rm -rf ~/nc_spm_08_grass7/test ~/nc_spm_08_grass7/test_steering
