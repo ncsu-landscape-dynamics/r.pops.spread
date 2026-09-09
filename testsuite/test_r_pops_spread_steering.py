@@ -13,6 +13,7 @@ import os
 import socket
 import subprocess
 import tempfile
+import time
 
 import grass.script as gs
 from grass.gunittest.case import TestCase
@@ -304,6 +305,19 @@ class TestSteering(TestCase):
                 if line and not line.startswith("step,")
             ]
 
+    def wait_for_quarantine_rows(self, path, count, timeout=10):
+        """Wait until the quarantine file holds the given number of data rows
+
+        The file is rewritten as the simulation advances, so a read can land
+        while it is being written.
+        """
+        deadline = time.time() + timeout
+        rows = self.quarantine_rows(path)
+        while len(rows) != count and time.time() < deadline:
+            time.sleep(0.05)
+            rows = self.quarantine_rows(path)
+        return rows
+
     def test_quarantine_is_readable_while_stepping(self):
         """Quarantine results are available for each step as it is computed
 
@@ -323,7 +337,7 @@ class TestSteering(TestCase):
                 session.send("cmd:stepf;")
                 session.wait_for("output:", count=step)
                 self.assertEqual(
-                    len(self.quarantine_rows(path)),
+                    len(self.wait_for_quarantine_rows(path, step)),
                     step,
                     msg=f"Expected {step} quarantine row(s) after {step} step(s)",
                 )

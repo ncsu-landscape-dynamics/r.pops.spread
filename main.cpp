@@ -1999,6 +1999,16 @@ int main(int argc, char* argv[])
                         select_run = false;
                         G_verbose_message("Selected run %d", selected_run);
                     }
+                    // Written before the outputs below are announced to the
+                    // client, so that the file is complete by the time the
+                    // client is told the step is done.
+                    if (opt.quarantine_output->answer) {
+                        write_quarantine(
+                            opt.quarantine_output,
+                            escape_infos,
+                            quarantine_steps_done(
+                                config.quarantine_schedule(), current_index));
+                    }
                 }
                 if (config.output_schedule()[current_index]) {
                     // output
@@ -2145,13 +2155,6 @@ int main(int argc, char* argv[])
                             write_spread_rate(opt.spread_rate_output, spread_rates,
                                               num_years_spread, config.date_start().year());
                         }
-                    }
-                    if (opt.quarantine_output->answer) {
-                        write_quarantine(
-                            opt.quarantine_output,
-                            escape_infos,
-                            quarantine_steps_done(
-                                config.quarantine_schedule(), current_index));
                     }
                 }
             }
