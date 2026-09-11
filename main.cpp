@@ -2019,7 +2019,8 @@ int main(int argc, char* argv[])
                         raster_to_grass(
                             inf_species_rasts[selected_run],
                             name,
-                            "Occurrence from a single stochastic run",
+                            "Occurrence from a single stochastic run (run "
+                                + std::to_string(selected_run) + ")",
                             interval.end_date());
                         if (steering && steering_schedule[current_index]) {
                             c.send_data("output:" + name + '|');
@@ -2029,7 +2030,8 @@ int main(int argc, char* argv[])
                     if (opt.min_series->answer) {
                         string name = generate_name(opt.min_series->answer, interval.end_date());
                         raster_to_grass(inf_species_rasts[min_run], name,
-                                        "Min occurrence from a single stochastic run",
+                                        "Min occurrence from a single stochastic run (run "
+                                            + std::to_string(min_run) + ")",
                                         interval.end_date());
                         if (steering && steering_schedule[current_index]) {
                             c.send_data("output:" + name + '|');
@@ -2039,7 +2041,8 @@ int main(int argc, char* argv[])
                     if (opt.max_series->answer) {
                         string name = generate_name(opt.max_series->answer, interval.end_date());
                         raster_to_grass(inf_species_rasts[max_run], name,
-                                        "Max occurrence from a single stochastic run",
+                                        "Max occurrence from a single stochastic run (run "
+                                            + std::to_string(max_run) + ")",
                                         interval.end_date());
                         if (steering && steering_schedule[current_index]) {
                             c.send_data("output:" + name + '|');
