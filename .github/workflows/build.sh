@@ -23,7 +23,7 @@ BRANCH="$3"
 
 cd $WORKDIR
 
-# GRASS GIS
+# GRASS build
 
 git clone https://github.com/OSGeo/grass.git --branch "$BRANCH" --depth=1
 
@@ -35,8 +35,6 @@ cd grass
     --with-cxx \
     --with-zstd \
     --with-bzlib \
-    --with-blas \
-    --with-lapack \
     --with-readline \
     --with-openmp \
     --with-pthread \
@@ -48,6 +46,7 @@ cd grass
     --with-sqlite \
     --with-fftw \
     --with-netcdf \
+    --without-opengl \
     --without-pdal
 
 make
@@ -56,7 +55,7 @@ make install
 # Delete the source code.
 # The source code should not be needed anymore and
 # it may cause problems when it is in the same directory used further
-# for the compilation of the module itself
+# for the compilation of the tool itself
 # (e.g., g.extension will recurse to it).
 cd ..
 rm -rf grass

@@ -19,6 +19,7 @@
 #include "tcp_client.h"
 
 #include "pops/model.hpp"
+#include "pops/model_type.hpp"
 #include "pops/date.hpp"
 #include "pops/raster.hpp"
 #include "pops/kernel.hpp"
@@ -27,6 +28,9 @@
 #include "pops/statistics.hpp"
 #include "pops/scheduling.hpp"
 #include "pops/quarantine.hpp"
+#include "pops/host_pool.hpp"
+#include "pops/pest_pool.hpp"
+#include "pops/multi_host_pool.hpp"
 
 extern "C" {
 #include <grass/gis.h>
@@ -68,9 +72,6 @@ using std::thread;
 using std::ref;
 
 using namespace pops;
-
-// TODO: for backwards compatibility, update eventually
-typedef Simulation<Img, DImg> Sporulation;
 
 #define DIM 1
 
@@ -226,7 +227,8 @@ std::vector<double> weather_file_to_list(const string& filename)
     return output;
 }
 
-void write_spread_rate(struct Option *opt, const std::vector<SpreadRate<Img>>& spread_rates,
+template<typename SpreadRateType>
+void write_spread_rate(struct Option *opt, const std::vector<SpreadRateType>& spread_rates,
                        unsigned num_years, int start_time) {
     FILE *fp = G_open_option_file(opt);
     fprintf(fp, "year,N,S,E,W\n");
@@ -240,7 +242,8 @@ void write_spread_rate(struct Option *opt, const std::vector<SpreadRate<Img>>& s
     G_close_option_file(fp);
 }
 
-void write_spread_rate(struct Option *opt, const SpreadRate<Img>& spread_rate,
+template<typename SpreadRateType>
+void write_spread_rate(struct Option *opt, const SpreadRateType& spread_rate,
                        unsigned num_years, int start_time) {
     FILE *fp = G_open_option_file(opt);
     fprintf(fp, "year,N,S,E,W\n");
@@ -252,6 +255,36 @@ void write_spread_rate(struct Option *opt, const SpreadRate<Img>& spread_rate,
                 isnan(e) ? e : round(e), isnan(w) ? w : round(w));
     }
     G_close_option_file(fp);
+}
+
+/**
+ * Writes quarantine escape information for the action steps computed so far.
+ *
+ * During steering the file is rewritten whenever the simulation advances, so
+ * that a steering client can read the results while stepping through the
+ * simulation instead of only after it ends.
+ */
+template<typename EscapeInfo>
+void write_quarantine(struct Option *opt, const std::vector<EscapeInfo>& escape_infos,
+                      unsigned num_steps)
+{
+    FILE *fp = G_open_option_file(opt);
+    std::string output = write_quarantine_escape(escape_infos, num_steps);
+    fprintf(fp, "%s", output.c_str());
+    G_close_option_file(fp);
+}
+
+/**
+ * Number of quarantine action steps completed up to and including a simulation step.
+ *
+ * Steering can go back in time, so the number of steps which have valid results
+ * is not necessarily the number of all scheduled quarantine steps.
+ */
+unsigned quarantine_steps_done(const std::vector<bool>& quarantine_schedule,
+                               unsigned step)
+{
+    return static_cast<unsigned>(std::count(
+        quarantine_schedule.begin(), quarantine_schedule.begin() + step + 1, true));
 }
 
 /** Checks if there are any susceptible hosts left */
@@ -440,6 +473,8 @@ struct PoPSOptions
     struct Option *host, *total_plants, *infected, *outside_spores;
     struct Option* model_type;
     struct Option* latency_period;
+    struct Option* dispersers_to_soils;
+    struct Option* soil_survival_steps;
     struct Option *moisture_coefficient_file, *temperature_coefficient_file;
     struct Option* weather_coefficient_file;
     struct Option* weather_coefficient_stddev_file;
@@ -462,13 +497,19 @@ struct PoPSOptions
     struct Option *infected_to_dead_rate, *first_year_to_die;
     struct Option *mortality_frequency, *mortality_frequency_n;
     struct Option* dead_series;
-    struct Option *seed, *runs, *threads;
-    struct Option *single_series, *min_series, *max_series;
+    struct Option* seed;
+    struct Option* seeds;
+    struct Option* runs;
+    struct Option* threads;
+    struct Option* single_series;
+    struct Option* min_series;
+    struct Option* max_series;
     struct Option *average, *average_series;
     struct Option *stddev, *stddev_series;
     struct Option *probability, *probability_series;
     struct Option* spread_rate_output;
-    struct Option *quarantine, *quarantine_output;
+    struct Option *quarantine, *quarantine_output, *quarantine_directions;
+    struct Option *dispersers_output, *established_dispersers_output;
     struct Option *output_frequency, *output_frequency_n;
     struct Option *ip_address, *port;
 };
@@ -596,9 +637,21 @@ int main(int argc, char* argv[])
 
     opt.quarantine_output = G_define_standard_option(G_OPT_F_OUTPUT);
     opt.quarantine_output->key = "quarantine_output";
-    opt.quarantine_output->description = _("Output CSV file containg yearly quarantine information");
+    opt.quarantine_output->description =
+        _("Output CSV file containg yearly quarantine information");
     opt.quarantine_output->required = NO;
     opt.quarantine_output->guisection = _("Output");
+
+    opt.quarantine_directions = G_define_option();
+    opt.quarantine_directions->type = TYPE_STRING;
+    opt.quarantine_directions->key = "quarantine_directions";
+    opt.quarantine_directions->label = _("Quarantine directions to consider");
+    opt.quarantine_directions->description =
+        _("Comma separated directions to include"
+          "in the quarantine direction analysis, e.g., 'N,E' "
+          "(by default all directions (N, S, E, W) are considered)");
+    opt.quarantine_directions->required = NO;
+    opt.quarantine_directions->guisection = _("Output");
 
     opt.model_type = G_define_option();
     opt.model_type->type = TYPE_STRING;
@@ -622,6 +675,27 @@ int main(int argc, char* argv[])
               " (unit is a simulation step)");
     opt.latency_period->required = NO;
     opt.latency_period->guisection = _("Model");
+
+    opt.dispersers_to_soils = G_define_option();
+    opt.dispersers_to_soils->type = TYPE_DOUBLE;
+    opt.dispersers_to_soils->key = "dispersers_to_soils";
+    opt.dispersers_to_soils->label = _("Ratio of dispersers going into soil");
+    opt.dispersers_to_soils->description =
+        _("Ratio (percentage) of generated dispersers going into soil instead "
+          "of being dispersed by the kernel");
+    opt.dispersers_to_soils->options = "0-1";
+    opt.dispersers_to_soils->required = NO;
+    opt.dispersers_to_soils->guisection = _("Model");
+
+    opt.soil_survival_steps = G_define_option();
+    opt.soil_survival_steps->type = TYPE_INTEGER;
+    opt.soil_survival_steps->key = "soil_survival_steps";
+    opt.soil_survival_steps->label = _("Steps dispersers stay in the soil");
+    opt.soil_survival_steps->description =
+        _("Number of simulation steps dispersers survive in the soil");
+    opt.soil_survival_steps->options = "1-";
+    opt.soil_survival_steps->required = NO;
+    opt.soil_survival_steps->guisection = _("Model");
 
     opt.treatments = G_define_standard_option(G_OPT_R_INPUT);
     opt.treatments->key = "treatments";
@@ -925,6 +999,23 @@ int main(int argc, char* argv[])
     opt.percent_natural_dispersal->options = "0-1";
     opt.percent_natural_dispersal->guisection = _("Dispersal");
 
+    opt.dispersers_output = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.dispersers_output->key = "dispersers_output";
+    opt.dispersers_output->label = _("Output raster of disperses");
+    opt.dispersers_output->description =
+        _("Dispersers are accumulated over all steps and stochastic runs");
+    opt.dispersers_output->required = NO;
+    opt.dispersers_output->guisection = _("Output");
+
+    opt.established_dispersers_output = G_define_standard_option(G_OPT_R_OUTPUT);
+    opt.established_dispersers_output->key = "established_dispersers_output";
+    opt.established_dispersers_output->label =
+        _("Output raster of established disperses");
+    opt.established_dispersers_output->description =
+        _("Dispersers are accumulated over all steps and stochastic runs");
+    opt.established_dispersers_output->required = NO;
+    opt.established_dispersers_output->guisection = _("Output");
+
     opt.infected_to_dead_rate = G_define_option();
     opt.infected_to_dead_rate->type = TYPE_DOUBLE;
     opt.infected_to_dead_rate->key = "mortality_rate";
@@ -988,6 +1079,20 @@ int main(int argc, char* argv[])
           " or random seed can be generated by other means.");
     opt.seed->guisection = _("Randomness");
 
+    opt.seeds = G_define_option();
+    opt.seeds->key = "random_seeds";
+    opt.seeds->key_desc = "name=value";
+    opt.seeds->type = TYPE_STRING;
+    opt.seeds->required = NO;
+    opt.seeds->multiple = YES;
+    opt.seeds->label = _("Seeds for isolated random number generators");
+    opt.seeds->description = _(
+        "Multiple seeds for separate processes as a list of pairs key=value (comma-separated). "
+        "Seeds must be provided for: disperser_generation,natural_dispersal,"
+        "anthropogenic_dispersal,establishment,weather,movement,"
+        "overpopulation,survival_rate,soil");
+    opt.seeds->guisection = _("Randomness");
+
     flg.generate_seed = G_define_flag();
     flg.generate_seed->key = 's';
     flg.generate_seed->label = _("Generate random seed (result is non-deterministic)");
@@ -1043,8 +1148,8 @@ int main(int argc, char* argv[])
     G_option_requires_all(opt.single_series, opt.output_frequency, NULL);
     G_option_requires_all(opt.probability_series, opt.output_frequency, NULL);
     G_option_requires_all(opt.stddev_series, opt.output_frequency, NULL);
-    G_option_exclusive(opt.seed, flg.generate_seed, NULL);
-    G_option_required(opt.seed, flg.generate_seed, NULL);
+    G_option_exclusive(opt.seed, opt.seeds, flg.generate_seed, NULL);
+    G_option_required(opt.seed, opt.seeds, flg.generate_seed, NULL);
     G_option_collective(opt.ip_address, opt.port, NULL);
 
     // weather
@@ -1083,6 +1188,7 @@ int main(int argc, char* argv[])
         opt.lethal_temperature_months,
         opt.temperature_file,
         NULL);
+    G_option_collective(opt.soil_survival_steps, opt.dispersers_to_soils, NULL);
     G_option_collective(
         opt.survival_rate_file, opt.survival_rate_month, opt.survival_rate_day, NULL);
     G_option_collective(opt.quarantine, opt.quarantine_output, NULL);
@@ -1179,7 +1285,7 @@ int main(int argc, char* argv[])
             std::stod(opt.percent_natural_dispersal->answer);
 
     // warn about limits to backwards compatibility
-    // "none" is consistent with other GRASS GIS modules
+    // "none" is consistent with other GRASS tools
     warn_about_depreciated_option_value(opt.natural_direction, "NONE", "none");
     warn_about_depreciated_option_value(opt.anthro_kernel, "NONE", "none");
     warn_about_depreciated_option_value(opt.anthro_direction, "NONE", "none");
@@ -1214,6 +1320,11 @@ int main(int argc, char* argv[])
                 ? std::stoi(opt.mortality_frequency_n->answer)
                 : 0;
     }
+    config.create_pest_host_table_from_parameters(1);
+    std::vector<std::vector<double>> competency_table_data;
+    competency_table_data.push_back({1, 1});
+    competency_table_data.push_back({0, 0});
+    config.read_competency_table(competency_table_data);
 
     if (opt.survival_rate_month->answer)
         config.survival_rate_month = std::stoi(opt.survival_rate_month->answer);
@@ -1241,6 +1352,8 @@ int main(int argc, char* argv[])
         config.use_quarantine = true;
         config.quarantine_frequency = "yearly";
         config.quarantine_frequency_n = 1;
+        if (opt.quarantine_directions->answer)
+            config.quarantine_directions = opt.quarantine_directions->answer;
     }
 
     std::vector<string> moisture_names;
@@ -1287,10 +1400,10 @@ int main(int argc, char* argv[])
     int num_mortality_steps = config.num_mortality_steps();
     if (flg.mortality->answer) {
         if (config.mortality_time_lag > num_mortality_steps) {
-                G_fatal_error(
-                    _("%s is too large (%d). It must be smaller or "
-                      " equal than number of simulation years (%d)."),
-                    opt.first_year_to_die->key,
+            G_fatal_error(
+                _("%s is too large (%d). It must be smaller than "
+                  "or equal to the number of simulation steps (%d)."),
+                opt.first_year_to_die->key,
                 config.mortality_time_lag,
                 num_mortality_steps);
             }
@@ -1298,21 +1411,41 @@ int main(int argc, char* argv[])
     else
         num_mortality_steps = 1;
 
-    // for steering: even with set seed, when we go back
-    // and forward, we get different results
-    unsigned seed_value;
+    // for steering: even with a set seed, going back and forward
+    // in time does not reproduce identical results
     if (opt.seed->answer) {
-        seed_value = std::stoul(opt.seed->answer);
+        config.random_seed = std::stoul(opt.seed->answer);
         G_verbose_message(
-            _("Read random seed from %s option: %u"), opt.seed->key, seed_value);
+            _("Using random seed from %s option: %u"),
+            opt.seed->key,
+            config.random_seed);
+    }
+    else if (opt.seeds->answer) {
+        config.read_seeds(opt.seeds->answer, ',', '=');
+        try {
+            validate_random_number_generator_provider_config(config);
+        }
+        catch (const std::invalid_argument& error) {
+            G_fatal_error(
+                _("%s is incomplete or incorrectly formatted: %s"),
+                opt.seeds->key,
+                error.what());
+        }
+
+        G_verbose_message(
+            _("Using random seeds from %s option: %s"),
+            opt.seeds->key,
+            opt.seeds->answer);
     }
     else {
-        // flag or option is required, so no check needed
+        // Flag or option is required, so no further check is needed here.
         // getting random seed using GRASS library
         // std::random_device is deterministic in MinGW (#338)
-        seed_value = G_srand48_auto();
+        config.random_seed = G_srand48_auto();
         G_verbose_message(
-            _("Generated random seed (-%c): %u"), flg.generate_seed->key, seed_value);
+            _("Generated random seed (-%c): %u"),
+            flg.generate_seed->key,
+            config.random_seed);
     }
 
     // read the suspectible UMCA raster image
@@ -1353,6 +1486,17 @@ int main(int argc, char* argv[])
     if (weather_coefficient_distribution)
         weather_coefficient_stddevs.resize(config.scheduler().get_num_steps());
 
+    bool use_soils = false;
+    int soil_survival_steps = 0;
+    if (opt.soil_survival_steps->answer) {
+        use_soils = true;
+        soil_survival_steps = std::stoi(opt.soil_survival_steps->answer);
+        config.dispersers_to_soils_percentage =
+            std::stod(opt.dispersers_to_soils->answer);
+    }
+
+    using SpreadModel = Model<Img, DImg, DImg::IndexType>;
+
     // treatments
     if (get_num_answers(opt.treatments) != get_num_answers(opt.treatment_date)
         && get_num_answers(opt.treatment_date)
@@ -1367,8 +1511,9 @@ int main(int argc, char* argv[])
     TreatmentApplication treatment_app = TreatmentApplication::Ratio;
     if (opt.treatment_app->answer)
         treatment_app = treatment_app_enum_from_string(opt.treatment_app->answer);
-    Treatments<Img, DImg> treatments(config.scheduler());
-    config.use_treatments = true; // steering needs true here
+    Treatments<SpreadModel::StandardSingleHostPool, DImg> treatments(
+        config.scheduler());
+    config.use_treatments = true;  // steering needs true here
     if (opt.treatments->answers) {
         for (int i_t = 0; opt.treatment_date->answers[i_t]; i_t++) {
             DImg tr = raster_from_grass_float(opt.treatments->answers[i_t]);
@@ -1381,8 +1526,8 @@ int main(int argc, char* argv[])
         }
     }
 
-    // build the Sporulation object
-    std::vector<Model<Img, DImg, int>> models;
+    // build the model object
+    std::vector<SpreadModel> models;
     std::vector<Img> dispersers;
     std::vector<Img> established_dispersers;
     std::vector<Img> sus_species_rasts(num_runs, S_species_rast);
@@ -1390,6 +1535,8 @@ int main(int argc, char* argv[])
     std::vector<Img> total_species_rasts(num_runs, species_rast);
     std::vector<Img> resistant_rasts(num_runs, Img(S_species_rast, 0));
     std::vector<Img> total_exposed_rasts(num_runs, Img(S_species_rast, 0));
+    std::vector<SpreadModel::StandardMultiHostPool> multi_host_pools;
+    std::vector<PestPool<Img, DImg, int>> pest_pools;
 
     // We always create at least one exposed for simplicity, but we
     // could also just leave it empty.
@@ -1412,40 +1559,112 @@ int main(int argc, char* argv[])
     Img accumulated_dead(Img(S_species_rast, 0));
 
     models.reserve(num_runs);
+    multi_host_pools.reserve(num_runs);
+    pest_pools.reserve(num_runs);
     dispersers.reserve(num_runs);
     established_dispersers.reserve(num_runs);
+    auto tmp_seeds = config.random_seeds;
+    auto tmp_seed_value = config.random_seed;
     for (unsigned i = 0; i < num_runs; ++i) {
         Config config_copy = config;
-        config_copy.random_seed = seed_value++;
-        models.emplace_back(config_copy);
-        dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols());
+        if (opt.seeds->answer) {
+            for (auto& item : tmp_seeds) {
+                config_copy.random_seeds[item.first] = item.second++;
+            }
+        }
+        else {
+            config_copy.random_seed = tmp_seed_value++;
+        }
+        try {
+            models.emplace_back(config_copy);
+        }
+        catch (const std::invalid_argument& error) {
+            G_fatal_error(_("Model configuration is invalid: %s"), error.what());
+        }
+        // For the model itself, this does not need to be initialized to 0 because the
+        // model only sets and then looks at suitable cells. However, the output is
+        // taken from all cells, so even the untouched cells need a value.
+        dispersers.emplace_back(I_species_rast.rows(), I_species_rast.cols(), 0);
         established_dispersers.emplace_back(
-            I_species_rast.rows(), I_species_rast.cols());
+            I_species_rast.rows(), I_species_rast.cols(), 0);
     }
-    // TODO: outside spores are not yet checkpointed
+    std::vector<Img> dispersers_rasts(num_runs, Img(S_species_rast, 0));
+    std::vector<Img> established_dispersers_rasts(num_runs, Img(S_species_rast, 0));
+
+    std::vector<std::vector<Img>> soil_reservoirs(
+        use_soils ? num_runs : 0,
+        std::vector<Img>(
+            use_soils ? soil_survival_steps : 0,
+            Img(I_species_rast.rows(), I_species_rast.cols(), 0)));
+    if (use_soils) {
+        for (unsigned i = 0; i < num_runs; ++i) {
+            models[i].activate_soils(soil_reservoirs[i]);
+        }
+    }
     std::vector<std::vector<std::tuple<int, int> > > outside_spores(num_runs);
 
-    // spread rate initialization
+    // One host pool for each run (not multi-host case).
+    std::vector<std::unique_ptr<SpreadModel::StandardSingleHostPool>> host_pools;
+    host_pools.reserve(num_runs);
+    std::vector<
+        std::unique_ptr<pops::PestHostTable<SpreadModel::StandardSingleHostPool>>>
+        pest_host_tables;
+    pest_host_tables.reserve(num_runs);
+    std::vector<
+        std::unique_ptr<pops::CompetencyTable<SpreadModel::StandardSingleHostPool>>>
+        competency_tables;
+    competency_tables.reserve(num_runs);
 
-    std::vector<SpreadRate<Img>> spread_rates(
-        num_runs,
-        SpreadRate<Img>(
-            I_species_rast,
-            window.ew_res,
-            window.ns_res,
-            config.use_spreadrates ? config.rate_num_steps() : 0,
+    for (unsigned run = 0; run < num_runs; ++run) {
+        pest_host_tables.emplace_back(
+            new pops::PestHostTable<SpreadModel::StandardSingleHostPool>(
+                config, models[run].environment()));
+        competency_tables.emplace_back(
+            new pops::CompetencyTable<SpreadModel::StandardSingleHostPool>(
+                config, models[run].environment()));
+
+        host_pools.emplace_back(new SpreadModel::StandardSingleHostPool(
+            config,
+            sus_species_rasts[run],
+            exposed_vectors[run],
+            inf_species_rasts[run],
+            total_exposed_rasts[run],
+            resistant_rasts[run],
+            mortality_tracker_vector[run],
+            dead_in_current_year[run],
+            total_species_rasts[run],
+            models[run].environment(),
             suitable_cells));
+        std::vector<SpreadModel::StandardSingleHostPool*> tmp = {host_pools[run].get()};
+        multi_host_pools.emplace_back(tmp, config);
+        multi_host_pools[run].set_pest_host_table(*pest_host_tables[run]);
+        multi_host_pools[run].set_competency_table(*competency_tables[run]);
+
+        pest_pools.emplace_back(
+            dispersers[run], established_dispersers[run], outside_spores[run]);
+    }
+    std::vector<SpreadRateAction<SpreadModel::StandardMultiHostPool, int>> spread_rates(
+        num_runs,
+        SpreadRateAction<SpreadModel::StandardMultiHostPool, int>(
+            multi_host_pools[0],
+            config.rows,
+            config.cols,
+            config.ew_res,
+            config.ns_res,
+            config.use_spreadrates ? config.rate_num_steps() : 0));
     // Quarantine escape tracking
     Img quarantine_rast(S_species_rast, 0);
     if (config.use_quarantine)
         quarantine_rast = raster_from_grass_integer(opt.quarantine->answer);
-    std::vector<QuarantineEscape<Img>> escape_infos(
+    std::vector<QuarantineEscapeAction<Img>> escape_infos(
         num_runs,
-        QuarantineEscape<Img>(
+        QuarantineEscapeAction<Img>(
             quarantine_rast,
             window.ew_res,
             window.ns_res,
-            config.use_quarantine ? config.quarantine_num_steps() : 0));
+            config.use_quarantine ? config.quarantine_num_steps() : 0,
+            config.quarantine_directions));
+
     // Unused movements
     std::vector<std::vector<int>> movements;
 
@@ -1506,6 +1725,29 @@ int main(int argc, char* argv[])
                 std::vector<std::vector<Img>>(num_runs,
                                               exposed_vectors[0]));
 
+    // Suitable cells are shared by all runs and grow during the simulation
+    // as hosts move into cells which were not suitable before, so they need
+    // to be checkpointed too. Otherwise going back in time keeps cells which
+    // were added only after the checkpoint.
+    std::vector<std::vector<std::vector<int>>> suitable_cells_checkpoint(
+                num_checkpoints, suitable_cells);
+
+    // Mortality cohorts, soil reservoirs, dispersers and pests which left the
+    // area all accumulate over the course of the simulation, so they need to
+    // be checkpointed too. Otherwise going back in time keeps state which
+    // belongs to the discarded future.
+    std::vector<std::vector<std::vector<Img>>> mortality_tracker_checkpoint(
+                num_checkpoints, mortality_tracker_vector);
+    std::vector<std::vector<std::vector<Img>>> soil_reservoirs_checkpoint(
+                num_checkpoints, soil_reservoirs);
+    std::vector<std::vector<Img>> dispersers_rasts_checkpoint(
+                num_checkpoints, dispersers_rasts);
+    std::vector<std::vector<Img>> established_dispersers_rasts_checkpoint(
+                num_checkpoints, established_dispersers_rasts);
+    std::vector<std::vector<std::vector<std::tuple<int, int>>>>
+                outside_spores_checkpoint(num_checkpoints, outside_spores);
+    std::vector<Img> accumulated_dead_checkpoint(num_checkpoints, accumulated_dead);
+
     std::vector<int> step_checkpoint(num_checkpoints);
     std::vector<unsigned> selected_run_checkpoint(num_checkpoints);
     std::vector<unsigned> min_run_checkpoint(num_checkpoints);
@@ -1516,6 +1758,8 @@ int main(int argc, char* argv[])
     bool select_run = true;
     int last_checkpoint = 0;
     // suitable cells change only with movements
+    suitable_cells_checkpoint[last_checkpoint] = suitable_cells;
+    accumulated_dead_checkpoint[last_checkpoint] = accumulated_dead;
     for (unsigned run = 0; run < num_runs; run++) {
         sus_checkpoint[last_checkpoint][run] = S_species_rast_start;
         inf_checkpoint[last_checkpoint][run] = I_species_rast_start;
@@ -1523,6 +1767,14 @@ int main(int argc, char* argv[])
         total_species_checkpoint[last_checkpoint][run] = species_rast_start;
         total_exposed_checkpoint[last_checkpoint][run] = total_exposed_rasts[0];
         exposed_checkpoint[last_checkpoint][run] = exposed_vectors[0];
+        mortality_tracker_checkpoint[last_checkpoint][run] =
+            mortality_tracker_vector[run];
+        if (use_soils)
+            soil_reservoirs_checkpoint[last_checkpoint][run] = soil_reservoirs[run];
+        dispersers_rasts_checkpoint[last_checkpoint][run] = dispersers_rasts[run];
+        established_dispersers_rasts_checkpoint[last_checkpoint][run] =
+            established_dispersers_rasts[run];
+        outside_spores_checkpoint[last_checkpoint][run] = outside_spores[run];
         step_checkpoint[last_checkpoint] = 0;
         selected_run_checkpoint[last_checkpoint] = selected_run;
         min_run_checkpoint[last_checkpoint] = min_run;
@@ -1565,7 +1817,17 @@ int main(int argc, char* argv[])
                     total_species_rasts[run] = total_species_checkpoint[last_checkpoint][run];
                     exposed_vectors[run] = exposed_checkpoint[last_checkpoint][run];
                     total_exposed_rasts[run] = total_exposed_checkpoint[last_checkpoint][run];
+                    mortality_tracker_vector[run] =
+                        mortality_tracker_checkpoint[last_checkpoint][run];
+                    if (use_soils)
+                        soil_reservoirs[run] = soil_reservoirs_checkpoint[last_checkpoint][run];
+                    dispersers_rasts[run] = dispersers_rasts_checkpoint[last_checkpoint][run];
+                    established_dispersers_rasts[run] =
+                        established_dispersers_rasts_checkpoint[last_checkpoint][run];
+                    outside_spores[run] = outside_spores_checkpoint[last_checkpoint][run];
                 }
+                suitable_cells = suitable_cells_checkpoint[last_checkpoint];
+                accumulated_dead = accumulated_dead_checkpoint[last_checkpoint];
                 unresolved_steps.clear();
                 Date dt = config.scheduler().get_step(current_end).end_date();
                 G_verbose_message("Going back to date: %d-%d-%d", dt.year(), dt.month(), dt.day());
@@ -1613,7 +1875,17 @@ int main(int argc, char* argv[])
                     total_species_rasts[run] = total_species_checkpoint[goto_checkpoint][run];
                     exposed_vectors[run] = exposed_checkpoint[goto_checkpoint][run];
                     total_exposed_rasts[run] = total_exposed_checkpoint[goto_checkpoint][run];
+                    mortality_tracker_vector[run] =
+                        mortality_tracker_checkpoint[goto_checkpoint][run];
+                    if (use_soils)
+                        soil_reservoirs[run] = soil_reservoirs_checkpoint[goto_checkpoint][run];
+                    dispersers_rasts[run] = dispersers_rasts_checkpoint[goto_checkpoint][run];
+                    established_dispersers_rasts[run] =
+                        established_dispersers_rasts_checkpoint[goto_checkpoint][run];
+                    outside_spores[run] = outside_spores_checkpoint[goto_checkpoint][run];
                 }
+                suitable_cells = suitable_cells_checkpoint[goto_checkpoint];
+                accumulated_dead = accumulated_dead_checkpoint[goto_checkpoint];
                 Date dt = config.scheduler().get_step(current_end).end_date();
                 G_verbose_message("Going to date: %d-%d-%d", dt.year(), dt.month(), dt.day());
                 // add 1 to index to start new step, current_index is already computed
@@ -1687,40 +1959,35 @@ int main(int argc, char* argv[])
                     int weather_step = 0;
                     for (auto step : unresolved_steps) {
                         dead_in_current_year[run].zero();
-                    if (weather_type == WeatherType::Probabilistic) {
-                        models[run].environment().update_weather_from_distribution(
-                            weather_coefficients[weather_step],
-                            weather_coefficient_stddevs[weather_step],
-                            models[run].random_number_generator());
-                    }
-                    else if (weather_type == WeatherType::Deterministic) {
-                        models[run].environment().update_weather_coefficient(
-                            weather_coefficients[weather_step]);
-                    }
+                        if (weather_type == WeatherType::Probabilistic) {
+                            models[run].environment().update_weather_from_distribution(
+                                weather_coefficients[weather_step],
+                                weather_coefficient_stddevs[weather_step],
+                                models[run].random_number_generator());
+                        }
+                        else if (weather_type == WeatherType::Deterministic) {
+                            models[run].environment().update_weather_coefficient(
+                                weather_coefficients[weather_step]);
+                        }
                         models[run].run_step(
-                                    step,
-                                    inf_species_rasts[run],
-                                    sus_species_rasts[run],
-                                    lvtree_rast,
-                                    total_species_rasts[run],
-                                    dispersers[run],
-                                    established_dispersers[run],
-                                    total_exposed_rasts[run],
-                                    exposed_vectors[run],
-                                    mortality_tracker_vector[run],
-                                    dead_in_current_year[run],
-                                    actual_temperatures,
-                                    survival_rates,
-                                    treatments,
-                                    resistant_rasts[run],
-                                    outside_spores[run],
-                                    spread_rates[run],
-                                    escape_infos[run],
-                                    quarantine_rast,
-                                    movements,
-                                    Network<Img::IndexType>::null_network(),
-                                    suitable_cells);
+                            step,
+                            multi_host_pools[run],
+                            pest_pools[run],
+                            lvtree_rast,
+                            treatments,
+                            actual_temperatures,
+                            survival_rates,
+                            spread_rates[run],
+                            escape_infos[run],
+                            quarantine_rast,
+                            movements,
+                            Network<Img::IndexType>::null_network());
                         ++weather_step;
+                        if (opt.dispersers_output->answer)
+                            dispersers_rasts[run] += dispersers[run];
+                        if (opt.established_dispersers_output->answer)
+                            established_dispersers_rasts[run] +=
+                                established_dispersers[run];
                     }
                 }
 
@@ -1731,6 +1998,16 @@ int main(int argc, char* argv[])
                         std::tie(min_run, selected_run, max_run) = select_min_median_max_run(inf_species_rasts, suitable_cells);
                         select_run = false;
                         G_verbose_message("Selected run %d", selected_run);
+                    }
+                    // Written before the outputs below are announced to the
+                    // client, so that the file is complete by the time the
+                    // client is told the step is done.
+                    if (opt.quarantine_output->answer) {
+                        write_quarantine(
+                            opt.quarantine_output,
+                            escape_infos,
+                            quarantine_steps_done(
+                                config.quarantine_schedule(), current_index));
                     }
                 }
                 if (config.output_schedule()[current_index]) {
@@ -1885,6 +2162,8 @@ int main(int argc, char* argv[])
             if (steering && steering_schedule[current_index]) {
                 last_checkpoint = simulation_step_to_action_step(steering_schedule, current_index) + 1;
                 step_checkpoint[last_checkpoint] = current_index;
+                suitable_cells_checkpoint[last_checkpoint] = suitable_cells;
+                accumulated_dead_checkpoint[last_checkpoint] = accumulated_dead;
                 selected_run_checkpoint[last_checkpoint] = selected_run;
                 min_run_checkpoint[last_checkpoint] = min_run;
                 max_run_checkpoint[last_checkpoint] = max_run;
@@ -1895,6 +2174,16 @@ int main(int argc, char* argv[])
                     resistant_checkpoint[last_checkpoint][run] = resistant_rasts[run];
                     exposed_checkpoint[last_checkpoint][run] = exposed_vectors[run];
                     total_exposed_checkpoint[last_checkpoint][run] = total_exposed_rasts[run];
+                    mortality_tracker_checkpoint[last_checkpoint][run] =
+                        mortality_tracker_vector[run];
+                    if (use_soils)
+                        soil_reservoirs_checkpoint[last_checkpoint][run] =
+                            soil_reservoirs[run];
+                    dispersers_rasts_checkpoint[last_checkpoint][run] =
+                        dispersers_rasts[run];
+                    established_dispersers_rasts_checkpoint[last_checkpoint][run] =
+                        established_dispersers_rasts[run];
+                    outside_spores_checkpoint[last_checkpoint][run] = outside_spores[run];
                 }
             }
             current_index++;
@@ -2027,10 +2316,41 @@ int main(int argc, char* argv[])
         G_close_option_file(fp);
     }
     if (opt.quarantine_output->answer) {
-        FILE* fp = G_open_option_file(opt.quarantine_output);
-        std::string output = write_quarantine_escape(escape_infos, config.quarantine_num_steps());
-        fprintf(fp, "%s", output.c_str());
-        G_close_option_file(fp);
+        // Steering can end at an earlier step than the simulation end, in which
+        // case the later steps hold results of a timeline which was discarded.
+        unsigned last_index = std::min<unsigned>(
+            current_index, config.scheduler().get_num_steps() - 1);
+        write_quarantine(
+            opt.quarantine_output,
+            escape_infos,
+            quarantine_steps_done(config.quarantine_schedule(), last_index));
+    }
+    if (opt.dispersers_output->answer) {
+        Img dispersers_rasts_sum(I_species_rast.rows(), I_species_rast.cols(), 0);
+        for (unsigned i = 0; i < num_runs; i++)
+            dispersers_rasts_sum += dispersers_rasts[i];
+        if (opt.dispersers_output->answer) {
+            // write final result
+            raster_to_grass(
+                dispersers_rasts_sum,
+                opt.dispersers_output->answer,
+                "Sum of all dispersers",
+                interval.end_date());
+        }
+    }
+    if (opt.established_dispersers_output->answer) {
+        Img established_dispersers_rasts_sum(
+            I_species_rast.rows(), I_species_rast.cols(), 0);
+        for (unsigned i = 0; i < num_runs; i++)
+            established_dispersers_rasts_sum += established_dispersers_rasts[i];
+        if (opt.established_dispersers_output->answer) {
+            // write final result
+            raster_to_grass(
+                established_dispersers_rasts_sum,
+                opt.established_dispersers_output->answer,
+                "Sum of all established dispersers",
+                interval.end_date());
+        }
     }
 
     if (steering) {
