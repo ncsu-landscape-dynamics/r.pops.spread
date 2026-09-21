@@ -128,6 +128,40 @@ void write_average_area(
     Rast_write_history(raster_name, &hist);
 }
 
+/**
+ * Writes average number of lost hosts over all runs into raster history.
+ *
+ * Lost hosts are all hosts which are no longer healthy, i.e., exposed,
+ * infected, removed by treatments, or dead. Only susceptible and resistant
+ * hosts count as not lost, so lost = initial hosts - susceptible - resistant.
+ *
+ * The value is stored as data source 1 (source1 in r.info -e) because
+ * the description (HIST_KEYWRD) holds the average infected area and
+ * is parsed by clients as a single key-value pair.
+ */
+void write_average_lost_hosts(
+    const Img& initial_hosts,
+    const std::vector<Img>& susceptible,
+    const std::vector<Img>& resistant,
+    const char* raster_name,
+    const std::vector<std::vector<int>>& suitable_cells)
+{
+    struct History hist;
+    double avg = 0;
+    for (unsigned run = 0; run < susceptible.size(); run++) {
+        for (const auto& indices : suitable_cells) {
+            int i = indices[0];
+            int j = indices[1];
+            avg += initial_hosts(i, j) - susceptible[run](i, j) - resistant[run](i, j);
+        }
+    }
+    avg /= susceptible.size();
+    string avg_string = "Average lost hosts: " + std::to_string(avg);
+    Rast_read_history(raster_name, "", &hist);
+    Rast_set_history(&hist, HIST_DATSRC_1, avg_string.c_str());
+    Rast_write_history(raster_name, &hist);
+}
+
 inline Date treatment_date_from_string(const string& text)
 {
     try {
@@ -2073,6 +2107,12 @@ int main(int argc, char* argv[])
                                 window.ew_res,
                                 window.ns_res,
                                 suitable_cells);
+                            write_average_lost_hosts(
+                                species_rast_start,
+                                sus_species_rasts,
+                                resistant_rasts,
+                                name.c_str(),
+                                suitable_cells);
 
                             if (steering && steering_schedule[current_index]) {
                                 c.send_data("output:" + name + '|');
@@ -2227,6 +2267,12 @@ int main(int argc, char* argv[])
                 opt.average->answer,
                 window.ew_res,
                 window.ns_res,
+                suitable_cells);
+            write_average_lost_hosts(
+                species_rast_start,
+                sus_species_rasts,
+                resistant_rasts,
+                opt.average->answer,
                 suitable_cells);
         }
         if (opt.stddev->answer) {
